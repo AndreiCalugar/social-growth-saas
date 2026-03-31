@@ -7,10 +7,22 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 - Workflow 3: Trend monitor (daily cron)
-- Next.js frontend dashboard (in progress)
 - Auth system (NextAuth)
 - Stripe billing integration
 - Landing page
+
+---
+
+## 2026-03-31 — Competitor Comparison Page
+
+### Added
+- **Competitor comparison page** (`/competitors`):
+  - Add competitor form: enter Instagram username → creates profile in Supabase + triggers scrape webhook automatically
+  - Competitor card list with followers, last scraped date
+  - Side-by-side comparison: select own profile vs competitor — avg likes, avg comments, posting frequency, top content type
+  - Grouped bar chart comparing avg likes and avg comments
+  - "What they do that you don't" keyword analysis table: terms appearing in competitor captions not found in own posts
+  - Competitor posts table (sortable, top 10 highlighted green)
 
 ---
 

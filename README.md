@@ -57,7 +57,7 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 - [x] Workflow 1: Instagram scrape pipeline (working end-to-end)
 - [x] Workflow 2: AI analysis pipeline (Claude API — engagement summary, top/worst posts, recommendations)
 - [ ] Workflow 3: Trend monitor (daily cron)
-- [~] Frontend dashboard (Next.js) — in progress (overview page live)
+- [~] Frontend dashboard (Next.js) — in progress (overview + profile analytics + competitor comparison)
 - [ ] Auth system (NextAuth)
 - [ ] Stripe billing
 - [ ] Landing page
