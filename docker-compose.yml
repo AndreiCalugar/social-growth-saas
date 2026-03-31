@@ -12,8 +12,12 @@ services:
       - TZ=Europe/Bucharest
       - APIFY_API_TOKEN=${APIFY_API_TOKEN}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     env_file:
       - .env
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
 volumes:
   n8n_data:

@@ -29,11 +29,13 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.apify.com/v2/acts/apify~instagram-post-scraper/runs",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -41,43 +43,15 @@
           ]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "directUrls",
-              "value": "={{ [\"https://www.instagram.com/\" + $json.username + \"/\"] }}"
-            },
-            {
-              "name": "resultsLimit",
-              "value": "100"
-            },
-            {
-              "name": "resultsType",
-              "value": "posts"
-            },
-            {
-              "name": "scrapePostsUntilDate",
-              "value": ""
-            },
-            {
-              "name": "proxy",
-              "value": "={{ { \"useApifyProxy\": true, \"apifyProxyGroups\": [\"RESIDENTIAL\"] } }}"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ username: [$json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true } }) }}",
         "options": {}
       },
       "id": "start-apify-run",
       "name": "Start Apify Run",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "apify-token",
-          "name": "Apify API Token"
-        }
-      }
+      "position": [680, 300]
     },
     {
       "parameters": {
@@ -102,22 +76,23 @@
     },
     {
       "parameters": {
-        "url": "=https://api.apify.com/v2/acts/apify~instagram-post-scraper/runs/{{ $json.apify_run_id }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "=https://api.apify.com/v2/actor-runs/{{ $json.apify_run_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "check-run-status",
       "name": "Check Run Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 300],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "apify-token",
-          "name": "Apify API Token"
-        }
-      }
+      "position": [1340, 300]
     },
     {
       "parameters": {
@@ -160,22 +135,34 @@
     },
     {
       "parameters": {
-        "url": "=https://api.apify.com/v2/acts/apify~instagram-post-scraper/runs/{{ $json.apify_run_id }}/dataset/items?limit=150&clean=true",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "wait-dataset-finalize",
+      "name": "Wait Dataset Finalize",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1900, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apify.com/v2/actor-runs/{{ $json.apify_run_id }}/dataset/items?limit=150&clean=true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "fetch-dataset",
       "name": "Fetch Dataset Items",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 200],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "apify-token",
-          "name": "Apify API Token"
-        }
-      }
+      "position": [2000, 200]
     },
     {
       "parameters": {
@@ -409,8 +396,13 @@
     },
     "Is Run Done?": {
       "main": [
-        [{ "node": "Fetch Dataset Items", "type": "main", "index": 0 }],
+        [{ "node": "Wait Dataset Finalize", "type": "main", "index": 0 }],
         [{ "node": "Wait 15s", "type": "main", "index": 0 }]
+      ]
+    },
+    "Wait Dataset Finalize": {
+      "main": [
+        [{ "node": "Fetch Dataset Items", "type": "main", "index": 0 }]
       ]
     },
     "Fetch Dataset Items": {

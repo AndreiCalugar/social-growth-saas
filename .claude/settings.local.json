@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"/opt/homebrew/opt/libpq/bin:$PATH\")",
+      "Bash(source \"/Users/andreixperience/Documents/Cursor Projects/social-growth-saas/.env\")",
+      "Bash(psql \"$SUPABASE_DB_URL\" -f \"/Users/andreixperience/Documents/Cursor Projects/social-growth-saas/schema/001-initial-schema.sql\")"
+    ]
+  }
+}
