@@ -1,0 +1,234 @@
+{
+  "name": "Workflow 2: AI Analysis Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-profile",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "analyze-profile"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst profile_id = body.profile_id;\nconst analysis_type = body.analysis_type || 'performance';\n\nif (!profile_id) throw new Error('Missing required field: profile_id');\n\n// Basic UUID format check\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile_id)) {\n  throw new Error('profile_id must be a valid UUID');\n}\n\nreturn [{ json: { profile_id, analysis_type } }];"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.Project_URL }}/rest/v1/posts?profile_id=eq.{{ $json.profile_id }}&select=platform_post_id,content_type,caption,likes,comments,views,engagement_rate,posted_at&order=posted_at.desc&limit=100",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-posts",
+      "name": "Fetch Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all post items into one item with a posts array\nconst allItems = $input.all();\nconst profile_id = $('Validate Input').first().json.profile_id;\nconst analysis_type = $('Validate Input').first().json.analysis_type;\n\nif (allItems.length === 0) {\n  throw new Error(`No posts found for profile_id: ${profile_id}. Run the scrape pipeline first.`);\n}\n\nconst posts = allItems.map(item => item.json);\nconsole.log(`Aggregated ${posts.length} posts for analysis`);\n\nreturn [{ json: { profile_id, analysis_type, posts } }];"
+      },
+      "id": "aggregate-posts",
+      "name": "Aggregate Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.Project_URL }}/rest/v1/profiles?id=eq.{{ $json.profile_id }}&select=id,username,followers,following,platform,bio",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-profile",
+      "name": "Fetch Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build a structured prompt for Claude with all post data\nconst profileResp = $input.first().json;\nconst profile = Array.isArray(profileResp) ? profileResp[0] : profileResp;\n\nif (!profile?.id) {\n  throw new Error('Profile not found in Supabase for id: ' + $('Aggregate Posts').first().json.profile_id);\n}\n\nconst { posts, analysis_type } = $('Aggregate Posts').first().json;\nconst username = profile.username;\nconst followers = profile.followers;\n\n// Format posts as a readable table for Claude\nconst postsTable = posts.map((p, i) => {\n  const date = p.posted_at ? p.posted_at.slice(0, 10) : 'unknown';\n  const caption_snippet = (p.caption || '').replace(/\\n/g, ' ').slice(0, 80);\n  return `${String(i+1).padStart(2)}. [${(p.content_type || 'unknown').padEnd(9)}] ${date} | ` +\n         `Likes: ${String(p.likes || 0).padStart(6)} | Comments: ${String(p.comments || 0).padStart(4)} | ` +\n         `Views: ${String(p.views || 0).padStart(7)} | ID: ${p.platform_post_id} | \"${caption_snippet}\"...`;\n}).join('\\n');\n\nconst systemPrompt = `You are an expert social media growth analyst specialising in Instagram content strategy. \nYou analyse post performance data and provide data-driven, actionable recommendations.\nYou always respond with valid JSON only — no markdown, no code blocks, no explanation outside the JSON.`;\n\nconst userPrompt = `Analyse the Instagram account @${username}${followers ? ` (${followers.toLocaleString()} followers)` : ''} based on the following post data.\n\nPOSTS (${posts.length} most recent, newest first):\n${postsTable}\n\nProvide a complete performance analysis. Return ONLY a valid JSON object with exactly this structure — no markdown, no code fences:\n\n{\n  \"engagement_summary\": {\n    \"avg_likes\": <number>,\n    \"avg_comments\": <number>,\n    \"avg_views\": <number>,\n    \"total_posts_analyzed\": <number>,\n    \"top_content_type\": \"<string>\",\n    \"trend\": \"growing\" | \"stable\" | \"declining\",\n    \"trend_reasoning\": \"<1-2 sentence explanation>\"\n  },\n  \"top_posts\": [\n    {\n      \"platform_post_id\": \"<string>\",\n      \"content_type\": \"<string>\",\n      \"likes\": <number>,\n      \"comments\": <number>,\n      \"views\": <number>,\n      \"posted_at\": \"<YYYY-MM-DD>\",\n      \"why_it_worked\": \"<1 sentence>\"\n    }\n  ],\n  \"worst_posts\": [\n    {\n      \"platform_post_id\": \"<string>\",\n      \"content_type\": \"<string>\",\n      \"likes\": <number>,\n      \"views\": <number>,\n      \"posted_at\": \"<YYYY-MM-DD>\",\n      \"why_it_underperformed\": \"<1 sentence>\"\n    }\n  ],\n  \"best_posting_times\": {\n    \"days_of_week\": [\"<day>\"],\n    \"hours_utc\": [<0-23>],\n    \"reasoning\": \"<1-2 sentences based on the data>\"\n  },\n  \"content_type_breakdown\": {\n    \"<type>\": {\n      \"count\": <number>,\n      \"avg_likes\": <number>,\n      \"avg_views\": <number>,\n      \"performance_note\": \"<1 sentence>\"\n    }\n  },\n  \"recommendations\": [\n    {\n      \"category\": \"content\" | \"timing\" | \"engagement\" | \"hashtags\" | \"growth\",\n      \"title\": \"<short title>\",\n      \"description\": \"<2-3 sentence actionable description>\",\n      \"priority\": \"high\" | \"medium\" | \"low\"\n    }\n  ]\n}\n\nRules:\n- top_posts: pick the 3 best performing posts by combined likes+views\n- worst_posts: pick the 3 lowest performing posts\n- recommendations: provide exactly 5 recommendations\n- All numbers must be actual numbers (not strings)\n- Respond with ONLY the JSON object`;\n\nreturn [{\n  json: {\n    profile_id: profile.id,\n    profile_username: username,\n    analysis_type,\n    posts_count: posts.length,\n    system_prompt: systemPrompt,\n    user_prompt: userPrompt\n  }\n}];"
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 4096, system: $json.system_prompt, messages: [{ role: 'user', content: $json.user_prompt }] }) }}",
+        "options": {}
+      },
+      "id": "call-claude",
+      "name": "Call Claude API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and parse Claude's JSON response\nconst resp = $input.first().json;\n\n// Claude response structure: { content: [{ type: 'text', text: '...' }] }\nconst rawText = resp?.content?.[0]?.text;\nif (!rawText) {\n  throw new Error('Claude returned no content. Full response: ' + JSON.stringify(resp));\n}\n\n// Strip any accidental markdown code fences Claude might add\nconst cleaned = rawText\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nlet analysis;\ntry {\n  analysis = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Failed to parse Claude JSON: ' + e.message + '\\n\\nRaw text: ' + cleaned.slice(0, 500));\n}\n\n// Validate expected top-level keys\nconst required = ['engagement_summary', 'top_posts', 'worst_posts', 'best_posting_times', 'content_type_breakdown', 'recommendations'];\nconst missing = required.filter(k => !analysis[k]);\nif (missing.length > 0) {\n  throw new Error(`Claude response missing required keys: ${missing.join(', ')}`);\n}\n\nconst upstream = $('Build Prompt').first().json;\n\nreturn [{\n  json: {\n    profile_id: upstream.profile_id,\n    analysis_type: upstream.analysis_type,\n    raw_response: rawText,\n    engagement_summary: analysis.engagement_summary,\n    top_posts: analysis.top_posts,\n    worst_posts: analysis.worst_posts,\n    best_posting_times: analysis.best_posting_times,\n    content_type_breakdown: analysis.content_type_breakdown,\n    recommendations: analysis.recommendations\n  }\n}];"
+      },
+      "id": "parse-response",
+      "name": "Parse Claude Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.Project_URL }}/rest/v1/analyses",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ profile_id: $json.profile_id, analysis_type: $json.analysis_type, engagement_summary: $json.engagement_summary, top_posts: $json.top_posts, worst_posts: $json.worst_posts, best_posting_times: $json.best_posting_times, content_type_breakdown: $json.content_type_breakdown, raw_response: $json.raw_response }) }}",
+        "options": {}
+      },
+      "id": "upsert-analysis",
+      "name": "Save Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the saved analysis ID from Supabase response\nconst analysisResp = $input.first().json;\nconst analysisArr = Array.isArray(analysisResp) ? analysisResp : [analysisResp];\nconst analysis_id = analysisArr[0]?.id;\n\nif (!analysis_id) {\n  throw new Error('Save Analysis did not return an ID: ' + JSON.stringify(analysisResp));\n}\n\nconst upstream = $('Parse Claude Response').first().json;\nconst recs = upstream.recommendations || [];\n\nif (recs.length === 0) {\n  throw new Error('No recommendations in Claude response');\n}\n\n// Map to recommendations table schema\nconst rows = recs.map(r => ({\n  profile_id: upstream.profile_id,\n  analysis_id,\n  category: ['content','timing','engagement','hashtags','growth'].includes(r.category) ? r.category : 'content',\n  title: r.title || 'Recommendation',\n  description: r.description || '',\n  priority: ['high','medium','low'].includes(r.priority) ? r.priority : 'medium'\n}));\n\nreturn [{ json: { analysis_id, profile_id: upstream.profile_id, recommendations: rows } }];"
+      },
+      "id": "build-recommendations",
+      "name": "Build Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.Project_URL }}/rest/v1/recommendations",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.recommendations) }}",
+        "options": {}
+      },
+      "id": "insert-recommendations",
+      "name": "Insert Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, profile_id: $('Build Recommendations').first().json.profile_id, analysis_id: $('Build Recommendations').first().json.analysis_id, recommendations_saved: $('Build Recommendations').first().json.recommendations.length, engagement_summary: $('Parse Claude Response').first().json.engagement_summary }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2660, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]]
+    },
+    "Validate Input": {
+      "main": [[{ "node": "Fetch Posts", "type": "main", "index": 0 }]]
+    },
+    "Fetch Posts": {
+      "main": [[{ "node": "Aggregate Posts", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Posts": {
+      "main": [[{ "node": "Fetch Profile", "type": "main", "index": 0 }]]
+    },
+    "Fetch Profile": {
+      "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build Prompt": {
+      "main": [[{ "node": "Call Claude API", "type": "main", "index": 0 }]]
+    },
+    "Call Claude API": {
+      "main": [[{ "node": "Parse Claude Response", "type": "main", "index": 0 }]]
+    },
+    "Parse Claude Response": {
+      "main": [[{ "node": "Save Analysis", "type": "main", "index": 0 }]]
+    },
+    "Save Analysis": {
+      "main": [[{ "node": "Build Recommendations", "type": "main", "index": 0 }]]
+    },
+    "Build Recommendations": {
+      "main": [[{ "node": "Insert Recommendations", "type": "main", "index": 0 }]]
+    },
+    "Insert Recommendations": {
+      "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-31T00:00:00.000Z",
+  "versionId": "1"
+}
