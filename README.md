@@ -53,11 +53,11 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 ## Current Status
 
 - [x] Project infrastructure (Docker, n8n, Supabase schema)
-- [x] Database schema (`profiles`, `posts`, `scrape_runs`)
+- [x] Database schema (`profiles`, `posts`, `scrape_runs`, `analyses`, `recommendations`)
 - [x] Workflow 1: Instagram scrape pipeline (working end-to-end)
-- [ ] Workflow 2: AI analysis pipeline (Claude API)
+- [x] Workflow 2: AI analysis pipeline (Claude API — engagement summary, top/worst posts, recommendations)
 - [ ] Workflow 3: Trend monitor (daily cron)
-- [ ] Frontend dashboard (Next.js)
+- [ ] Frontend dashboard (Next.js) — in progress
 - [ ] Auth system (NextAuth)
 - [ ] Stripe billing
 - [ ] Landing page
@@ -143,13 +143,15 @@ social-growth-saas/
 ├── .env                      # API keys (never committed)
 ├── .env.example              # Template for .env
 ├── schema/
-│   └── 001-initial-schema.sql   # Supabase PostgreSQL schema
+│   ├── 001-initial-schema.sql       # profiles, posts, scrape_runs
+│   └── 002-analyses-schema.sql      # analyses, recommendations
 ├── n8n-workflows/
-│   └── scrape-pipeline.json     # Workflow 1: Instagram scrape
+│   ├── scrape-pipeline.json         # Workflow 1: Instagram scrape
+│   └── analysis-pipeline.json       # Workflow 2: Claude AI analysis
 ├── scripts/
-│   └── verify-setup.sh          # Infrastructure health checker
+│   └── verify-setup.sh              # Infrastructure health checker
 ├── docs/
-│   └── MVP-BLUEPRINT.md         # Full product blueprint
-├── src/                         # Next.js app (coming Phase 1)
+│   └── MVP-BLUEPRINT.md             # Full product blueprint
+├── src/                             # Next.js app (in progress)
 └── CHANGELOG.md
 ```

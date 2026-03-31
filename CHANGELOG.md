@@ -6,12 +6,29 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-- Workflow 2: AI analysis pipeline (Claude API)
 - Workflow 3: Trend monitor (daily cron)
-- Next.js frontend dashboard
+- Next.js frontend dashboard (in progress)
 - Auth system (NextAuth)
 - Stripe billing integration
 - Landing page
+
+---
+
+## 2026-03-31 — Workflow 2 & Frontend Init
+
+### Added
+- **Database schema** `schema/002-analyses-schema.sql`: `analyses` and `recommendations` tables with indexes
+- **Workflow 2 — AI analysis pipeline** (`n8n-workflows/analysis-pipeline.json`):
+  - Webhook POST `/analyze-profile` accepts `{profile_id, analysis_type}`
+  - Fetches all posts + profile from Supabase, builds structured prompt
+  - Calls Claude API (`claude-sonnet-4-20250514`) — returns engagement summary, top/worst posts, best posting times, content breakdown, 5 recommendations
+  - Saves analysis row + batch-inserts recommendations to Supabase
+  - First successful analysis of `@andreixperience` — 10 posts, 5 recommendations stored
+- **Next.js frontend** (`src/`): scaffolded with TypeScript, Tailwind, App Router, Prisma ORM, shadcn/ui, recharts
+- **Overview dashboard page**: metric cards (followers, engagement rate, posts, last analysis) + likes-over-time chart + Run Analysis trigger button
+
+### Fixed
+- Workflow 1 `engagement_rate` calculation now uses real `profile.followers` as divisor (was defaulting to 1, producing inflated values)
 
 ---
 
