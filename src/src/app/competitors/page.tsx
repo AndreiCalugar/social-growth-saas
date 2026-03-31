@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
+import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { Users, Clock } from "lucide-react"
 import Link from "next/link"
 
@@ -55,23 +56,28 @@ export default async function CompetitorsPage() {
       {competitors.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {competitors.map((c) => (
-            <Link key={c.id} href={`/profiles/${c.id}`}>
-              <Card className="hover:border-orange-300/60 hover:shadow-sm transition-all cursor-pointer">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold">@{c.username}</CardTitle>
-                  <CardDescription className="flex items-center gap-1.5 text-xs">
-                    <Users className="h-3 w-3" />
-                    {formatNumber(c.followers)} followers
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Scraped {formatDate(c.last_scraped)}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
+            <div key={c.id} className="group relative">
+              <Link href={`/profiles/${c.id}`}>
+                <Card className="hover:border-orange-300/60 hover:shadow-sm transition-all cursor-pointer">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-semibold">@{c.username}</CardTitle>
+                      <DeleteCompetitorButton profileId={c.id} username={c.username} />
+                    </div>
+                    <CardDescription className="flex items-center gap-1.5 text-xs">
+                      <Users className="h-3 w-3" />
+                      {formatNumber(c.followers)} followers
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Scraped {formatDate(c.last_scraped)}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            </div>
           ))}
         </div>
       )}
