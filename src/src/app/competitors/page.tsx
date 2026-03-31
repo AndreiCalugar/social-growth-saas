@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
-import { Users, Clock } from "lucide-react"
+import { Users, Clock, AlertTriangle, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 
 function formatNumber(n: number | null | undefined) {
@@ -21,7 +21,7 @@ function formatDate(d: string | null | undefined) {
 }
 
 export default async function CompetitorsPage() {
-  const [profilesRes, postsRes] = await Promise.all([
+  const [profilesRes, postsRes, scrapeRunsRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, username, followers, last_scraped, is_own")
@@ -31,10 +31,23 @@ export default async function CompetitorsPage() {
       .from("posts")
       .select("id, profile_id, posted_at, caption, likes, comments, views, engagement_rate, content_type, url")
       .order("posted_at", { ascending: false }),
+    supabase
+      .from("scrape_runs")
+      .select("profile_id, status, completed_at")
+      .order("completed_at", { ascending: false }),
   ])
 
   const profiles = profilesRes.data ?? []
   const allPosts = postsRes.data ?? []
+  const scrapeRuns = scrapeRunsRes.data ?? []
+
+  // Last scrape run per profile
+  const lastRunByProfile: Record<string, { status: string; completed_at: string | null }> = {}
+  for (const run of scrapeRuns) {
+    if (!lastRunByProfile[run.profile_id]) {
+      lastRunByProfile[run.profile_id] = { status: run.status, completed_at: run.completed_at }
+    }
+  }
 
   const ownProfile = profiles.find((p) => p.is_own) ?? null
   const competitors = profiles.filter((p) => !p.is_own)
@@ -55,30 +68,50 @@ export default async function CompetitorsPage() {
       {/* Competitor cards list */}
       {competitors.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {competitors.map((c) => (
-            <div key={c.id} className="group relative">
-              <Link href={`/profiles/${c.id}`}>
-                <Card className="hover:border-orange-300/60 hover:shadow-sm transition-all cursor-pointer">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-semibold">@{c.username}</CardTitle>
-                      <DeleteCompetitorButton profileId={c.id} username={c.username} />
-                    </div>
-                    <CardDescription className="flex items-center gap-1.5 text-xs">
-                      <Users className="h-3 w-3" />
-                      {formatNumber(c.followers)} followers
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      Scraped {formatDate(c.last_scraped)}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            </div>
-          ))}
+          {competitors.map((c) => {
+            const lastRun = lastRunByProfile[c.id]
+            const scrapeStatus = lastRun?.status ?? (c.last_scraped ? "completed" : "never")
+
+            return (
+              <div key={c.id} className="group relative">
+                <Link href={`/profiles/${c.id}`}>
+                  <Card className="hover:border-orange-300/60 hover:shadow-sm transition-all cursor-pointer">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold">@{c.username}</CardTitle>
+                        <DeleteCompetitorButton profileId={c.id} username={c.username} />
+                      </div>
+                      <CardDescription className="flex items-center gap-1.5 text-xs">
+                        <Users className="h-3 w-3" />
+                        {formatNumber(c.followers)} followers
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Scraped {formatDate(c.last_scraped)}
+                      </p>
+                      {scrapeStatus === "failed" && (
+                        <p className="text-xs flex items-center gap-1 text-amber-600">
+                          <AlertTriangle className="h-3 w-3" />
+                          Last scrape failed — Instagram rate-limited. Try again later.
+                        </p>
+                      )}
+                      {scrapeStatus === "completed" && c.last_scraped && (
+                        <p className="text-xs flex items-center gap-1 text-green-600">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Scraped successfully
+                        </p>
+                      )}
+                      {scrapeStatus === "never" && (
+                        <p className="text-xs text-muted-foreground">Not scraped yet</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              </div>
+            )
+          })}
         </div>
       )}
 

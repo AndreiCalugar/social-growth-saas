@@ -23,8 +23,12 @@ export function ScrapeNowButton({ username }: Props) {
       })
       if (res.ok) {
         setState("done")
-        setMessage("Scrape queued — data will update in ~2 min")
-        setTimeout(() => setState("idle"), 6000)
+        setMessage("Scrape queued — refresh in ~2 min to see data")
+        setTimeout(() => setState("idle"), 8000)
+      } else if (res.status === 429 || res.status === 503) {
+        setState("error")
+        setMessage("Scrape failed — Instagram may have rate-limited this account. Try again in a few hours.")
+        setTimeout(() => setState("idle"), 10000)
       } else {
         throw new Error(`HTTP ${res.status}`)
       }
