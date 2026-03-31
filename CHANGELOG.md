@@ -14,6 +14,17 @@ All notable changes to this project are documented here.
 
 ---
 
+## 2026-03-31 — Profile Analytics Page
+
+### Added
+- **Profile analytics page** (`/profiles/[id]`): full per-profile deep-dive view
+  - Profile header with username, followers, bio, last scraped date, Scrape Now + Run Analysis buttons
+  - Engagement charts: likes over time (30/60/90-day toggle), engagement by day of week, engagement by hour of day, content type donut chart
+  - Posts table: all posts with date, caption preview, likes, comments, views, engagement rate — top 10 highlighted green, bottom 10 red, click to expand full caption
+  - Latest AI analysis section with recommendation cards and priority badges
+
+---
+
 ## 2026-03-31 — Workflow 2 & Frontend Init
 
 ### Added
@@ -24,11 +35,12 @@ All notable changes to this project are documented here.
   - Calls Claude API (`claude-sonnet-4-20250514`) — returns engagement summary, top/worst posts, best posting times, content breakdown, 5 recommendations
   - Saves analysis row + batch-inserts recommendations to Supabase
   - First successful analysis of `@andreixperience` — 10 posts, 5 recommendations stored
-- **Next.js frontend** (`src/`): scaffolded with TypeScript, Tailwind, App Router, Prisma ORM, shadcn/ui, recharts
-- **Overview dashboard page**: metric cards (followers, engagement rate, posts, last analysis) + likes-over-time chart + Run Analysis trigger button
+- **Next.js frontend** (`src/`): scaffolded with TypeScript, Tailwind, App Router, shadcn/ui, recharts, Supabase JS client
+- **Overview dashboard page** (`/`): metric cards (followers, avg likes, posts tracked, last analysis date) + likes-over-time chart with views overlay + AI recommendations panel + trend insight card
 
 ### Fixed
 - Workflow 1 `engagement_rate` calculation now uses real `profile.followers` as divisor (was defaulting to 1, producing inflated values)
+- Switched data fetching from Prisma (direct TCP — blocked) to Supabase JS client (REST/HTTPS — reliable)
 
 ---
 
