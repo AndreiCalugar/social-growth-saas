@@ -3,7 +3,9 @@
     "allow": [
       "Bash(export PATH=\"/opt/homebrew/opt/libpq/bin:$PATH\")",
       "Bash(source \"/Users/andreixperience/Documents/Cursor Projects/social-growth-saas/.env\")",
-      "Bash(psql \"$SUPABASE_DB_URL\" -f \"/Users/andreixperience/Documents/Cursor Projects/social-growth-saas/schema/001-initial-schema.sql\")"
+      "Bash(psql \"$SUPABASE_DB_URL\" -f \"/Users/andreixperience/Documents/Cursor Projects/social-growth-saas/schema/001-initial-schema.sql\")",
+      "Bash(npx create-next-app@latest src --typescript --tailwind --app --src-dir --no-eslint --import-alias \"@/*\" --use-npm --no-react-compiler --no-agents-md)",
+      "Bash(npm install:*)"
     ]
   }
 }
