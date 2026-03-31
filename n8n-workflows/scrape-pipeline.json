@@ -1,0 +1,473 @@
+{
+  "name": "Workflow 1: Instagram Scrape Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scrape-instagram",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "scrape-instagram"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate input and set defaults\nconst body = $input.first().json.body || $input.first().json;\nconst username = body.username;\n\nif (!username) {\n  throw new Error('Missing required field: username');\n}\n\nreturn [{ json: { username: username.toLowerCase().replace('@', '') } }];"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~instagram-post-scraper/runs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "directUrls",
+              "value": "={{ [\"https://www.instagram.com/\" + $json.username + \"/\"] }}"
+            },
+            {
+              "name": "resultsLimit",
+              "value": "100"
+            },
+            {
+              "name": "resultsType",
+              "value": "posts"
+            },
+            {
+              "name": "scrapePostsUntilDate",
+              "value": ""
+            },
+            {
+              "name": "proxy",
+              "value": "={{ { \"useApifyProxy\": true, \"apifyProxyGroups\": [\"RESIDENTIAL\"] } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "start-apify-run",
+      "name": "Start Apify Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "apify-token",
+          "name": "Apify API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const runData = $input.first().json;\nconst runId = runData.data?.id;\n\nif (!runId) {\n  throw new Error('Apify run did not start: ' + JSON.stringify(runData));\n}\n\n// Pass run ID and original username downstream\nconst username = $('Validate Input').first().json.username;\n\nreturn [{ json: { apify_run_id: runId, username, status: runData.data.status } }];"
+      },
+      "id": "extract-run-id",
+      "name": "Extract Run ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "id": "wait-15s",
+      "name": "Wait 15s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apify.com/v2/acts/apify~instagram-post-scraper/runs/{{ $json.apify_run_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "check-run-status",
+      "name": "Check Run Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "apify-token",
+          "name": "Apify API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const runData = $input.first().json;\nconst status = runData.data?.status;\nconst apify_run_id = $('Extract Run ID').first().json.apify_run_id;\nconst username = $('Extract Run ID').first().json.username;\n\n// SUCCEEDED or FAILED/ABORTED stop the loop\nconst done = ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(status);\n\nif (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {\n  throw new Error(`Apify run ${apify_run_id} ended with status: ${status}`);\n}\n\nreturn [{ json: { apify_run_id, username, status, done } }];"
+      },
+      "id": "check-status-done",
+      "name": "Is Run Done?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "done-check",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-done",
+      "name": "If Done",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apify.com/v2/acts/apify~instagram-post-scraper/runs/{{ $json.apify_run_id }}/dataset/items?limit=150&clean=true",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "fetch-dataset",
+      "name": "Fetch Dataset Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "apify-token",
+          "name": "Apify API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform Apify Instagram post data to our posts table schema\nconst items = $input.all();\nconst username = $('Extract Run ID').first().json.username;\n\nconst transformed = items.map(item => {\n  const d = item.json;\n\n  // Detect content type\n  let content_type = 'image';\n  if (d.type === 'Video' || d.videoUrl) content_type = 'reel';\n  else if (d.type === 'Sidecar' || (d.images && d.images.length > 1)) content_type = 'carousel';\n\n  // Extract hashtags from caption\n  const caption = d.caption || d.text || '';\n  const hashtagMatches = caption.match(/#[\\w]+/g) || [];\n  const hashtags = [...new Set(hashtagMatches.map(h => h.toLowerCase()))];\n\n  // Metrics — Apify field names vary slightly by scraper version\n  const likes = d.likesCount ?? d.likes ?? 0;\n  const comments = d.commentsCount ?? d.comments ?? 0;\n  const shares = d.sharesCount ?? d.shares ?? 0;\n  const views = d.videoViewCount ?? d.videoPlayCount ?? d.views ?? 0;\n  const followers = d.ownerFollowersCount ?? 1; // fallback to avoid div/0\n\n  // Engagement rate: (likes + comments) / followers * 100\n  const engagement_rate = followers > 0\n    ? parseFloat(((likes + comments) / followers * 100).toFixed(4))\n    : 0;\n\n  const platform_post_id = d.shortCode || d.id || d.url?.split('/p/')?.[1]?.replace(/\\/.*/, '') || String(d.timestamp);\n\n  return {\n    json: {\n      profile_username: username,\n      platform_post_id,\n      content_type,\n      caption: caption.substring(0, 2000),\n      hashtags,\n      likes,\n      comments,\n      shares,\n      views,\n      engagement_rate,\n      posted_at: d.timestamp ? new Date(typeof d.timestamp === 'number' ? d.timestamp * 1000 : d.timestamp).toISOString() : null,\n      // Pass follower count for profile update\n      owner_followers: d.ownerFollowersCount ?? null,\n      owner_following: d.ownerFollowingCount ?? null,\n      owner_bio: d.ownerBiography ?? null,\n    }\n  };\n}).filter(item => item.json.platform_post_id);\n\nconsole.log(`Transformed ${transformed.length} posts for @${username}`);\nreturn transformed;"
+      },
+      "id": "transform-posts",
+      "name": "Transform Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Upsert or create the profile record, return its ID\nconst item = $input.first().json;\nconst username = item.profile_username;\n\n// We'll look up / create the profile in the next HTTP node.\n// Just pass through with profile lookup data.\nreturn [{\n  json: {\n    ...item,\n    platform: 'instagram',\n    username\n  }\n}];"
+      },
+      "id": "prep-profile-upsert",
+      "name": "Prep Profile Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.Project_URL }}/rest/v1/profiles",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ platform: 'instagram', username: $json.username, profile_url: 'https://www.instagram.com/' + $json.username + '/', followers: $json.owner_followers, following: $json.owner_following, bio: $json.owner_bio, is_own: false }) }}",
+        "options": {}
+      },
+      "id": "upsert-profile",
+      "name": "Upsert Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine profile ID from upsert response with post data\nconst profileResp = $input.first().json;\nconst profileId = Array.isArray(profileResp) ? profileResp[0]?.id : profileResp?.id;\n\nif (!profileId) {\n  throw new Error('Profile upsert did not return an ID: ' + JSON.stringify(profileResp));\n}\n\n// Grab ALL transformed posts from the Transform Posts node\nconst allPosts = $('Transform Posts').all();\n\nreturn allPosts.map(p => ({\n  json: {\n    profile_id: profileId,\n    platform_post_id: p.json.platform_post_id,\n    content_type: p.json.content_type,\n    caption: p.json.caption,\n    hashtags: p.json.hashtags,\n    likes: p.json.likes,\n    comments: p.json.comments,\n    shares: p.json.shares,\n    views: p.json.views,\n    engagement_rate: p.json.engagement_rate,\n    posted_at: p.json.posted_at,\n  }\n}));"
+      },
+      "id": "attach-profile-id",
+      "name": "Attach Profile ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.Project_URL }}/rest/v1/posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "upsert-posts",
+      "name": "Upsert Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3100, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// After all posts upserted, update last_scraped on the profile\nconst allPosts = $('Attach Profile ID').all();\nconst profileId = allPosts[0]?.json?.profile_id;\nconst postsCount = allPosts.length;\nconst apifyRunId = $('Extract Run ID').first().json.apify_run_id;\n\nreturn [{ json: { profile_id: profileId, posts_count: postsCount, apify_run_id: apifyRunId } }];"
+      },
+      "id": "prep-finalize",
+      "name": "Prep Finalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3320, 200]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.Project_URL }}/rest/v1/profiles?id=eq.{{ $json.profile_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ last_scraped: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "id": "update-last-scraped",
+      "name": "Update last_scraped",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3540, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.Project_URL }}/rest/v1/scrape_runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ profile_id: $('Prep Finalize').first().json.profile_id, apify_run_id: $('Prep Finalize').first().json.apify_run_id, status: 'completed', posts_scraped: $('Prep Finalize').first().json.posts_count, completed_at: new Date().toISOString() }) }}",
+        "options": {}
+      },
+      "id": "log-scrape-run",
+      "name": "Log Scrape Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3760, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, username: $('Extract Run ID').first().json.username, posts_scraped: $('Prep Finalize').first().json.posts_count, apify_run_id: $('Prep Finalize').first().json.apify_run_id }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3980, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [{ "node": "Validate Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [{ "node": "Start Apify Run", "type": "main", "index": 0 }]
+      ]
+    },
+    "Start Apify Run": {
+      "main": [
+        [{ "node": "Extract Run ID", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Run ID": {
+      "main": [
+        [{ "node": "Wait 15s", "type": "main", "index": 0 }]
+      ]
+    },
+    "Wait 15s": {
+      "main": [
+        [{ "node": "Check Run Status", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Run Status": {
+      "main": [
+        [{ "node": "Is Run Done?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Run Done?": {
+      "main": [
+        [{ "node": "Fetch Dataset Items", "type": "main", "index": 0 }],
+        [{ "node": "Wait 15s", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Dataset Items": {
+      "main": [
+        [{ "node": "Transform Posts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Transform Posts": {
+      "main": [
+        [{ "node": "Prep Profile Upsert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prep Profile Upsert": {
+      "main": [
+        [{ "node": "Upsert Profile", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upsert Profile": {
+      "main": [
+        [{ "node": "Attach Profile ID", "type": "main", "index": 0 }]
+      ]
+    },
+    "Attach Profile ID": {
+      "main": [
+        [{ "node": "Upsert Posts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upsert Posts": {
+      "main": [
+        [{ "node": "Prep Finalize", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prep Finalize": {
+      "main": [
+        [{ "node": "Update last_scraped", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update last_scraped": {
+      "main": [
+        [{ "node": "Log Scrape Run", "type": "main", "index": 0 }]
+      ]
+    },
+    "Log Scrape Run": {
+      "main": [
+        [{ "node": "Respond Success", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-31T00:00:00.000Z",
+  "versionId": "1"
+}
