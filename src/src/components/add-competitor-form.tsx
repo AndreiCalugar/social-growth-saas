@@ -6,12 +6,46 @@ import { Button } from "@/components/ui/button"
 import { UserPlus, Loader2 } from "lucide-react"
 
 export function AddCompetitorForm() {
-  const [state, setState] = useState<"idle" | "loading" | "error">("idle")
+  const [state, setState] = useState<"idle" | "loading" | "polling" | "error">("idle")
   const [message, setMessage] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
-  async function handleSubmit(e: React.FormEvent) {
+  function startPolling(profileId: string) {
+    setState("polling")
+    setMessage("Scraping in background… ~2 min")
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/scrape-status/${profileId}`)
+        const data = await res.json()
+        if (data.status === "completed") {
+          clearInterval(interval)
+          setState("idle")
+          setMessage("")
+          router.refresh()
+        } else if (data.status === "failed") {
+          clearInterval(interval)
+          setState("idle")
+          setMessage("Scrape failed — Instagram may have rate-limited. Try again later.")
+          router.refresh()
+        }
+      } catch {
+        // ignore transient errors, keep polling
+      }
+    }, 10_000)
+
+    // Stop polling after 5 minutes max
+    setTimeout(() => {
+      clearInterval(interval)
+      if (state === "polling") {
+        setState("idle")
+        setMessage("Still scraping — refresh the page in a minute.")
+      }
+    }, 300_000)
+  }
+
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
     const username = inputRef.current?.value?.trim()
     if (!username) return
@@ -29,9 +63,8 @@ export function AddCompetitorForm() {
 
       if (data.success) {
         if (inputRef.current) inputRef.current.value = ""
-        setMessage(`@${data.profile.username} added — scrape queued (~2 min)`)
-        setState("idle")
         router.refresh()
+        startPolling(data.profile.id)
       } else {
         throw new Error(data.error ?? "Unknown error")
       }
@@ -42,24 +75,24 @@ export function AddCompetitorForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 flex-wrap">
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
         <input
           ref={inputRef}
           type="text"
           placeholder="username"
-          disabled={state === "loading"}
+          disabled={state === "loading" || state === "polling"}
           className="h-9 w-56 rounded-md border border-input bg-background pl-7 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
         />
       </div>
-      <Button type="submit" size="sm" disabled={state === "loading"}>
-        {state === "loading" ? (
+      <Button type="submit" size="sm" disabled={state === "loading" || state === "polling"}>
+        {state === "loading" || state === "polling" ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
           <UserPlus className="h-4 w-4" />
         )}
-        {state === "loading" ? "Adding…" : "Add Competitor"}
+        {state === "loading" ? "Adding…" : state === "polling" ? "Scraping…" : "Add Competitor"}
       </Button>
       {message && (
         <span className={`text-xs ${state === "error" ? "text-destructive" : "text-muted-foreground"}`}>

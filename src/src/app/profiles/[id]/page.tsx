@@ -38,7 +38,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
       .single(),
     supabase
       .from("posts")
-      .select("id, posted_at, caption, likes, comments, views, engagement_rate, content_type, url")
+      .select("id, posted_at, caption, likes, comments, views, engagement_rate, content_type")
       .eq("profile_id", id)
       .order("posted_at", { ascending: false }),
     supabase

@@ -11,7 +11,6 @@ interface Post {
   comments: number | null
   views: number | null
   engagement_rate: number | null
-  url: string | null
 }
 
 type SortKey = "posted_at" | "likes" | "comments" | "views" | "engagement_rate"

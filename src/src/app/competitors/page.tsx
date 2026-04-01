@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
+import { RetryScrapeButton } from "@/components/retry-scrape-button"
 import { Users, Clock, AlertTriangle, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 
@@ -29,7 +30,7 @@ export default async function CompetitorsPage() {
       .order("username", { ascending: true }),
     supabase
       .from("posts")
-      .select("id, profile_id, posted_at, caption, likes, comments, views, engagement_rate, content_type, url")
+      .select("id, profile_id, posted_at, caption, likes, comments, views, engagement_rate, content_type")
       .order("posted_at", { ascending: false }),
     supabase
       .from("scrape_runs")
@@ -92,10 +93,13 @@ export default async function CompetitorsPage() {
                         Scraped {formatDate(c.last_scraped)}
                       </p>
                       {scrapeStatus === "failed" && (
-                        <p className="text-xs flex items-center gap-1 text-amber-600">
-                          <AlertTriangle className="h-3 w-3" />
-                          Last scrape failed — Instagram rate-limited. Try again later.
-                        </p>
+                        <div className="space-y-1">
+                          <p className="text-xs flex items-center gap-1 text-amber-600">
+                            <AlertTriangle className="h-3 w-3" />
+                            Last scrape failed — rate-limited.
+                          </p>
+                          <RetryScrapeButton profileId={c.id} username={c.username} />
+                        </div>
                       )}
                       {scrapeStatus === "completed" && c.last_scraped && (
                         <p className="text-xs flex items-center gap-1 text-green-600">

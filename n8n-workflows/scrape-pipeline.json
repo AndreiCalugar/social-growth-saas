@@ -28,13 +28,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.apify.com/v2/acts/apify~instagram-post-scraper/runs",
+        "url": "https://api.apify.com/v2/acts/nH2AHrwxeTRJoN5hX/runs",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+              "value": "=Bearer apify_api_cpBet0l5cVlaQKNZpeMPftfv5pSpYd1wjXZP"
             },
             {
               "name": "Content-Type",
@@ -44,7 +44,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ username: [$json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true } }) }}",
+        "jsonBody": "={{ JSON.stringify({ username: [$json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }, loginCookies: [{ name: 'sessionid', value: '269383777%3AaomZyKxZWlZxWe%3A8%3AAYiDgBb19KfcoRYWhAIpH6f0JWV_pKGin_4WBaB5WNg', domain: '.instagram.com' }] }) }}",
         "options": {}
       },
       "id": "start-apify-run",
@@ -82,7 +82,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+              "value": "=Bearer apify_api_cpBet0l5cVlaQKNZpeMPftfv5pSpYd1wjXZP"
             }
           ]
         },
@@ -152,7 +152,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+              "value": "=Bearer apify_api_cpBet0l5cVlaQKNZpeMPftfv5pSpYd1wjXZP"
             }
           ]
         },
@@ -166,7 +166,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Transform Apify Instagram post data to our posts table schema\nconst items = $input.all();\nconst username = $('Extract Run ID').first().json.username;\n\nconst transformed = items.map(item => {\n  const d = item.json;\n\n  // Detect content type\n  let content_type = 'image';\n  if (d.type === 'Video' || d.videoUrl) content_type = 'reel';\n  else if (d.type === 'Sidecar' || (d.images && d.images.length > 1)) content_type = 'carousel';\n\n  // Extract hashtags from caption\n  const caption = d.caption || d.text || '';\n  const hashtagMatches = caption.match(/#[\\w]+/g) || [];\n  const hashtags = [...new Set(hashtagMatches.map(h => h.toLowerCase()))];\n\n  // Metrics — Apify field names vary slightly by scraper version\n  const likes = d.likesCount ?? d.likes ?? 0;\n  const comments = d.commentsCount ?? d.comments ?? 0;\n  const shares = d.sharesCount ?? d.shares ?? 0;\n  const views = d.videoViewCount ?? d.videoPlayCount ?? d.views ?? 0;\n  const followers = d.ownerFollowersCount ?? 1; // fallback to avoid div/0\n\n  // Engagement rate: (likes + comments) / followers * 100\n  const engagement_rate = followers > 0\n    ? parseFloat(((likes + comments) / followers * 100).toFixed(4))\n    : 0;\n\n  const platform_post_id = d.shortCode || d.id || d.url?.split('/p/')?.[1]?.replace(/\\/.*/, '') || String(d.timestamp);\n\n  return {\n    json: {\n      profile_username: username,\n      platform_post_id,\n      content_type,\n      caption: caption.substring(0, 2000),\n      hashtags,\n      likes,\n      comments,\n      shares,\n      views,\n      engagement_rate,\n      posted_at: d.timestamp ? new Date(typeof d.timestamp === 'number' ? d.timestamp * 1000 : d.timestamp).toISOString() : null,\n      // Pass follower count for profile update\n      owner_followers: d.ownerFollowersCount ?? null,\n      owner_following: d.ownerFollowingCount ?? null,\n      owner_bio: d.ownerBiography ?? null,\n    }\n  };\n}).filter(item => item.json.platform_post_id);\n\nconsole.log(`Transformed ${transformed.length} posts for @${username}`);\nreturn transformed;"
+        "jsCode": "// Transform Apify Instagram post data to our posts table schema\n// The HTTP node returns the array as a single item — unwrap it\nconst raw = $input.all();\nconst firstItem = raw[0]?.json;\nconst items = Array.isArray(firstItem) ? firstItem.map(d => ({ json: d })) : raw;\nconst username = $('Extract Run ID').first().json.username;\n\nconst transformed = items.map(item => {\n  const d = item.json;\n\n  // Detect content type\n  let content_type = 'image';\n  if (d.type === 'Video' || d.videoUrl) content_type = 'reel';\n  else if (d.type === 'Sidecar' || (d.images && d.images.length > 1)) content_type = 'carousel';\n\n  // Extract hashtags from caption\n  const caption = d.caption || d.text || '';\n  const hashtagMatches = caption.match(/#[\\w]+/g) || [];\n  const hashtags = [...new Set(hashtagMatches.map(h => h.toLowerCase()))];\n\n  // Metrics — Apify field names vary slightly by scraper version\n  const likes = d.likesCount ?? d.likes ?? 0;\n  const comments = d.commentsCount ?? d.comments ?? 0;\n  const shares = d.sharesCount ?? d.shares ?? 0;\n  const views = d.videoViewCount ?? d.videoPlayCount ?? d.views ?? 0;\n  const followers = d.ownerFollowersCount ?? 1; // fallback to avoid div/0\n\n  // Engagement rate: (likes + comments) / followers * 100\n  const engagement_rate = followers > 0\n    ? parseFloat(((likes + comments) / followers * 100).toFixed(4))\n    : 0;\n\n  const platform_post_id = d.shortCode || d.id || d.url?.split('/p/')?.[1]?.replace(/\\/.*/, '') || String(d.timestamp);\n\n  return {\n    json: {\n      profile_username: username,\n      platform_post_id,\n      content_type,\n      caption: caption.substring(0, 2000),\n      hashtags,\n      likes,\n      comments,\n      shares,\n      views,\n      engagement_rate,\n      posted_at: d.timestamp ? new Date(typeof d.timestamp === 'number' ? d.timestamp * 1000 : d.timestamp).toISOString() : null,\n      // Pass follower count for profile update\n      owner_followers: d.ownerFollowersCount ?? null,\n      owner_following: d.ownerFollowingCount ?? null,\n      owner_bio: d.ownerBiography ?? null,\n    }\n  };\n}).filter(item => item.json.platform_post_id);\n\nconsole.log(`Transformed ${transformed.length} posts for @${username}`);\nreturn transformed;"
       },
       "id": "transform-posts",
       "name": "Transform Posts",
@@ -187,17 +187,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.Project_URL }}/rest/v1/profiles",
+        "url": "https://arujkowiihftpghmxlwv.supabase.co/rest/v1/profiles?on_conflict=platform,username",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "Bearer sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Content-Type",
@@ -233,17 +233,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.Project_URL }}/rest/v1/posts",
+        "url": "https://arujkowiihftpghmxlwv.supabase.co/rest/v1/posts?on_conflict=platform_post_id",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "Bearer sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Content-Type",
@@ -279,17 +279,17 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.Project_URL }}/rest/v1/profiles?id=eq.{{ $json.profile_id }}",
+        "url": "={{ 'https://arujkowiihftpghmxlwv.supabase.co/rest/v1/profiles?id=eq.' + $json.profile_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "Bearer sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Content-Type",
@@ -315,17 +315,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.Project_URL }}/rest/v1/scrape_runs",
+        "url": "https://arujkowiihftpghmxlwv.supabase.co/rest/v1/scrape_runs",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+              "value": "Bearer sb_secret_XoMeJNjYtKF1-gPqc09Pyg_7KgYxGHO"
             },
             {
               "name": "Content-Type",
