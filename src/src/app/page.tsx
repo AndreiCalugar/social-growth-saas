@@ -8,17 +8,24 @@ import Link from "next/link"
 import { Users, BarChart2, FileText, Sparkles, TrendingUp, TrendingDown, Minus, Zap } from "lucide-react"
 
 async function getDashboardData() {
-  const [profileRes, postsRes, analysisRes, recsRes] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, username, followers, last_scraped")
-      .eq("is_own", true)
-      .single(),
-    supabase
-      .from("posts")
-      .select("posted_at, likes, views, engagement_rate")
-      .order("posted_at", { ascending: true })
-      .limit(30),
+  // Fetch own profile first — all subsequent queries need its ID
+  const profileRes = await supabase
+    .from("profiles")
+    .select("id, username, followers, last_scraped")
+    .eq("is_own", true)
+    .single()
+
+  const ownProfileId = profileRes.data?.id ?? null
+
+  const [postsRes, analysisRes, recsRes] = await Promise.all([
+    ownProfileId
+      ? supabase
+          .from("posts")
+          .select("posted_at, likes, views, engagement_rate")
+          .eq("profile_id", ownProfileId)
+          .order("posted_at", { ascending: false })
+          .limit(30)
+      : Promise.resolve({ data: [] }),
     supabase
       .from("analyses")
       .select("created_at, engagement_summary")
@@ -40,7 +47,6 @@ async function getDashboardData() {
   const postCount = posts.length
 
   // Count trend insights for own profile
-  const ownProfileId = profileRes.data?.id
   let trendCount = 0
   let megaTipCount = 0
   if (ownProfileId) {
@@ -103,7 +109,7 @@ export default async function OverviewPage() {
     trend_reasoning?: string
   } | null
 
-  const chartData = posts.map((p) => ({
+  const chartData = [...posts].reverse().map((p) => ({
     date: p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
     likes: p.likes ?? 0,
     views: Math.round((p.views ?? 0) / 10),

@@ -211,7 +211,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ platform: 'instagram', username: $json.username, profile_url: 'https://www.instagram.com/' + $json.username + '/', followers: $json.owner_followers, following: $json.owner_following, bio: $json.owner_bio, is_own: false }) }}",
+        "jsonBody": "={{ JSON.stringify({ platform: 'instagram', username: $json.username, profile_url: 'https://www.instagram.com/' + $json.username + '/', followers: $json.owner_followers, following: $json.owner_following, bio: $json.owner_bio }) }}",
         "options": {}
       },
       "id": "upsert-profile",
