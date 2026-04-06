@@ -53,11 +53,11 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 ## Current Status
 
 - [x] Project infrastructure (Docker, n8n, Supabase schema)
-- [x] Database schema (`profiles`, `posts`, `scrape_runs`, `analyses`, `recommendations`)
-- [x] Workflow 1: Instagram scrape pipeline (working end-to-end)
+- [x] Database schema (`profiles`, `posts`, `scrape_runs`, `analyses`, `recommendations`, `trend_insights`)
+- [x] Workflow 1: Instagram scrape pipeline (working end-to-end, 7 competitor accounts tracked)
 - [x] Workflow 2: AI analysis pipeline (Claude API — engagement summary, top/worst posts, recommendations)
-- [ ] Workflow 3: Trend monitor (daily cron)
-- [~] Frontend dashboard (Next.js) — in progress (overview + profile analytics + competitor comparison)
+- [x] Workflow 3: Insights Engine — cross-competitor trend detection with mega-tips (Claude API, working end-to-end)
+- [x] Frontend dashboard (Next.js) — overview, profile analytics, competitor comparison, insights page
 - [ ] Auth system (NextAuth)
 - [ ] Stripe billing
 - [ ] Landing page
@@ -147,11 +147,17 @@ social-growth-saas/
 │   └── 002-analyses-schema.sql      # analyses, recommendations
 ├── n8n-workflows/
 │   ├── scrape-pipeline.json         # Workflow 1: Instagram scrape
-│   └── analysis-pipeline.json       # Workflow 2: Claude AI analysis
+│   ├── analysis-pipeline.json       # Workflow 2: Claude AI analysis
+│   └── cross-analysis-pipeline.json # Workflow 3: Insights Engine (cross-competitor)
+├── schema/
+│   ├── 001-initial-schema.sql       # profiles, posts, scrape_runs
+│   ├── 002-analyses-schema.sql      # analyses, recommendations
+│   └── 003-trend-insights.sql       # trend_insights table
 ├── scripts/
 │   └── verify-setup.sh              # Infrastructure health checker
 ├── docs/
-│   └── MVP-BLUEPRINT.md             # Full product blueprint
+│   ├── MVP-BLUEPRINT.md             # Full product blueprint
+│   └── INSIGHTS-ENGINE.md           # Technical overview of Insights Engine
 ├── src/                             # Next.js app (in progress)
 └── CHANGELOG.md
 ```

@@ -6,10 +6,40 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-- Workflow 3: Trend monitor (daily cron)
 - Auth system (NextAuth)
 - Stripe billing integration
 - Landing page
+
+---
+
+## 2026-04-06 — Insights Engine (Workflow 3)
+
+### Added
+- **Insights Engine** (`/insights`): core product feature — cross-competitor trend detection with mega-tips
+  - Analyzes posts from all tracked competitor accounts together via Claude API
+  - Detects content patterns appearing in the top 20% of posts across 2+ competitors
+  - Calculates `performance_multiplier` (avg likes of pattern posts / avg likes overall)
+  - Produces "mega-tips": specific content briefs telling the user exactly what to film, hook line, caption structure, and posting schedule
+  - Trends with multiplier < 1.5× filtered out before storage (safety net)
+  - Trends from 2.0× threshold preferred; sub-threshold ones labelled "Emerging:"
+- **Workflow 3: Cross-Competitor Analysis** (`n8n-workflows/cross-analysis-pipeline.json`):
+  - Webhook `POST /webhook/cross-analysis` → fetches own posts + all competitor posts in parallel
+  - Groups competitor posts by profile, builds structured Claude prompt with top posts per account
+  - Calls Claude API (`claude-sonnet-4-5`, 4096 tokens) → parses JSON trend array
+  - Validates example_posts are from competitor accounts only (not own_account)
+  - Inserts validated trends into `trend_insights` table with `is_mega_tip` flag
+- **`schema/003-trend-insights.sql`**: `trend_insights` table (`profile_id`, `trend_name`, `confidence`, `performance_multiplier`, `example_posts`, `recommendation`, `is_mega_tip`)
+- **`/insights` page**: server component with competitor count gate (requires 3+), Generate button, polling, mega-tip cards
+- **`/api/insights` route**: fetches latest batch of insights (10-minute window) ordered by multiplier
+- **Sidebar**: Insights link styled orange with NEW badge and Sparkles icon
+- **Overview CTA card**: shows trend count and mega-tip count linking to `/insights`
+- **7 competitor accounts** tracked and scraped (andreixperience, irina.narativa, zicho.hu, spenwragg + others)
+- **`docs/INSIGHTS-ENGINE.md`**: full technical overview — data flow, Claude prompts, schema, node map, sample output
+
+### Fixed
+- Scrape pipeline `Upsert Profile` node no longer overwrites `is_own` — rescraping an own account no longer sets it to `false`
+- Overview page posts query now filters by own profile's `profile_id` (previously fetched posts from all accounts)
+- Overview page post order changed to newest-first with chart reversed for correct timeline display
 
 ---
 
