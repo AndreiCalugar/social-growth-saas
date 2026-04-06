@@ -165,14 +165,19 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
     if (!ownProfileId) return
     try {
       const res = await fetch(`/api/insights?profile_id=${ownProfileId}`)
-      const json = await res.json()
+      const text = await res.text()
+      console.log("[pollForInsights] raw response:", text.slice(0, 200))
+      const json = JSON.parse(text)
+      if (json.error) console.warn("[pollForInsights] API error:", json.error)
       const fetched: Insight[] = json.insights ?? []
       if (fetched.length > startCountRef.current) {
         setInsights(fetched)
         setStatus("done")
         if (pollingRef.current) clearInterval(pollingRef.current)
       }
-    } catch {}
+    } catch (e) {
+      console.error("[pollForInsights] error:", e)
+    }
   }
 
   async function handleGenerate() {
@@ -187,22 +192,43 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
     startCountRef.current = insights.length
 
     try {
+      console.log("[handleGenerate] calling n8n webhook with profile_id:", ownProfileId)
       const res = await fetch("http://localhost:5678/webhook/cross-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ own_profile_id: ownProfileId }),
       })
 
+      const rawText = await res.text()
+      console.log("[handleGenerate] n8n response status:", res.status, "body:", rawText.slice(0, 500))
+
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(`Webhook failed (${res.status}): ${text.slice(0, 200)}`)
+        throw new Error(`n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`)
       }
 
-      const json = await res.json()
+      // Safe JSON parse — n8n returns empty body when workflow errors before Respond Success
+      let json: Record<string, unknown> = {}
+      if (rawText.trim()) {
+        try {
+          json = JSON.parse(rawText)
+        } catch {
+          console.warn("[handleGenerate] n8n response was not JSON:", rawText.slice(0, 200))
+        }
+      } else {
+        // Empty body = workflow crashed before Respond Success node
+        // Almost always means the trend_insights table doesn't exist yet
+        console.warn("[handleGenerate] n8n returned empty body — workflow errored mid-run.")
+        throw new Error(
+          "⚠️ The n8n workflow crashed before finishing. The most likely cause: the trend_insights table doesn't exist in Supabase yet.\n\nFix: Go to Supabase → SQL Editor → paste and run the contents of schema/003-trend-insights.sql, then click Generate Insights again."
+        )
+      }
 
-      // If webhook returned inline results, use them directly
+      if (json.error) {
+        throw new Error(`Workflow error: ${json.error}`)
+      }
+
+      // Success — poll DB for the saved rows
       if (json.insights || json.trends_detected != null) {
-        // Poll to get the saved rows from DB (they're now inserted)
         pollingRef.current = setInterval(pollForInsights, 3000)
         setTimeout(() => {
           if (pollingRef.current) clearInterval(pollingRef.current)

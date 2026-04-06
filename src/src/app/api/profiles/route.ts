@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 
 export async function POST(req: NextRequest) {
-  const { username, is_own } = await req.json()
+  const body = await req.json()
+  const { username, is_own } = body
+  console.log("[/api/profiles POST] body:", body)
 
   if (!username || typeof username !== "string") {
     return NextResponse.json({ error: "username is required" }, { status: 400 })
@@ -18,7 +20,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    // Re-trigger scrape
+    console.log("[/api/profiles POST] profile already exists:", existing.id, "re-triggering scrape")
     const n8nBase = process.env.NEXT_PUBLIC_N8N_BASE_URL ?? "http://localhost:5678"
     try {
       await fetch(`${n8nBase}/webhook/scrape-instagram`, {
@@ -38,18 +40,24 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !profile) {
+    console.error("[/api/profiles POST] insert error:", error?.message)
     return NextResponse.json({ error: error?.message ?? "Failed to save profile" }, { status: 500 })
   }
+
+  console.log("[/api/profiles POST] created profile:", profile.id, profile.username)
 
   // Trigger n8n scrape webhook
   const n8nBase = process.env.NEXT_PUBLIC_N8N_BASE_URL ?? "http://localhost:5678"
   try {
-    await fetch(`${n8nBase}/webhook/scrape-instagram`, {
+    const scrapeRes = await fetch(`${n8nBase}/webhook/scrape-instagram`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: clean }),
     })
-  } catch { /* best-effort */ }
+    console.log("[/api/profiles POST] scrape webhook status:", scrapeRes.status)
+  } catch (e) {
+    console.error("[/api/profiles POST] scrape webhook error:", e)
+  }
 
   return NextResponse.json({ success: true, profile })
 }
