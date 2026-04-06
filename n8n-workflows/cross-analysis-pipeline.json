@@ -1,0 +1,233 @@
+{
+  "name": "Workflow 3: Cross-Competitor Analysis (Insights Engine)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cross-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "cross-analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst own_profile_id = body.own_profile_id;\n\nif (!own_profile_id) throw new Error('Missing required field: own_profile_id');\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(own_profile_id)) {\n  throw new Error('own_profile_id must be a valid UUID');\n}\n\nreturn [{ json: { own_profile_id } }];"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://arujkowiihftpghmxlwv.supabase.co/rest/v1/posts?profile_id=eq.{{ $json.own_profile_id }}&order=likes.desc&limit=100&select=platform_post_id,content_type,caption,likes,comments,views,engagement_rate,posted_at",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-own-posts",
+      "name": "Fetch Own Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://arujkowiihftpghmxlwv.supabase.co/rest/v1/profiles?is_own=eq.false&platform=eq.instagram&select=id,username,followers",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-competitors",
+      "name": "Fetch Competitors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge own posts and competitor list, validate we have enough, build competitor IDs for next query\nconst ownRaw = $('Fetch Own Posts').first().json;\nconst compRaw = $('Fetch Competitors').first().json;\n\nconst own_posts = Array.isArray(ownRaw) ? ownRaw : [ownRaw];\nconst competitors = Array.isArray(compRaw) ? compRaw : [compRaw];\n\nconst own_profile_id = $('Validate Input').first().json.own_profile_id;\n\nif (competitors.length < 2) {\n  throw new Error(`Need at least 2 competitor profiles. Found: ${competitors.length}. Add and scrape competitors first.`);\n}\n\n// Build comma-separated IDs for Supabase IN filter\nconst competitor_ids = competitors.map(c => c.id);\n\nreturn [{ json: { own_profile_id, own_posts, competitors, competitor_ids } }];"
+      },
+      "id": "merge-profiles",
+      "name": "Merge Profiles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "=https://arujkowiihftpghmxlwv.supabase.co/rest/v1/posts?profile_id=in.({{ $json.competitor_ids.join(',') }})&order=likes.desc&limit=300&select=profile_id,platform_post_id,content_type,caption,likes,comments,views,engagement_rate,posted_at",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-all-competitor-posts",
+      "name": "Fetch All Competitor Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "function sanitize(str) {\n  if (!str) return '';\n  return str.replace(/[\\uD800-\\uDFFF]/g, '').replace(/[\\x00-\\x1F\\x7F]/g, ' ').trim();\n}\n\nfunction formatPosts(posts, limit) {\n  if (!posts || posts.length === 0) return '  (no posts scraped yet)';\n  return posts.slice(0, limit).map((p, i) => {\n    const caption = sanitize(p.caption || '').slice(0, 100);\n    const date = (p.posted_at || '').slice(0, 10);\n    return `  ${String(i+1).padStart(2)}. [${(p.content_type||'unknown').padEnd(8)}] ${date} | L:${p.likes||0} C:${p.comments||0} V:${p.views||0} | \"${caption}\"`;\n  }).join('\\n');\n}\n\nconst upstream = $('Merge Profiles').first().json;\nconst { own_profile_id, own_posts, competitors } = upstream;\n\n// Get all competitor posts and group by profile_id\nconst allPostsRaw = $input.first().json;\nconst allPosts = Array.isArray(allPostsRaw) ? allPostsRaw : [allPostsRaw];\n\n// Build a map: profile_id -> posts[]\nconst postsByProfile = {};\nfor (const post of allPosts) {\n  if (!postsByProfile[post.profile_id]) postsByProfile[post.profile_id] = [];\n  postsByProfile[post.profile_id].push(post);\n}\n\nconst competitorCount = competitors.length;\n\n// Format sections for Claude prompt\nconst ownSection = `--- OWN ACCOUNT (${own_posts.length} posts, top by likes) ---\\n${formatPosts(own_posts, 30)}`;\n\nlet competitorSections = '';\nfor (const comp of competitors) {\n  const posts = postsByProfile[comp.id] || [];\n  competitorSections += `\\n--- COMPETITOR: @${comp.username} (${posts.length} posts) ---\\n${formatPosts(posts, 50)}\\n`;\n}\n\nconst systemPrompt = `You are a social media growth analyst specialising in Instagram content strategy. Analyze all provided posts and detect content patterns that consistently outperform average engagement. Return ONLY a valid JSON array, no markdown, no code blocks, no explanation outside the JSON. Be extremely specific in mega_tip recommendations — tell the creator exactly what video to make, what hook to use in the first 3 seconds, caption structure, and best posting day/time.`;\n\nconst userPrompt = `Analyze the following Instagram posts from ${competitorCount} competitor accounts plus the user's own account.\n\nIDENTIFY CONTENT PATTERNS across all accounts. Consider patterns such as: episodic series, problem/solution, gear review, montage/recap, origin story, vulnerability/personal story, human connection moment, educational how-to, food and culture, scenic adventure, behind-the-scenes, challenge/transformation, Q&A, day-in-life, gear failure/mistake, achievement celebration, myth-busting, comparison, route/destination reveal.\n\nFor EACH pattern identified:\n1. Determine which competitors have it in their TOP 20% posts by likes\n2. Only include the pattern if it appears in top 20% posts of 2+ competitors (VALIDATED TREND)\n3. Calculate performance_multiplier = average likes of posts with this pattern / average likes of all posts for that competitor\n\n${ownSection}\n${competitorSections}\n\nReturn a JSON ARRAY (3–7 items max), sorted by performance_multiplier descending. Each item MUST have exactly this structure:\n{\n  \"trend_name\": \"Short descriptive name like 'Episodic Series Content'\",\n  \"confidence\": \"X/${competitorCount} competitors\",\n  \"performance_multiplier\": 3.2,\n  \"why_it_works\": \"1-2 sentences explaining the psychological/algorithmic reason this pattern drives engagement\",\n  \"example_posts\": [\n    {\"caption_preview\": \"first 80 chars of caption\", \"likes\": 1234, \"comments\": 56, \"competitor\": \"@username\"},\n    {\"caption_preview\": \"...\", \"likes\": 890, \"comments\": 34, \"competitor\": \"@username\"},\n    {\"caption_preview\": \"...\", \"likes\": 567, \"comments\": 23, \"competitor\": \"@username\"}\n  ],\n  \"mega_tip\": \"VERY SPECIFIC instruction: describe exactly what to film, the opening hook line word-for-word, caption structure with example hashtags, and ideal posting day and time. Minimum 3 sentences.\",\n  \"user_doing_it\": true\n}\n\nCritical rules:\n- performance_multiplier must be a number, not a string\n- example_posts must have exactly 3 entries\n- user_doing_it must be a boolean (true if own account posts clearly show this pattern, false otherwise)\n- Return ONLY the JSON array`;\n\nreturn [{ json: { own_profile_id, system_prompt: systemPrompt, user_prompt: userPrompt, competitor_count: competitorCount } }];"
+      },
+      "id": "build-prompt",
+      "name": "Build Claude Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "YOUR_ANTHROPIC_API_KEY" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 4096, system: $json.system_prompt, messages: [{ role: 'user', content: $json.user_prompt }] }) }}",
+        "options": {}
+      },
+      "id": "call-claude",
+      "name": "Call Claude API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst rawText = resp?.content?.[0]?.text;\nif (!rawText) throw new Error('Claude returned no content. Response: ' + JSON.stringify(resp));\n\nconst cleaned = rawText\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nlet trends;\ntry {\n  trends = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Failed to parse Claude JSON: ' + e.message + '\\nRaw: ' + cleaned.slice(0, 500));\n}\n\nif (!Array.isArray(trends)) throw new Error('Expected JSON array from Claude, got: ' + typeof trends);\n\nconst upstream = $('Build Claude Prompt').first().json;\nconst own_profile_id = upstream.own_profile_id;\n\nconst enriched = trends.map(t => ({\n  profile_id: own_profile_id,\n  trend_name: t.trend_name || 'Unknown Trend',\n  confidence: (() => {\n    const parts = String(t.confidence || '0/1').split('/');\n    return parseFloat(parts[0]) / (parseFloat(parts[1]) || 1);\n  })(),\n  confidence_label: t.confidence || '',\n  performance_multiplier: typeof t.performance_multiplier === 'number' ? t.performance_multiplier : parseFloat(t.performance_multiplier) || 0,\n  why_it_works: t.why_it_works || '',\n  example_posts: JSON.stringify(t.example_posts || []),\n  recommendation: t.mega_tip || '',\n  suggested_schedule: '',\n  is_mega_tip: t.user_doing_it === false && (t.performance_multiplier || 0) > 2,\n  user_doing_it: t.user_doing_it === true\n}));\n\nconsole.log(`Parsed ${enriched.length} trends. Mega-tips: ${enriched.filter(t => t.is_mega_tip).length}`);\n\nreturn enriched.map(r => ({ json: r }));"
+      },
+      "id": "parse-response",
+      "name": "Parse & Enrich Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://arujkowiihftpghmxlwv.supabase.co/rest/v1/trend_insights",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ profile_id: $json.profile_id, trend_name: $json.trend_name, confidence: $json.confidence, performance_multiplier: $json.performance_multiplier, example_posts: $json.example_posts, recommendation: $json.recommendation, suggested_schedule: $json.suggested_schedule, is_mega_tip: $json.is_mega_tip }) }}",
+        "options": {}
+      },
+      "id": "insert-insight",
+      "name": "Insert Trend Insight",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allInserted = $input.all();\nconst upstream = $('Parse & Enrich Response').all();\n\nconst megaTips = upstream.filter(i => i.json.is_mega_tip).length;\nconst total = upstream.length;\n\nreturn [{\n  json: {\n    success: true,\n    trends_detected: total,\n    mega_tips: megaTips,\n    insights: upstream.map(i => ({\n      trend_name: i.json.trend_name,\n      confidence_label: i.json.confidence_label,\n      performance_multiplier: i.json.performance_multiplier,\n      is_mega_tip: i.json.is_mega_tip,\n      user_doing_it: i.json.user_doing_it\n    }))\n  }\n}];"
+      },
+      "id": "build-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          { "node": "Fetch Own Posts", "type": "main", "index": 0 },
+          { "node": "Fetch Competitors", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Own Posts": {
+      "main": [[{ "node": "Merge Profiles", "type": "main", "index": 0 }]]
+    },
+    "Fetch Competitors": {
+      "main": [[{ "node": "Merge Profiles", "type": "main", "index": 0 }]]
+    },
+    "Merge Profiles": {
+      "main": [[{ "node": "Fetch All Competitor Posts", "type": "main", "index": 0 }]]
+    },
+    "Fetch All Competitor Posts": {
+      "main": [[{ "node": "Build Claude Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build Claude Prompt": {
+      "main": [[{ "node": "Call Claude API", "type": "main", "index": 0 }]]
+    },
+    "Call Claude API": {
+      "main": [[{ "node": "Parse & Enrich Response", "type": "main", "index": 0 }]]
+    },
+    "Parse & Enrich Response": {
+      "main": [[{ "node": "Insert Trend Insight", "type": "main", "index": 0 }]]
+    },
+    "Insert Trend Insight": {
+      "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]]
+    },
+    "Build Response": {
+      "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-06T00:00:00.000Z",
+  "versionId": "1"
+}
