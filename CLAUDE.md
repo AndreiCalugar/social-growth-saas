@@ -1,5 +1,40 @@
-# Developer Setup Guide — Social Growth SaaS
-## Everything you need to install and configure, step by step
+# Social Growth SaaS — CLAUDE.md
+
+## Core product concept
+The product is NOT a dashboard that shows numbers. It's a trend detection engine that tells creators exactly what content to create based on what's working across their competitors.
+
+Core flow: User adds 3-5 competitors → System scrapes 100 posts each → AI analyzes ALL posts together across accounts → Identifies patterns in top 20% posts that appear across 2+ competitors → Each validated pattern becomes a "mega-tip" with specific content brief (format, topic, hook, posting schedule, examples).
+
+The Insights page (/insights) with mega-tips is the core of the product. Everything else (charts, profile pages, competitor comparisons) is supporting context.
+
+## Current phase
+Building the Insights Engine (cross-competitor trend detection + mega-tips).
+
+## What's built and working
+- Infrastructure: Docker, n8n, Supabase
+- Database: profiles, posts, scrape_runs, analyses, recommendations, trend_insights tables
+- Workflow 1: Instagram scrape pipeline (Apify → n8n → Supabase)
+- Workflow 2: AI analysis pipeline (single profile analysis via Claude API)
+- Frontend: Next.js dashboard with Overview, Profiles, Competitors, Profile Detail pages
+- Scraping: loading states, polling, retry, error handling
+- Data: andreixperience, irina.narativa, zicho.hu scraped and in DB
+
+## What's being built next
+- Workflow 3: Cross-competitor analysis pipeline (the insights engine)
+- Insights page (/insights) — the core product page
+- Mega-tip cards with actionable recommendations
+
+## Tech stack
+- Next.js 14 (App Router) + Tailwind + shadcn/ui + Recharts
+- Supabase (PostgreSQL via REST API)
+- n8n (self-hosted via Docker) for workflow automation
+- Apify for Instagram scraping
+- Claude API (Sonnet) for AI analysis
+
+---
+
+## Developer Setup Guide
+### Everything you need to install and configure, step by step
 
 ---
 
@@ -184,13 +219,10 @@ A SaaS platform that scrapes Instagram/TikTok data via Apify, analyzes it with C
 - Apify API for social media scraping
 - Claude API (Sonnet) for AI analysis
 
-## Current phase
-Building the n8n automation pipeline (Workflow 1: Scrape Pipeline)
-
 ## Key files
 - .env — API keys (never commit)
 - n8n-workflows/ — exported workflow JSON files
-- src/ — Next.js application (coming later)
+- src/ — Next.js application
 EOF
 
 # Now launch Claude Code
