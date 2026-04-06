@@ -22,7 +22,7 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings, highlight: false },
 ]
 
-export function Sidebar() {
+export function Sidebar({ username }: { username: string }) {
   const pathname = usePathname()
 
   return (
@@ -68,10 +68,10 @@ export function Sidebar() {
       <div className="border-t p-3">
         <div className="flex items-center gap-2 rounded-md px-3 py-2">
           <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">
-            A
+            {username.charAt(0).toUpperCase()}
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-medium">andreixperience</span>
+            <span className="text-xs font-medium">{username}</span>
             <span className="text-xs text-muted-foreground">Free plan</span>
           </div>
         </div>
