@@ -4,7 +4,8 @@ import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { LikesChart } from "@/components/likes-chart"
-import { Users, BarChart2, FileText, Sparkles, TrendingUp, TrendingDown, Minus } from "lucide-react"
+import Link from "next/link"
+import { Users, BarChart2, FileText, Sparkles, TrendingUp, TrendingDown, Minus, Zap } from "lucide-react"
 
 async function getDashboardData() {
   const [profileRes, postsRes, analysisRes, recsRes] = await Promise.all([
@@ -38,12 +39,39 @@ async function getDashboardData() {
     : 0
   const postCount = posts.length
 
+  // Count trend insights for own profile
+  const ownProfileId = profileRes.data?.id
+  let trendCount = 0
+  let megaTipCount = 0
+  if (ownProfileId) {
+    const { data: latestInsight } = await supabase
+      .from("trend_insights")
+      .select("created_at")
+      .eq("profile_id", ownProfileId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (latestInsight) {
+      const cutoff = new Date(new Date(latestInsight.created_at).getTime() - 10 * 60 * 1000).toISOString()
+      const { data: insights } = await supabase
+        .from("trend_insights")
+        .select("is_mega_tip")
+        .eq("profile_id", ownProfileId)
+        .gte("created_at", cutoff)
+      trendCount = insights?.length ?? 0
+      megaTipCount = insights?.filter((i) => i.is_mega_tip).length ?? 0
+    }
+  }
+
   return {
     ownProfile: profileRes.data ?? null,
     postStats: { avgLikes, postCount },
     posts,
     latestAnalysis: analysisRes.data ?? null,
     recentRecs: recsRes.data ?? [],
+    trendCount,
+    megaTipCount,
   }
 }
 
@@ -66,7 +94,7 @@ const priorityStyles: Record<string, string> = {
 }
 
 export default async function OverviewPage() {
-  const { ownProfile, postStats, posts, latestAnalysis, recentRecs } = await getDashboardData()
+  const { ownProfile, postStats, posts, latestAnalysis, recentRecs, trendCount, megaTipCount } = await getDashboardData()
 
   const engagementSummary = latestAnalysis?.engagement_summary as {
     trend?: string
@@ -239,6 +267,45 @@ export default async function OverviewPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Insights Engine CTA */}
+      <Link href="/insights" className="block">
+        <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 hover:border-orange-300 transition-colors cursor-pointer">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-full bg-orange-100 p-2">
+                  <Zap className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  {trendCount > 0 ? (
+                    <>
+                      <p className="text-sm font-semibold">
+                        {trendCount} trend{trendCount !== 1 ? "s" : ""} detected in your niche
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {megaTipCount > 0
+                          ? `${megaTipCount} mega-tip${megaTipCount !== 1 ? "s" : ""} you should act on now`
+                          : "View your insights"}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold">Discover what content to create</p>
+                      <p className="text-xs text-muted-foreground">
+                        Run the insights engine to detect trends across your competitors
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+              <span className="text-xs font-medium text-orange-600 shrink-0">
+                {trendCount > 0 ? "View insights →" : "Generate insights →"}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
     </div>
   )
 }
