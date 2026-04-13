@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sparkles, Loader2, CheckCircle2 } from "lucide-react"
 
@@ -11,6 +12,7 @@ interface Props {
 export function RunAnalysisButton({ profileId }: Props) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [message, setMessage] = useState("")
+  const router = useRouter()
 
   async function handleClick() {
     setState("loading")
@@ -25,7 +27,10 @@ export function RunAnalysisButton({ profileId }: Props) {
       if (data.success) {
         setState("done")
         setMessage(`Analysis complete — ${data.recommendations_saved} recommendations saved`)
-        setTimeout(() => setState("idle"), 5000)
+        setTimeout(() => {
+          setState("idle")
+          router.refresh()
+        }, 2000)
       } else {
         throw new Error(data.message || "Analysis failed")
       }

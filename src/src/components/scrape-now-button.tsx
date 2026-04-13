@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, Loader2, CheckCircle2 } from "lucide-react"
 
@@ -11,6 +12,7 @@ interface Props {
 export function ScrapeNowButton({ username }: Props) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [message, setMessage] = useState("")
+  const router = useRouter()
 
   async function handleClick() {
     setState("loading")
@@ -23,8 +25,11 @@ export function ScrapeNowButton({ username }: Props) {
       })
       if (res.ok) {
         setState("done")
-        setMessage("Scrape queued — refresh in ~2 min to see data")
-        setTimeout(() => setState("idle"), 8000)
+        setMessage("Scrape queued — data updates in ~2 min")
+        setTimeout(() => {
+          setState("idle")
+          router.refresh()
+        }, 8000)
       } else if (res.status === 429 || res.status === 503) {
         setState("error")
         setMessage("Scrape failed — Instagram may have rate-limited this account. Try again in a few hours.")

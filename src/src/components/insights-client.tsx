@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Sparkles, TrendingUp, Users, CheckCircle, XCircle, Zap } from "lucide-react"
+import { Sparkles, TrendingUp, Users, Zap, RefreshCw, AlertCircle } from "lucide-react"
 
 interface ExamplePost {
   caption_preview: string
@@ -47,82 +46,80 @@ function InsightCard({ insight }: { insight: Insight }) {
   const examples = parseExamples(insight.example_posts)
   const multiplier = insight.performance_multiplier ?? 0
   const isMegaTip = insight.is_mega_tip === true
-
-  // confidence is stored as a ratio (e.g. 0.67 = 2/3)
-  // We display the raw confidence_label from the workflow but we only have confidence ratio here
-  // Format as percentage or multiplier
   const confidencePct = insight.confidence != null ? Math.round(insight.confidence * 100) : null
 
   return (
-    <Card className={`relative overflow-hidden ${isMegaTip ? "border-orange-300 bg-orange-50/30" : ""}`}>
-      {isMegaTip && (
-        <div className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl">
-          MEGA TIP
-        </div>
-      )}
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-base font-semibold leading-snug pr-12">
+    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden border-l-4 ${
+      isMegaTip ? "border-l-amber-500 border-slate-200" : "border-l-purple-500 border-slate-200"
+    }`}>
+      <div className="p-5">
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <h3 className="text-sm font-semibold text-slate-900 leading-snug pr-2">
             {insight.trend_name}
-          </CardTitle>
+          </h3>
+          {isMegaTip && (
+            <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-700">
+              <Zap className="h-3 w-3" /> MEGA TIP
+            </span>
+          )}
         </div>
 
-        {/* Badges row */}
-        <div className="flex flex-wrap items-center gap-2 mt-1">
+        {/* Badges */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-4">
           {confidencePct != null && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 font-medium">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 font-medium">
               <Users className="h-3 w-3" />
               {confidencePct}% of competitors
             </span>
           )}
           {multiplier > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] text-green-700 font-medium">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium">
               <TrendingUp className="h-3 w-3" />
-              {multiplier.toFixed(1)}x avg engagement
+              {multiplier.toFixed(1)}× avg engagement
             </span>
           )}
           {insight.is_mega_tip === false ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] text-green-700 font-medium">
-              <CheckCircle className="h-3 w-3" />
-              You&apos;re already doing this
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium">
+              ✓ You&apos;re doing this
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] text-red-600 font-medium">
-              <XCircle className="h-3 w-3" />
-              You&apos;re not doing this yet
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[11px] font-medium">
+              ✗ You&apos;re not doing this
             </span>
           )}
         </div>
-      </CardHeader>
 
-      <CardContent className="space-y-4">
-        {/* Multiplier highlight */}
+        {/* Large multiplier */}
         {multiplier > 0 && (
-          <div className="text-4xl font-bold text-foreground tabular-nums">
-            {multiplier.toFixed(1)}
-            <span className="text-lg font-normal text-muted-foreground ml-1">× avg engagement</span>
+          <div className="mb-4">
+            <span className="text-4xl font-bold text-slate-900 tabular-nums tracking-tight">
+              {multiplier.toFixed(1)}
+            </span>
+            <span className="text-base font-normal text-slate-400 ml-1.5">× avg engagement</span>
           </div>
         )}
 
-        {/* Example posts */}
+        {/* Example posts table */}
         {examples.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+          <div className="mb-4">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
               Top examples
             </p>
-            <div className="rounded-md border overflow-hidden">
+            <div className="rounded-lg border border-slate-100 overflow-hidden">
               <table className="w-full text-xs">
                 <tbody>
                   {examples.map((ex, i) => (
-                    <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="px-3 py-2 text-muted-foreground font-medium whitespace-nowrap">
-                        {ex.competitor}
+                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
+                      <td className="px-3 py-2 font-medium text-slate-600 whitespace-nowrap">
+                        @{ex.competitor}
                       </td>
-                      <td className="px-3 py-2 max-w-[220px] truncate text-muted-foreground">
+                      <td className="px-3 py-2 text-slate-500 max-w-[200px] truncate">
                         {ex.caption_preview}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap font-medium">{fmt(ex.likes)} ♥</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{fmt(ex.comments)} 💬</td>
+                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-700 text-right">
+                        {fmt(ex.likes)} ♥
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -131,18 +128,27 @@ function InsightCard({ insight }: { insight: Insight }) {
           </div>
         )}
 
-        {/* Mega-tip recommendation */}
+        {/* Recommendation */}
         {insight.recommendation && (
-          <div className={`rounded-md p-4 space-y-1 ${isMegaTip ? "bg-orange-100 border border-orange-200" : "bg-muted/50 border"}`}>
-            <p className={`text-[11px] font-bold uppercase tracking-wide ${isMegaTip ? "text-orange-700" : "text-muted-foreground"}`}>
-              <Zap className="inline h-3 w-3 mr-1" />
-              {isMegaTip ? "Mega Tip — do this now" : "Recommendation"}
+          <div className={`rounded-lg px-4 py-3 ${
+            isMegaTip
+              ? "bg-amber-50 border border-amber-100"
+              : "bg-purple-50 border border-purple-100"
+          }`}>
+            <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+              isMegaTip ? "text-amber-700" : "text-purple-700"
+            }`}>
+              {isMegaTip ? "⚡ Do this now" : "Recommendation"}
             </p>
-            <p className="text-sm leading-relaxed">{insight.recommendation}</p>
+            <p className={`text-sm leading-relaxed ${
+              isMegaTip ? "text-amber-900" : "text-purple-900"
+            }`}>
+              {insight.recommendation}
+            </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -165,10 +171,7 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
     if (!ownProfileId) return
     try {
       const res = await fetch(`/api/insights?profile_id=${ownProfileId}`)
-      const text = await res.text()
-      console.log("[pollForInsights] raw response:", text.slice(0, 200))
-      const json = JSON.parse(text)
-      if (json.error) console.warn("[pollForInsights] API error:", json.error)
+      const json = await res.json()
       const fetched: Insight[] = json.insights ?? []
       if (fetched.length > startCountRef.current) {
         setInsights(fetched)
@@ -192,7 +195,6 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
     startCountRef.current = insights.length
 
     try {
-      console.log("[handleGenerate] calling n8n webhook with profile_id:", ownProfileId)
       const res = await fetch("http://localhost:5678/webhook/cross-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -200,47 +202,30 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
       })
 
       const rawText = await res.text()
-      console.log("[handleGenerate] n8n response status:", res.status, "body:", rawText.slice(0, 500))
 
       if (!res.ok) {
         throw new Error(`n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`)
       }
 
-      // Safe JSON parse — n8n returns empty body when workflow errors before Respond Success
       let json: Record<string, unknown> = {}
       if (rawText.trim()) {
-        try {
-          json = JSON.parse(rawText)
-        } catch {
-          console.warn("[handleGenerate] n8n response was not JSON:", rawText.slice(0, 200))
-        }
+        try { json = JSON.parse(rawText) } catch { /* non-JSON */ }
       } else {
-        // Empty body = workflow crashed before Respond Success node
-        // Almost always means the trend_insights table doesn't exist yet
-        console.warn("[handleGenerate] n8n returned empty body — workflow errored mid-run.")
         throw new Error(
-          "⚠️ The n8n workflow crashed before finishing. The most likely cause: the trend_insights table doesn't exist in Supabase yet.\n\nFix: Go to Supabase → SQL Editor → paste and run the contents of schema/003-trend-insights.sql, then click Generate Insights again."
+          "The n8n workflow crashed before finishing. Most likely cause: the trend_insights table doesn't exist in Supabase yet.\n\nFix: Go to Supabase → SQL Editor → run schema/003-trend-insights.sql, then try again."
         )
       }
 
-      if (json.error) {
-        throw new Error(`Workflow error: ${json.error}`)
-      }
+      if (json.error) throw new Error(`Workflow error: ${json.error}`)
 
-      // Success — poll DB for the saved rows
-      if (json.insights || json.trends_detected != null) {
-        pollingRef.current = setInterval(pollForInsights, 3000)
-        setTimeout(() => {
-          if (pollingRef.current) clearInterval(pollingRef.current)
-          if (status !== "done") {
-            setStatus("error")
-            setErrorMsg("Analysis completed but insights didn't load. Refresh the page.")
-          }
-        }, 60_000)
-      } else {
-        // Start polling regardless
-        pollingRef.current = setInterval(pollForInsights, 5000)
-      }
+      pollingRef.current = setInterval(pollForInsights, 3000)
+      setTimeout(() => {
+        if (pollingRef.current) clearInterval(pollingRef.current)
+        if (status !== "done") {
+          setStatus("error")
+          setErrorMsg("Analysis completed but insights didn't load. Refresh the page.")
+        }
+      }, 60_000)
     } catch (e) {
       setStatus("error")
       setErrorMsg(e instanceof Error ? e.message : "Unknown error")
@@ -248,20 +233,20 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
   }
 
   const megaTips = insights.filter((i) => i.is_mega_tip)
-  const notMegaTips = insights.filter((i) => !i.is_mega_tip)
-  const doing = insights.filter((i) => i.is_mega_tip === false).length
-  const total = insights.length
+  const otherInsights = insights.filter((i) => !i.is_mega_tip)
 
   return (
     <div className="p-6 space-y-6 max-w-4xl">
-      {/* Header */}
+      {/* Page header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-orange-500" />
-            Insights Engine
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
+              <Sparkles className="h-4 w-4 text-white" />
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Insights Engine</h1>
+          </div>
+          <p className="text-sm text-slate-500">
             Cross-competitor trend detection across {competitorCount} accounts
           </p>
         </div>
@@ -269,56 +254,70 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
         <button
           onClick={handleGenerate}
           disabled={status === "generating" || !ownProfileId}
-          className="inline-flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shrink-0"
+          className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm shrink-0"
         >
-          <Sparkles className="h-4 w-4" />
-          {status === "generating" ? "Analyzing…" : insights.length > 0 ? "Re-run Analysis" : "Generate Insights"}
+          {status === "generating" ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {status === "generating"
+            ? "Analyzing…"
+            : insights.length > 0
+            ? "Re-run Analysis"
+            : "Generate Insights"}
         </button>
       </div>
 
-      {/* Loading state */}
+      {/* Generating state */}
       {status === "generating" && (
-        <Card className="border-orange-200 bg-orange-50/40">
-          <CardContent className="pt-6 pb-6 text-center space-y-2">
-            <div className="text-2xl animate-pulse">🔍</div>
-            <p className="text-sm font-medium">Analyzing trends across your competitors…</p>
-            <p className="text-xs text-muted-foreground">This takes 30–60 seconds. Claude is reading all posts.</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center space-y-2">
+          <RefreshCw className="h-8 w-8 text-amber-500 animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-amber-900">Analyzing trends across your competitors…</p>
+          <p className="text-xs text-amber-700">Claude is reading all posts. This takes 30–60 seconds.</p>
+        </div>
       )}
 
-      {/* Error */}
+      {/* Error state */}
       {status === "error" && errorMsg && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-4 pb-4">
-            <p className="text-sm text-red-700">{errorMsg}</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 leading-relaxed">{errorMsg}</p>
+        </div>
       )}
 
       {/* Summary bar */}
       {insights.length > 0 && status !== "generating" && (
-        <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground flex items-center gap-4 flex-wrap">
-          <span>
-            <strong className="text-foreground">{total}</strong> trends detected in your niche
-          </span>
-          <span>
-            <strong className="text-orange-600">{megaTips.length}</strong> mega-tips you should act on
-          </span>
-          <span>
-            <strong className="text-green-600">{doing}</strong> of {total} you&apos;re already doing
-          </span>
+        <div className="rounded-xl border border-slate-200 bg-white px-5 py-3 flex items-center gap-6 flex-wrap shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-slate-900 tabular-nums">{insights.length}</span>
+            <span className="text-xs text-slate-500 leading-tight">trends<br />detected</span>
+          </div>
+          <div className="w-px h-8 bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-amber-600 tabular-nums">{megaTips.length}</span>
+            <span className="text-xs text-slate-500 leading-tight">mega-tips<br />to act on</span>
+          </div>
+          <div className="w-px h-8 bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-emerald-600 tabular-nums">
+              {insights.filter((i) => i.is_mega_tip === false).length}
+            </span>
+            <span className="text-xs text-slate-500 leading-tight">already<br />doing</span>
+          </div>
         </div>
       )}
 
-      {/* Mega-tip cards */}
+      {/* Mega tips section */}
       {megaTips.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-orange-600 flex items-center gap-1">
-            <Zap className="h-4 w-4" />
-            Mega Tips — Act on these now
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-1">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-amber-500" />
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+              Mega Tips — Act on these now
+            </h2>
+          </div>
+          <div className="grid gap-4">
             {megaTips.map((insight) => (
               <InsightCard key={insight.id} insight={insight} />
             ))}
@@ -326,14 +325,14 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
         </div>
       )}
 
-      {/* Other detected trends */}
-      {notMegaTips.length > 0 && (
+      {/* Other trends section */}
+      {otherInsights.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
             Other Detected Trends
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            {notMegaTips.map((insight) => (
+            {otherInsights.map((insight) => (
               <InsightCard key={insight.id} insight={insight} />
             ))}
           </div>
@@ -342,17 +341,25 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
 
       {/* Empty state */}
       {insights.length === 0 && status === "idle" && (
-        <Card className="border-dashed">
-          <CardContent className="pt-8 pb-8 text-center space-y-3">
-            <div className="text-4xl">✨</div>
-            <div>
-              <p className="text-sm font-medium">No insights generated yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Click &ldquo;Generate Insights&rdquo; to run the cross-competitor analysis.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center space-y-4">
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
+            <Sparkles className="h-7 w-7 text-white" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">No insights generated yet</p>
+            <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+              Click &ldquo;Generate Insights&rdquo; to run the cross-competitor analysis and discover
+              what content to create.
+            </p>
+          </div>
+          <button
+            onClick={handleGenerate}
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 transition-colors shadow-sm"
+          >
+            <Sparkles className="h-4 w-4" />
+            Generate Insights
+          </button>
+        </div>
       )}
     </div>
   )

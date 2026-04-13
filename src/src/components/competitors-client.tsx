@@ -87,11 +87,11 @@ function formatDate(d: string | null | undefined) {
 }
 
 const CHART_COLORS = [
-  "hsl(221.2 83.2% 53.3%)", // primary blue (you)
-  "hsl(38 92% 50%)",         // orange
-  "hsl(142 71% 45%)",        // green
-  "hsl(262 83% 58%)",        // purple
-  "hsl(336 75% 55%)",        // pink
+  "#7c3aed", // purple (you)
+  "#059669", // emerald
+  "#d97706", // amber
+  "#2563eb", // blue
+  "#db2777", // pink
 ]
 
 // ─── MetricRow ────────────────────────────────────────────────────────────────
@@ -105,8 +105,8 @@ function MetricRow({ label, ownValue, compValue }: { label: string; ownValue: st
       <div className="text-right">
         <p className="text-sm font-semibold">{typeof ownValue === "number" ? formatNumber(ownValue) : ownValue}</p>
         {ownNum != null && max > 0 && (
-          <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden flex justify-end">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${(ownNum / max) * 100}%` }} />
+          <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden flex justify-end">
+            <div className="h-full rounded-full bg-purple-600" style={{ width: `${(ownNum / max) * 100}%` }} />
           </div>
         )}
       </div>
@@ -114,8 +114,8 @@ function MetricRow({ label, ownValue, compValue }: { label: string; ownValue: st
       <div>
         <p className="text-sm font-semibold">{typeof compValue === "number" ? formatNumber(compValue) : compValue}</p>
         {compNum != null && max > 0 && (
-          <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full rounded-full bg-orange-400" style={{ width: `${(compNum / max) * 100}%` }} />
+          <div className="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full rounded-full bg-amber-500" style={{ width: `${(compNum / max) * 100}%` }} />
           </div>
         )}
       </div>
@@ -181,12 +181,13 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
   }, [ownPosts, compPosts])
 
   const tooltipStyle = {
-    backgroundColor: "hsl(0 0% 100%)",
-    border: "1px solid hsl(214.3 31.8% 91.4%)",
-    borderRadius: "8px",
+    backgroundColor: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
     fontSize: "12px",
+    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.07)",
   }
-  const tickStyle = { fontSize: 11, fill: "hsl(215.4 16.3% 46.9%)" }
+  const tickStyle = { fontSize: 11, fill: "#94a3b8" }
 
   if (competitors.length === 0) {
     return (
@@ -227,12 +228,12 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
                 {allProfiles.map(({ profile, metrics, isOwn }, i) => {
                   const postCount = allPosts.filter((p) => p.profile_id === profile.id).length
                   return (
-                    <tr key={profile.id} className={`border-b last:border-0 ${isOwn ? "bg-primary/5" : ""}`}>
+                    <tr key={profile.id} className={`border-b last:border-0 ${isOwn ? "bg-purple-50/50" : "hover:bg-slate-50"}`}>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                           <span className="font-medium">@{profile.username}</span>
-                          {isOwn && <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">You</span>}
+                          {isOwn && <span className="text-[9px] px-1 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-semibold">You</span>}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right">{formatNumber(profile.followers)}</td>
@@ -263,7 +264,7 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
               <XAxis dataKey="name" tick={tickStyle} tickLine={false} axisLine={false} />
               <YAxis tick={tickStyle} tickLine={false} axisLine={false} width={45} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => [formatNumber(typeof value === "number" ? value : null), "Avg Likes"]} />
-              <Bar dataKey="avgLikes" radius={[3, 3, 0, 0]}>
+              <Bar dataKey="avgLikes" radius={[6, 6, 0, 0]}>
                 {engagementChartData.map((entry) => (
                   <Cell key={entry.name} fill={CHART_COLORS[entry.colorIndex % CHART_COLORS.length]} />
                 ))}
@@ -335,8 +336,8 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
                   onClick={() => setSelectedId(c.id)}
                   className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                     c.id === selectedId
-                      ? "bg-orange-100 text-orange-700 border-orange-300"
-                      : "bg-muted text-muted-foreground border-border hover:text-foreground"
+                      ? "bg-purple-50 text-purple-700 border-purple-300"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
                   @{c.username}
@@ -348,10 +349,10 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
 
         {/* Side-by-side header */}
         <div className="grid grid-cols-2 gap-4">
-          <Card className="border-primary/30">
+          <Card className="border-purple-200 bg-purple-50/30">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-primary" />
+                <div className="h-2 w-2 rounded-full bg-purple-600" />
                 <CardTitle className="text-sm font-semibold">You — @{ownProfile?.username ?? "—"}</CardTitle>
               </div>
               <CardDescription className="flex items-center gap-3 text-xs">
@@ -387,7 +388,7 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Head-to-head metrics</CardTitle>
               <div className="flex items-center gap-4 mt-1">
-                <span className="flex items-center gap-1.5 text-xs"><span className="inline-block h-2 w-2 rounded-full bg-primary" />You</span>
+                <span className="flex items-center gap-1.5 text-xs"><span className="inline-block h-2 w-2 rounded-full bg-purple-600" />You</span>
                 <span className="flex items-center gap-1.5 text-xs"><span className="inline-block h-2 w-2 rounded-full bg-orange-400" />Competitor</span>
               </div>
             </CardHeader>
@@ -421,8 +422,8 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
                   <XAxis dataKey="metric" tick={tickStyle} tickLine={false} axisLine={false} />
                   <YAxis tick={tickStyle} tickLine={false} axisLine={false} width={45} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="you" name="You" fill="hsl(221.2 83.2% 53.3%)" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="them" name="Competitor" fill="hsl(38 92% 50%)" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="you" name="You" fill="#7c3aed" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="them" name="Competitor" fill="#d97706" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

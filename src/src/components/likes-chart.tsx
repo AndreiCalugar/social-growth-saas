@@ -20,48 +20,50 @@ interface Props {
   data: DataPoint[]
 }
 
+const tickStyle = { fontSize: 11, fill: "#94a3b8" }
+const tooltipStyle = {
+  backgroundColor: "#ffffff",
+  border: "1px solid #e2e8f0",
+  borderRadius: "10px",
+  fontSize: "12px",
+  boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.07)",
+}
+
 export function LikesChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <LineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+          tick={tickStyle}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+          tick={tickStyle}
           tickLine={false}
           axisLine={false}
           width={40}
         />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px",
-            fontSize: "12px",
-          }}
-        />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "#e2e8f0", strokeWidth: 1 }} />
         <Line
           type="monotone"
           dataKey="likes"
-          stroke="hsl(var(--primary))"
+          stroke="#7c3aed"
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 4 }}
+          activeDot={{ r: 4, fill: "#7c3aed", strokeWidth: 0 }}
           name="Likes"
         />
         <Line
           type="monotone"
           dataKey="views"
-          stroke="hsl(var(--muted-foreground))"
+          stroke="#cbd5e1"
           strokeWidth={1.5}
           dot={false}
-          strokeDasharray="4 2"
-          name="Views"
+          strokeDasharray="4 3"
+          name="Views÷10"
         />
       </LineChart>
     </ResponsiveContainer>
