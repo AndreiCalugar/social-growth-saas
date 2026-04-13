@@ -47,8 +47,8 @@ export default async function CompetitorsPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Competitors</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-bold text-slate-900">Competitors</h1>
+          <p className="text-sm text-slate-500">
             Track and compare against other Instagram accounts
           </p>
         </div>
@@ -61,8 +61,8 @@ export default async function CompetitorsPage() {
           <CardContent className="pt-10 pb-10 text-center space-y-4">
             <div className="text-4xl">🎯</div>
             <div>
-              <p className="font-semibold text-sm">Add 3–5 competitors in your niche</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+              <p className="font-semibold text-sm text-slate-900">Add 3–5 competitors in your niche</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
                 The insights engine analyzes posts across all competitor accounts together to detect what
                 content patterns consistently outperform — then tells you exactly what to create.
                 You need at least 3 to unlock trend detection.
@@ -82,20 +82,24 @@ export default async function CompetitorsPage() {
             return (
               <div key={c.id} className="group relative">
                 <Link href={`/profiles/${c.id}`}>
-                  <Card className="hover:border-orange-300/60 hover:shadow-sm transition-all cursor-pointer">
+                  <Card className="hover:border-purple-300 hover:shadow-md transition-all cursor-pointer">
                     <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-semibold">@{c.username}</CardTitle>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center shrink-0 shadow-sm">
+                            <span className="text-sm font-bold text-white">{c.username.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div>
+                            <CardTitle className="text-sm font-semibold text-slate-900">@{c.username}</CardTitle>
+                            <p className="text-xs text-slate-500 mt-0.5">{formatNumber(c.followers)} followers</p>
+                          </div>
+                        </div>
                         <DeleteCompetitorButton profileId={c.id} username={c.username} />
                       </div>
-                      <CardDescription className="flex items-center gap-1.5 text-xs">
-                        <Users className="h-3 w-3" />
-                        {formatNumber(c.followers)} followers
-                      </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-1.5">
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
+                    <CardContent className="space-y-1.5 pt-0">
+                      <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                        <Clock className="h-3 w-3 text-slate-400" />
                         {c.last_scraped ? `Scraped ${formatRelativeTime(c.last_scraped)}` : "Never scraped"}
                       </p>
                       {scrapeStatus === "failed" && (
@@ -108,13 +112,13 @@ export default async function CompetitorsPage() {
                         </div>
                       )}
                       {scrapeStatus === "completed" && c.last_scraped && (
-                        <p className="text-xs flex items-center gap-1 text-green-600">
+                        <p className="text-xs flex items-center gap-1.5 text-emerald-600">
                           <CheckCircle2 className="h-3 w-3" />
                           Scraped successfully
                         </p>
                       )}
                       {scrapeStatus === "never" && (
-                        <p className="text-xs text-muted-foreground">Not scraped yet</p>
+                        <p className="text-xs text-slate-400">Not scraped yet</p>
                       )}
                     </CardContent>
                   </Card>
@@ -135,9 +139,9 @@ export default async function CompetitorsPage() {
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-slate-500">
               Own profile not found. Run a scrape from the{" "}
-              <Link href="/" className="text-primary underline underline-offset-2">Overview page</Link>{" "}
+              <Link href="/" className="text-purple-600 underline underline-offset-2">Overview page</Link>{" "}
               first.
             </p>
           </CardContent>

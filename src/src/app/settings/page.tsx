@@ -56,21 +56,21 @@ export default function SettingsPage() {
 
   return (
     <div className="p-6 max-w-xl">
-      <h1 className="text-2xl font-bold mb-1">Settings</h1>
-      <p className="text-muted-foreground text-sm mb-8">Configure your workspace</p>
+      <h1 className="text-xl font-bold text-slate-900 mb-1">Settings</h1>
+      <p className="text-slate-500 text-sm mb-8">Configure your workspace</p>
 
-      <section className="rounded-lg border bg-card p-5">
-        <h2 className="font-semibold mb-1">Current Profile</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Switch which account is treated as "your" profile across all pages.
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="font-semibold text-slate-900 mb-1">Current Profile</h2>
+        <p className="text-sm text-slate-500 mb-4">
+          Switch which account is treated as &ldquo;your&rdquo; profile across all pages.
         </p>
 
         {loading ? (
-          <div className="h-9 w-full animate-pulse rounded-md bg-muted" />
+          <div className="h-9 w-full animate-pulse rounded-lg bg-slate-100" />
         ) : (
           <div className="flex gap-3">
             <select
-              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+              className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
             >
@@ -85,7 +85,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSwitch}
               disabled={switching || selectedId === currentOwn?.id}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90 transition-colors"
+              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-purple-700 transition-colors shadow-sm"
             >
               {switching ? "Switching…" : "Switch"}
             </button>
@@ -93,14 +93,14 @@ export default function SettingsPage() {
         )}
 
         {currentOwn && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Active: <span className="font-medium">@{currentOwn.username}</span>
+          <p className="mt-3 text-xs text-slate-500">
+            Active: <span className="font-medium text-slate-900">@{currentOwn.username}</span>
           </p>
         )}
       </section>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg">
           {toast}
         </div>
       )}
