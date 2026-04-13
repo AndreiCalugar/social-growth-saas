@@ -8,18 +8,7 @@ import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { RetryScrapeButton } from "@/components/retry-scrape-button"
 import { Users, Clock, AlertTriangle, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
-
-function formatNumber(n: number | null | undefined) {
-  if (n == null) return "—"
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
-
-function formatDate(d: string | null | undefined) {
-  if (!d) return "Never"
-  return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-}
+import { formatNumber, formatRelativeTime } from "@/lib/format"
 
 export default async function CompetitorsPage() {
   const [profilesRes, postsRes, scrapeRunsRes] = await Promise.all([
@@ -66,6 +55,23 @@ export default async function CompetitorsPage() {
         <AddCompetitorForm />
       </div>
 
+      {/* Empty state */}
+      {competitors.length === 0 && (
+        <Card className="border-dashed">
+          <CardContent className="pt-10 pb-10 text-center space-y-4">
+            <div className="text-4xl">🎯</div>
+            <div>
+              <p className="font-semibold text-sm">Add 3–5 competitors in your niche</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                The insights engine analyzes posts across all competitor accounts together to detect what
+                content patterns consistently outperform — then tells you exactly what to create.
+                You need at least 3 to unlock trend detection.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Competitor cards list */}
       {competitors.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -90,7 +96,7 @@ export default async function CompetitorsPage() {
                     <CardContent className="space-y-1.5">
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        Scraped {formatDate(c.last_scraped)}
+                        {c.last_scraped ? `Scraped ${formatRelativeTime(c.last_scraped)}` : "Never scraped"}
                       </p>
                       {scrapeStatus === "failed" && (
                         <div className="space-y-1">

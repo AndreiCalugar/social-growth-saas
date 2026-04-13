@@ -5,19 +5,8 @@ import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AddProfileModal } from "@/components/add-profile-modal"
 import { ProfileCardActions } from "@/components/profile-card-actions"
+import { formatNumber, formatRelativeTime } from "@/lib/format"
 import { Users, Clock, FileText, TrendingUp } from "lucide-react"
-
-function formatNumber(n: number | null | undefined) {
-  if (n == null) return "—"
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
-
-function formatDate(d: string | null | undefined) {
-  if (!d) return "Never"
-  return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-}
 
 export default async function ProfilesPage() {
   const [profilesRes, postsRes] = await Promise.all([
@@ -74,8 +63,6 @@ export default async function ProfilesPage() {
                   key={profile.id}
                   profile={profile}
                   stats={stats}
-                  formatNumber={formatNumber}
-                  formatDate={formatDate}
                   badge={<span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">Own</span>}
                 />
               )
@@ -96,8 +83,6 @@ export default async function ProfilesPage() {
                   key={profile.id}
                   profile={profile}
                   stats={stats}
-                  formatNumber={formatNumber}
-                  formatDate={formatDate}
                 />
               )
             })}
@@ -121,12 +106,10 @@ export default async function ProfilesPage() {
 interface ProfileCardProps {
   profile: { id: string; username: string; followers: number | null; last_scraped: string | null; is_own: boolean }
   stats: { count: number; avgEngagement: number | null; avgLikes: number | null }
-  formatNumber: (n: number | null | undefined) => string
-  formatDate: (d: string | null | undefined) => string
   badge?: React.ReactNode
 }
 
-function ProfileCard({ profile, stats, formatNumber, formatDate, badge }: ProfileCardProps) {
+function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
   return (
     <div className="group relative">
       <Link href={`/profiles/${profile.id}`}>
@@ -157,7 +140,7 @@ function ProfileCard({ profile, stats, formatNumber, formatDate, badge }: Profil
             )}
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              Scraped {formatDate(profile.last_scraped)}
+              {profile.last_scraped ? `Scraped ${formatRelativeTime(profile.last_scraped)}` : "Never scraped"}
             </p>
           </CardContent>
         </Card>
