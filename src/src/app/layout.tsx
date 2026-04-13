@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
-import { Geist } from "next/font/google"
+import { Inter } from "next/font/google"
 import "./globals.css"
 import { Sidebar } from "@/components/sidebar"
 import { supabase } from "@/lib/supabase"
 
-const geist = Geist({ subsets: ["latin"] })
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Social Growth",
@@ -22,10 +22,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en">
-      <body className={`${geist.className} h-screen overflow-hidden`}>
+      <body className={`${inter.className} h-screen overflow-hidden bg-slate-50 antialiased`}>
         <div className="flex h-full">
           <Sidebar username={ownProfile?.username ?? "—"} />
-          <main className="flex-1 overflow-y-auto bg-muted/20">{children}</main>
+          <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
       </body>
     </html>
