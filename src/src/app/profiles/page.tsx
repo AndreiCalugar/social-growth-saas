@@ -45,8 +45,8 @@ export default async function ProfilesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Profiles</h1>
-          <p className="text-sm text-muted-foreground">Manage tracked Instagram accounts</p>
+          <h1 className="text-xl font-bold text-slate-900">Profiles</h1>
+          <p className="text-sm text-slate-500">Manage tracked Instagram accounts</p>
         </div>
         <AddProfileModal />
       </div>
@@ -54,7 +54,7 @@ export default async function ProfilesPage() {
       {/* Own profiles */}
       {ownProfiles.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Your Profile</h2>
+          <h2 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Your Profile</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ownProfiles.map((profile) => {
               const stats = statsByProfile[profile.id]
@@ -63,7 +63,7 @@ export default async function ProfilesPage() {
                   key={profile.id}
                   profile={profile}
                   stats={stats}
-                  badge={<span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">Own</span>}
+                  badge={<span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">Own</span>}
                 />
               )
             })}
@@ -74,7 +74,7 @@ export default async function ProfilesPage() {
       {/* Competitors */}
       {competitors.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Competitors</h2>
+          <h2 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Competitors</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {competitors.map((profile) => {
               const stats = statsByProfile[profile.id]
@@ -110,36 +110,41 @@ interface ProfileCardProps {
 }
 
 function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
+  const initials = profile.username.charAt(0).toUpperCase()
   return (
     <div className="group relative">
       <Link href={`/profiles/${profile.id}`}>
-        <Card className="hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer h-full">
+        <Card className="hover:border-purple-300 hover:shadow-md transition-all cursor-pointer h-full">
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">@{profile.username}</CardTitle>
-              <div className="flex items-center gap-1.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shrink-0 shadow-sm">
+                  <span className="text-sm font-bold text-white">{initials}</span>
+                </div>
+                <div>
+                  <CardTitle className="text-sm font-semibold text-slate-900">@{profile.username}</CardTitle>
+                  <p className="text-xs text-slate-500 mt-0.5">{formatNumber(profile.followers)} followers</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
                 {badge}
                 <ProfileCardActions profileId={profile.id} username={profile.username} />
               </div>
             </div>
-            <CardDescription className="flex items-center gap-1.5 text-xs">
-              <Users className="h-3 w-3" />
-              {formatNumber(profile.followers)} followers
-            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1.5">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <FileText className="h-3 w-3" />
-              {stats.count} posts
+          <CardContent className="space-y-1.5 pt-0">
+            <p className="text-xs text-slate-500 flex items-center gap-1.5">
+              <FileText className="h-3 w-3 text-slate-400" />
+              {stats.count} posts tracked
             </p>
             {stats.avgLikes != null && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <TrendingUp className="h-3 w-3" />
+              <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                <TrendingUp className="h-3 w-3 text-slate-400" />
                 {formatNumber(Math.round(stats.avgLikes))} avg likes
               </p>
             )}
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="h-3 w-3" />
+            <p className="text-xs text-slate-500 flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-slate-400" />
               {profile.last_scraped ? `Scraped ${formatRelativeTime(profile.last_scraped)}` : "Never scraped"}
             </p>
           </CardContent>

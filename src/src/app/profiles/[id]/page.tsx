@@ -141,7 +141,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold">@{profile.username}</h1>
             {profile.is_own && (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
                 Own account
               </span>
             )}
@@ -149,7 +149,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
           {profile.bio && (
             <p className="text-sm text-muted-foreground max-w-lg">{profile.bio}</p>
           )}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-4 text-sm text-slate-500">
             <span className="flex items-center gap-1">
               <Users className="h-3.5 w-3.5" />
               {formatNumber(profile.followers)} followers
@@ -170,17 +170,17 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-1 pt-4">
-            <CardDescription className="text-xs">Total posts</CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums">{posts.length}</CardTitle>
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Total posts</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">{posts.length}</CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
-            <p className="text-xs text-muted-foreground">tracked</p>
+            <p className="text-xs text-slate-400">tracked</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-1 pt-4">
-            <CardDescription className="text-xs">Avg likes</CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums">
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Avg likes</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
               {formatNumber(
                 engagementSummary?.avg_likes ??
                   (posts.length > 0
@@ -190,13 +190,13 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
-            <p className="text-xs text-muted-foreground">per post</p>
+            <p className="text-xs text-slate-400">per post</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-1 pt-4">
-            <CardDescription className="text-xs">Avg views</CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums">
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Avg views</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
               {formatNumber(
                 engagementSummary?.avg_views ??
                   (posts.length > 0
@@ -206,19 +206,19 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
-            <p className="text-xs text-muted-foreground">per post</p>
+            <p className="text-xs text-slate-400">per post</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-1 pt-4">
-            <CardDescription className="text-xs">Trend</CardDescription>
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Trend</CardDescription>
             <CardTitle className={`text-base font-semibold pt-1 flex items-center gap-1.5 ${trendColor}`}>
               <TrendIcon className="h-4 w-4" />
               {engagementSummary?.trend ?? "—"}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
-            <p className="text-xs text-muted-foreground">from AI analysis</p>
+            <p className="text-xs text-slate-400">from AI analysis</p>
           </CardContent>
         </Card>
       </div>
@@ -244,14 +244,14 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
 
       {/* ── AI ANALYSIS SECTIONS ── */}
       {!latestAnalysis ? (
-        <Card className="border-dashed border-primary/30 bg-primary/5">
+        <Card className="border-dashed border-purple-200 bg-purple-50/30">
           <CardContent className="pt-8 pb-8 text-center space-y-4">
-            <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Sparkles className="h-6 w-6 text-primary" />
+            <div className="mx-auto h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
+              <Sparkles className="h-6 w-6 text-purple-600" />
             </div>
             <div>
-              <p className="font-semibold text-sm">Run AI analysis to unlock deeper insights</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+              <p className="font-semibold text-sm text-slate-900">Run AI analysis to unlock deeper insights</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
                 Claude will identify your top and worst posts, best posting times, and give you specific
                 recommendations to grow faster.
               </p>
@@ -263,20 +263,20 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
         <div className="space-y-6">
           {/* Analysis timestamp */}
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">AI Analysis</h2>
-            <span className="text-xs text-muted-foreground">
+            <h2 className="text-base font-semibold text-slate-900">AI Analysis</h2>
+            <span className="text-xs text-slate-400">
               Run {formatRelativeTime(latestAnalysis.created_at)}
             </span>
           </div>
 
           {/* Trend reasoning */}
           {engagementSummary?.trend_reasoning && (
-            <Card className="border-dashed">
+            <Card className="border-slate-200 bg-slate-50/50">
               <CardContent className="pt-4 pb-4">
-                <p className="text-sm text-muted-foreground">
-                  <span className={`font-medium ${trendColor}`}>
+                <p className="text-sm text-slate-600">
+                  <span className={`font-semibold ${trendColor}`}>
                     <TrendIcon className="inline h-3.5 w-3.5 mr-1" />
-                    Trend:{" "}
+                    {engagementSummary.trend}:{" "}
                   </span>
                   {engagementSummary.trend_reasoning}
                 </p>
@@ -289,25 +289,25 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <CalendarClock className="h-4 w-4 text-primary" />
+                  <CalendarClock className="h-4 w-4 text-purple-600" />
                   <CardTitle className="text-sm font-semibold">Best Posting Times</CardTitle>
                 </div>
                 <CardDescription className="text-xs">Recommended by AI based on your top posts</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Days of week grid */}
+                {/* Days of week */}
                 <div className="space-y-1.5">
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Days</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Days</p>
                   <div className="flex gap-1.5 flex-wrap">
                     {DAYS_ALL.map((day, i) => {
                       const isRecommended = bestTimes.days_of_week.includes(day)
                       return (
                         <span
                           key={day}
-                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                             isRecommended
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
+                              ? "bg-purple-600 text-white shadow-sm"
+                              : "bg-slate-100 text-slate-400"
                           }`}
                         >
                           {DAYS_SHORT[i]}
@@ -317,19 +317,19 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
                   </div>
                 </div>
 
-                {/* Hours grid */}
+                {/* Hours heatmap */}
                 <div className="space-y-1.5">
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Hours (UTC)</p>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Hours (UTC)</p>
                   <div className="flex gap-1 flex-wrap">
                     {PEAK_HOURS.map((h) => {
                       const isRecommended = bestTimes.hours_utc.includes(h)
                       return (
                         <span
                           key={h}
-                          className={`w-9 text-center py-1 rounded text-xs font-medium tabular-nums ${
+                          className={`w-10 text-center py-1.5 rounded-lg text-[10px] font-semibold tabular-nums transition-colors ${
                             isRecommended
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
+                              ? "bg-purple-600 text-white shadow-sm"
+                              : "bg-slate-100 text-slate-400"
                           }`}
                         >
                           {h}:00
@@ -340,7 +340,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
                 </div>
 
                 {/* Reasoning */}
-                <p className="text-xs text-muted-foreground leading-relaxed border-t pt-3">
+                <p className="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-3">
                   {bestTimes.reasoning}
                 </p>
               </CardContent>
@@ -356,7 +356,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {topPosts.map((p, i) => (
-                  <Card key={i} className="border-green-200/60 bg-green-50/20">
+                  <Card key={i} className="border-l-4 border-l-emerald-500 border-slate-200 overflow-hidden">
                     <CardContent className="pt-4 pb-4 space-y-3">
                       {/* Stats row */}
                       <div className="flex items-center gap-3 text-sm">
@@ -376,27 +376,27 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
                             {formatNumber(p.comments)}
                           </span>
                         )}
-                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 capitalize font-medium">
                           {p.content_type}
                         </span>
                       </div>
 
                       {/* Caption */}
                       {p.caption && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
                           {p.caption}
                         </p>
                       )}
 
                       {/* Why it worked */}
                       {p.why_it_worked && (
-                        <div className="rounded-md bg-green-100/60 border border-green-200/50 px-3 py-2">
-                          <p className="text-[11px] font-medium text-green-800 mb-0.5">Why it worked</p>
-                          <p className="text-xs text-green-700 leading-relaxed">{p.why_it_worked}</p>
+                        <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-1">Why it worked</p>
+                          <p className="text-xs text-emerald-900 leading-relaxed">{p.why_it_worked}</p>
                         </div>
                       )}
 
-                      <p className="text-[10px] text-muted-foreground">{formatDate(p.posted_at)}</p>
+                      <p className="text-[10px] text-slate-400">{formatDate(p.posted_at)}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -413,7 +413,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {worstPosts.map((p, i) => (
-                  <Card key={i} className="border-red-200/60 bg-red-50/20">
+                  <Card key={i} className="border-l-4 border-l-red-500 border-slate-200 overflow-hidden">
                     <CardContent className="pt-4 pb-4 space-y-3">
                       {/* Stats row */}
                       <div className="flex items-center gap-3 text-sm">
@@ -427,27 +427,27 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
                             {formatNumber(p.views)}
                           </span>
                         )}
-                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 capitalize font-medium">
                           {p.content_type}
                         </span>
                       </div>
 
                       {/* Caption */}
                       {p.caption && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
                           {p.caption}
                         </p>
                       )}
 
                       {/* Why it underperformed */}
                       {p.why_it_underperformed && (
-                        <div className="rounded-md bg-red-100/60 border border-red-200/50 px-3 py-2">
-                          <p className="text-[11px] font-medium text-red-800 mb-0.5">Why it underperformed</p>
-                          <p className="text-xs text-red-700 leading-relaxed">{p.why_it_underperformed}</p>
+                        <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-red-700 mb-1">Why it underperformed</p>
+                          <p className="text-xs text-red-900 leading-relaxed">{p.why_it_underperformed}</p>
                         </div>
                       )}
 
-                      <p className="text-[10px] text-muted-foreground">{formatDate(p.posted_at)}</p>
+                      <p className="text-[10px] text-slate-400">{formatDate(p.posted_at)}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -460,37 +460,50 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />
+                  <BarChart3 className="h-4 w-4 text-purple-600" />
                   <CardTitle className="text-sm font-semibold">Content Type Breakdown</CardTitle>
                 </div>
                 <CardDescription className="text-xs">AI performance analysis per format</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="divide-y">
-                  {Object.entries(contentBreakdown).map(([type, data]) => (
-                    <div key={type} className="py-3 first:pt-0 last:pb-0 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium capitalize">{type}</span>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground tabular-nums">
-                          <span>{data.count} posts</span>
-                          <span className="flex items-center gap-1">
-                            <Heart className="h-3 w-3 text-rose-400" />
-                            {formatNumber(data.avg_likes)} avg
-                          </span>
-                          {data.avg_views != null && (
-                            <span className="flex items-center gap-1">
-                              <Eye className="h-3 w-3" />
-                              {formatNumber(data.avg_views)} avg views
-                            </span>
+                {(() => {
+                  const entries = Object.entries(contentBreakdown)
+                  const maxLikes = Math.max(...entries.map(([, d]) => d.avg_likes), 1)
+                  const TYPE_COLORS: Record<string, string> = {
+                    reel: "bg-purple-500",
+                    carousel: "bg-emerald-500",
+                    image: "bg-amber-500",
+                    other: "bg-slate-400",
+                  }
+                  return (
+                    <div className="divide-y divide-slate-100">
+                      {entries.map(([type, data]) => (
+                        <div key={type} className="py-3 first:pt-0 last:pb-0 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-slate-900 capitalize">{type}</span>
+                            <div className="flex items-center gap-3 text-xs text-slate-500 tabular-nums">
+                              <span>{data.count} posts</span>
+                              <span className="flex items-center gap-1 font-medium text-slate-700">
+                                <Heart className="h-3 w-3 text-rose-400" />
+                                {formatNumber(data.avg_likes)} avg
+                              </span>
+                            </div>
+                          </div>
+                          {/* Horizontal bar */}
+                          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${TYPE_COLORS[type] ?? TYPE_COLORS.other}`}
+                              style={{ width: `${Math.round((data.avg_likes / maxLikes) * 100)}%` }}
+                            />
+                          </div>
+                          {data.performance_note && (
+                            <p className="text-xs text-slate-500 leading-relaxed">{data.performance_note}</p>
                           )}
                         </div>
-                      </div>
-                      {data.performance_note && (
-                        <p className="text-xs text-muted-foreground leading-relaxed">{data.performance_note}</p>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           )}

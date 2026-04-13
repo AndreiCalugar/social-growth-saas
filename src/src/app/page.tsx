@@ -139,18 +139,18 @@ export default async function OverviewPage() {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="text-center space-y-5 max-w-sm">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <TrendingUp className="h-8 w-8 text-primary" />
+          <div className="mx-auto h-16 w-16 rounded-2xl bg-purple-100 flex items-center justify-center">
+            <TrendingUp className="h-8 w-8 text-purple-600" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Welcome to Social Growth</h1>
-            <p className="text-sm text-muted-foreground mt-2">
+            <h1 className="text-xl font-semibold text-slate-900">Welcome to Social Growth</h1>
+            <p className="text-sm text-slate-500 mt-2">
               Add your Instagram profile to start tracking analytics and discovering what content to create.
             </p>
           </div>
           <Link
             href="/profiles"
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-purple-700 transition-colors shadow-sm"
           >
             <PlusCircle className="h-4 w-4" />
             Add your Instagram profile
@@ -178,8 +178,8 @@ export default async function OverviewPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Overview</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-bold text-slate-900">Overview</h1>
+          <p className="text-sm text-slate-500">
             @{ownProfile.username} · Last scraped {formatRelativeTime(ownProfile.last_scraped)}
           </p>
         </div>
@@ -190,43 +190,43 @@ export default async function OverviewPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2 pt-4">
-            <CardDescription className="flex items-center gap-1.5 text-xs">
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
               <Users className="h-3.5 w-3.5" /> Followers
             </CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums">
+            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
               {formatNumber(ownProfile.followers)}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
-            <p className="text-xs text-muted-foreground">Instagram</p>
+            <p className="text-xs text-slate-400">Instagram</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2 pt-4">
-            <CardDescription className="flex items-center gap-1.5 text-xs">
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
               <BarChart2 className="h-3.5 w-3.5" /> Avg Likes
             </CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums">
+            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
               {formatNumber(engagementSummary?.avg_likes ?? postStats.avgLikes)}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
-            <p className="text-xs text-muted-foreground">per post</p>
+            <p className="text-xs text-slate-400">per post</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2 pt-4">
-            <CardDescription className="flex items-center gap-1.5 text-xs">
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5" /> Posts Tracked
             </CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums">
+            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
               {postStats.postCount}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-400">
               across {totalProfiles} profile{totalProfiles !== 1 ? "s" : ""}
             </p>
           </CardContent>
@@ -234,21 +234,21 @@ export default async function OverviewPage() {
 
         <Card>
           <CardHeader className="pb-2 pt-4">
-            <CardDescription className="flex items-center gap-1.5 text-xs">
+            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5" /> Last Analysis
             </CardDescription>
-            <CardTitle className="text-sm font-bold leading-snug pt-1">
+            <CardTitle className="text-sm font-bold leading-snug pt-1 text-slate-900">
               {latestAnalysis ? formatRelativeTime(latestAnalysis.created_at) : "—"}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
             {engagementSummary?.trend ? (
-              <p className={`text-xs flex items-center gap-1 ${trendColor}`}>
+              <p className={`text-xs flex items-center gap-1 font-medium ${trendColor}`}>
                 <TrendIcon className="h-3 w-3" />
                 {engagementSummary.trend}
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground">no analysis yet</p>
+              <p className="text-xs text-slate-400">no analysis yet</p>
             )}
           </CardContent>
         </Card>
@@ -258,19 +258,19 @@ export default async function OverviewPage() {
       <div className="flex flex-wrap gap-2">
         <Link
           href="/profiles"
-          className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
         >
           <PlusCircle className="h-3.5 w-3.5" /> Add Profile
         </Link>
         <Link
           href="/insights"
-          className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
         >
-          <Sparkles className="h-3.5 w-3.5 text-orange-500" /> View Insights
+          <Sparkles className="h-3.5 w-3.5 text-amber-500" /> View Insights
         </Link>
         <Link
           href="/competitors"
-          className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
         >
           <Users className="h-3.5 w-3.5" /> Manage Competitors
         </Link>
@@ -280,19 +280,19 @@ export default async function OverviewPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Likes over time</CardTitle>
+            <CardTitle className="text-sm font-semibold text-slate-900">Likes over time</CardTitle>
             <CardDescription className="text-xs">Solid line = likes · Dashed = views ÷ 10</CardDescription>
           </CardHeader>
           <CardContent>
             {chartData.length > 0 ? (
               <LikesChart data={chartData} />
             ) : (
-              <div className="flex h-60 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-                <BarChart2 className="h-10 w-10 text-muted-foreground/30" />
+              <div className="flex h-60 flex-col items-center justify-center gap-3 text-sm text-slate-400">
+                <BarChart2 className="h-10 w-10 text-slate-200" />
                 <p>No post data yet</p>
                 <Link
                   href="/profiles"
-                  className="text-xs text-primary underline underline-offset-2"
+                  className="text-xs text-purple-600 underline underline-offset-2"
                 >
                   Scrape your profile to see data
                 </Link>
@@ -305,7 +305,7 @@ export default async function OverviewPage() {
         <div className="lg:col-span-2 space-y-4">
           <Card className="h-full">
             <CardHeader>
-              <CardTitle className="text-sm font-medium">Top Recommendations</CardTitle>
+              <CardTitle className="text-sm font-semibold text-slate-900">Top Recommendations</CardTitle>
               <CardDescription className="text-xs">From latest AI analysis</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -318,13 +318,13 @@ export default async function OverviewPage() {
                       </span>
                       <span className="text-xs font-medium leading-none">{rec.title}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-snug line-clamp-2">{rec.description}</p>
+                    <p className="text-xs text-slate-500 leading-snug line-clamp-2">{rec.description}</p>
                   </div>
                 ))
               ) : (
                 <div className="flex flex-col items-center gap-3 py-6 text-center">
-                  <Sparkles className="h-8 w-8 text-muted-foreground/30" />
-                  <p className="text-xs text-muted-foreground">No analysis yet</p>
+                  <Sparkles className="h-8 w-8 text-slate-200" />
+                  <p className="text-xs text-slate-400">No analysis yet</p>
                   <RunAnalysisButton profileId={ownProfile.id} />
                 </div>
               )}
@@ -350,7 +350,7 @@ export default async function OverviewPage() {
                         {topInsight.performance_multiplier.toFixed(1)}×
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
                       {topInsight.recommendation}
                     </p>
                   </div>
@@ -375,7 +375,7 @@ export default async function OverviewPage() {
                     <p className="text-sm font-semibold">
                       {trendCount > 0 ? `${trendCount} trends detected in your niche` : "Discover what content to create"}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-slate-500">
                       {megaTipCount > 0
                         ? `${megaTipCount} mega-tip${megaTipCount !== 1 ? "s" : ""} ready`
                         : "Run the insights engine to detect trends across your competitors"}
@@ -395,20 +395,20 @@ export default async function OverviewPage() {
       {recentActivity.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+            <CardTitle className="text-sm font-semibold text-slate-900">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {recentActivity.map((item, i) => (
                 <div key={i} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="flex items-center gap-2 text-slate-500">
                     {item.type === "scrape"
-                      ? <RefreshCw className="h-3 w-3 shrink-0" />
-                      : <Sparkles className="h-3 w-3 shrink-0" />
+                      ? <RefreshCw className="h-3 w-3 shrink-0 text-purple-500" />
+                      : <Sparkles className="h-3 w-3 shrink-0 text-amber-500" />
                     }
                     <span>{item.label}</span>
                   </div>
-                  <span className="text-muted-foreground tabular-nums">{formatRelativeTime(item.time)}</span>
+                  <span className="text-slate-400 tabular-nums">{formatRelativeTime(item.time)}</span>
                 </div>
               ))}
             </div>
