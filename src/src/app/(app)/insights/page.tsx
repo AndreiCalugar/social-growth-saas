@@ -102,6 +102,7 @@ export default async function InsightsPage() {
   return (
     <InsightsClient
       ownProfileId={ownProfile?.id ?? null}
+      userId={userId}
       initialInsights={insights}
       competitorCount={competitorCount}
     />

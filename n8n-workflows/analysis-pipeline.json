@@ -39,11 +39,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             }
           ]
         },
@@ -79,11 +79,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             }
           ]
         },
@@ -120,7 +120,7 @@
           "parameters": [
             {
               "name": "x-api-key",
-              "value": "YOUR_ANTHROPIC_API_KEY"
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
             },
             {
               "name": "anthropic-version",
@@ -168,11 +168,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -220,11 +220,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Content-Type",

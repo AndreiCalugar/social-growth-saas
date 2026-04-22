@@ -34,7 +34,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer YOUR_APIFY_API_TOKEN"
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
             },
             {
               "name": "Content-Type",
@@ -44,7 +44,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ username: [$json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }, loginCookies: [{ name: 'sessionid', value: 'YOUR_INSTAGRAM_SESSION_ID', domain: '.instagram.com' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ username: [$json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }, loginCookies: [{ name: 'sessionid', value: $env.INSTAGRAM_SESSION_ID, domain: '.instagram.com' }] }) }}",
         "options": {}
       },
       "id": "start-apify-run",
@@ -82,7 +82,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer YOUR_APIFY_API_TOKEN"
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
             }
           ]
         },
@@ -152,7 +152,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer YOUR_APIFY_API_TOKEN"
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
             }
           ]
         },
@@ -187,17 +187,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/profiles?on_conflict=platform,username",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/profiles?on_conflict=platform,username",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -233,17 +233,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/posts?on_conflict=platform_post_id",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/posts?on_conflict=platform_post_id",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -279,17 +279,17 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "={{ 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/profiles?id=eq.' + $json.profile_id }}",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/profiles?id=eq.' + $json.profile_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -315,17 +315,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/scrape_runs",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/scrape_runs",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "YOUR_SUPABASE_SECRET_KEY"
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_SUPABASE_SECRET_KEY"
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
             },
             {
               "name": "Content-Type",

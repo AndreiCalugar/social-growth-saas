@@ -23,6 +23,7 @@ interface Insight {
 
 interface Props {
   ownProfileId: string | null
+  userId: string
   initialInsights: Insight[]
   competitorCount: number
 }
@@ -152,7 +153,7 @@ function InsightCard({ insight }: { insight: Insight }) {
   )
 }
 
-export function InsightsClient({ ownProfileId, initialInsights, competitorCount }: Props) {
+export function InsightsClient({ ownProfileId, userId, initialInsights, competitorCount }: Props) {
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
   const [status, setStatus] = useState<"idle" | "generating" | "done" | "error">(
     initialInsights.length > 0 ? "done" : "idle"
@@ -198,7 +199,7 @@ export function InsightsClient({ ownProfileId, initialInsights, competitorCount 
       const res = await fetch("http://localhost:5678/webhook/cross-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ own_profile_id: ownProfileId }),
+        body: JSON.stringify({ own_profile_id: ownProfileId, user_id: userId }),
       })
 
       const rawText = await res.text()
