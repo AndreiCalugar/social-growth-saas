@@ -174,7 +174,7 @@ function InsightCard({
         isMegaTip ? "border-l-amber-500 border-slate-200" : "border-l-emerald-500 border-slate-200"
       }`}
     >
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         {/* Header: name + multiplier */}
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-sm font-semibold text-slate-900 leading-snug">
@@ -490,7 +490,7 @@ export function InsightsClient({
         <button
           onClick={handleGenerate}
           disabled={status === "generating" || !ownProfileId}
-          className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm shrink-0"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm w-full sm:w-auto shrink-0"
         >
           {status === "generating" ? (
             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -528,7 +528,7 @@ export function InsightsClient({
 
       {/* Summary bar */}
       {insights.length > 0 && status !== "generating" && (
-        <div className="rounded-xl border border-slate-200 bg-white px-5 py-3 flex items-center gap-6 flex-wrap shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white px-5 py-3 grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-6 shadow-sm">
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold text-slate-900 tabular-nums">
               {insights.length}
@@ -539,7 +539,7 @@ export function InsightsClient({
               detected
             </span>
           </div>
-          <div className="w-px h-8 bg-slate-200" />
+          <div className="hidden sm:block w-px h-8 bg-slate-200" />
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold text-amber-600 tabular-nums">
               {megaTips.length}
@@ -550,7 +550,7 @@ export function InsightsClient({
               next
             </span>
           </div>
-          <div className="w-px h-8 bg-slate-200" />
+          <div className="hidden sm:block w-px h-8 bg-slate-200" />
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold text-emerald-600 tabular-nums">
               {insights.filter((i) => i.is_mega_tip === false).length}
@@ -605,7 +605,7 @@ export function InsightsClient({
 
       {/* Empty state */}
       {insights.length === 0 && status === "idle" && (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center space-y-4">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 sm:p-12 text-center space-y-4">
           <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
             <Sparkles className="h-7 w-7 text-white" />
           </div>
