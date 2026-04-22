@@ -472,7 +472,7 @@ export function InsightsClient({
   const otherInsights = insights.filter((i) => !i.is_mega_tip)
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-4xl">
       {/* Page header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>

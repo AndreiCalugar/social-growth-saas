@@ -55,7 +55,7 @@ export default function SettingsPage() {
   const currentOwn = profiles.find((p) => p.is_own)
 
   return (
-    <div className="p-6 max-w-xl">
+    <div className="p-4 sm:p-6 max-w-xl">
       <h1 className="text-xl font-bold text-slate-900 mb-1">Settings</h1>
       <p className="text-slate-500 text-sm mb-8">Configure your workspace</p>
 

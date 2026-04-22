@@ -48,7 +48,7 @@ export default async function ProfilesPage() {
   const competitors = profiles.filter((p) => !p.is_own)
 
   return (
-    <div className="p-6 space-y-8 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-8 max-w-5xl">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

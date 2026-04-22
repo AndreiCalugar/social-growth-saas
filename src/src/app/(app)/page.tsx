@@ -188,16 +188,18 @@ export default async function OverviewPage() {
   const trendColor = engagementSummary?.trend === "growing" ? "text-green-600" : engagementSummary?.trend === "declining" ? "text-red-500" : "text-muted-foreground"
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Overview</h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 truncate">
             @{ownProfile.username} · Last scraped {formatRelativeTime(ownProfile.last_scraped)}
           </p>
         </div>
-        <RunAnalysisButton profileId={ownProfile.id} />
+        <div className="shrink-0">
+          <RunAnalysisButton profileId={ownProfile.id} />
+        </div>
       </div>
 
       {/* Metric cards */}

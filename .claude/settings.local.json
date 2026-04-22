@@ -5,7 +5,23 @@
       "Bash(source \"/Users/andreixperience/Documents/Cursor Projects/social-growth-saas/.env\")",
       "Bash(psql \"$SUPABASE_DB_URL\" -f \"/Users/andreixperience/Documents/Cursor Projects/social-growth-saas/schema/001-initial-schema.sql\")",
       "Bash(npx create-next-app@latest src --typescript --tailwind --app --src-dir --no-eslint --import-alias \"@/*\" --use-npm --no-react-compiler --no-agents-md)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(curl -sL \"https://api.anthropic.com/v1/design/h/sZ8-2PiFDjw_-j1hvaSbAg\" -o /tmp/design-index.html -w \"HTTP %{http_code}\\\\nSize: %{size_download}\\\\n\")",
+      "Read(//tmp/**)",
+      "Bash(curl -sL --compressed \"https://api.anthropic.com/v1/design/h/sZ8-2PiFDjw_-j1hvaSbAg\" -o /tmp/design-index.html -w \"HTTP %{http_code}\\\\nSize: %{size_download}\\\\n\")",
+      "Read(//private/tmp/**)",
+      "Bash(curl -sL -H \"Accept-Encoding: gzip\" \"https://api.anthropic.com/v1/design/h/sZ8-2PiFDjw_-j1hvaSbAg?open_file=v2.html\" -o /tmp/design.gz -w \"HTTP %{http_code}\\\\nSize: %{size_download}\\\\nContent-Type: %{content_type}\\\\n\")",
+      "Bash(gunzip -c /tmp/design.gz)",
+      "Bash(curl -sL \"https://api.anthropic.com/v1/design/h/sZ8-2PiFDjw_-j1hvaSbAg\" -o /tmp/design.raw -D /tmp/headers.txt -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(gunzip -c /tmp/design-index.html)",
+      "Bash(xxd)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(/usr/bin/curl --version)",
+      "Bash(/usr/bin/curl -sL -o /dev/null -w \"%{http_code}\\\\n\" \"https://api.anthropic.com/v1/design/h/sZ8-2PiFDjw_-j1hvaSbAg/v2.html\")",
+      "Bash(npm ls *)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(git checkout *)"
     ]
   }
 }
