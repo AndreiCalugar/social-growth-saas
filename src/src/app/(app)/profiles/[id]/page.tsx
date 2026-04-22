@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 
 import { notFound } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { auth } from "@/lib/auth"
 import { formatNumber, formatDate, formatRelativeTime } from "@/lib/format"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ScrapeNowButton } from "@/components/scrape-now-button"
@@ -51,13 +52,16 @@ type ContentBreakdown = Record<string, {
 
 export default async function ProfileDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const session = await auth()
+  const userId = session!.user.id
 
   const [profileRes, postsRes, analysisRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, username, followers, bio, last_scraped, is_own")
+      .select("id, username, followers, bio, last_scraped, is_own, user_id")
       .eq("id", id)
-      .single(),
+      .eq("user_id", userId)
+      .maybeSingle(),
     supabase
       .from("posts")
       .select("id, platform_post_id, posted_at, caption, likes, comments, views, engagement_rate, content_type")

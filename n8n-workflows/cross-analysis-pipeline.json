@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst own_profile_id = body.own_profile_id;\n\nif (!own_profile_id) throw new Error('Missing required field: own_profile_id');\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(own_profile_id)) {\n  throw new Error('own_profile_id must be a valid UUID');\n}\n\nreturn [{ json: { own_profile_id } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst own_profile_id = body.own_profile_id;\nconst user_id = body.user_id;\n\nif (!own_profile_id) throw new Error('Missing required field: own_profile_id');\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(own_profile_id)) {\n  throw new Error('own_profile_id must be a valid UUID');\n}\nif (!user_id) throw new Error('Missing required field: user_id');\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user_id)) {\n  throw new Error('user_id must be a valid UUID');\n}\n\nreturn [{ json: { own_profile_id, user_id } }];"
       },
       "id": "validate-input",
       "name": "Validate Input",
@@ -31,8 +31,8 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
-            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" }
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" }
           ]
         },
         "options": {}
@@ -45,12 +45,12 @@
     },
     {
       "parameters": {
-        "url": "https://arujkowiihftpghmxlwv.supabase.co/rest/v1/profiles?is_own=eq.false&platform=eq.instagram&select=id,username,followers",
+        "url": "=https://arujkowiihftpghmxlwv.supabase.co/rest/v1/profiles?is_own=eq.false&platform=eq.instagram&user_id=eq.{{ $('Validate Input').first().json.user_id }}&select=id,username,followers",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
-            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" }
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" }
           ]
         },
         "options": {}
@@ -59,11 +59,12 @@
       "name": "Fetch Competitors",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 500]
+      "position": [680, 500],
+      "executeOnce": true
     },
     {
       "parameters": {
-        "jsCode": "// Merge own posts and competitor list, validate we have enough, build competitor IDs for next query\nconst ownRaw = $('Fetch Own Posts').first().json;\nconst compRaw = $('Fetch Competitors').first().json;\n\nconst own_posts = Array.isArray(ownRaw) ? ownRaw : [ownRaw];\nconst competitors = Array.isArray(compRaw) ? compRaw : [compRaw];\n\nconst own_profile_id = $('Validate Input').first().json.own_profile_id;\n\nif (competitors.length < 2) {\n  throw new Error(`Need at least 2 competitor profiles. Found: ${competitors.length}. Add and scrape competitors first.`);\n}\n\n// Build comma-separated IDs for Supabase IN filter\nconst competitor_ids = competitors.map(c => c.id);\n\nreturn [{ json: { own_profile_id, own_posts, competitors, competitor_ids } }];"
+        "jsCode": "// Merge own posts and competitor list, validate we have enough, build competitor IDs for next query\nconst ownItems = $('Fetch Own Posts').all();\nconst compItems = $('Fetch Competitors').all();\n\n// HTTP node may return either one item whose json is an array, or N items each a row.\nfunction flatten(items) {\n  if (!items || items.length === 0) return [];\n  if (items.length === 1 && Array.isArray(items[0].json)) return items[0].json;\n  return items.map(i => i.json);\n}\n\nconst own_posts = flatten(ownItems);\nconst competitors = flatten(compItems);\n\nconst own_profile_id = $('Validate Input').first().json.own_profile_id;\n\nif (competitors.length < 2) {\n  throw new Error(`Need at least 2 competitor profiles. Found: ${competitors.length}. Add and scrape competitors first.`);\n}\n\nconst competitor_ids = competitors.map(c => c.id);\n\nreturn [{ json: { own_profile_id, own_posts, competitors, competitor_ids } }];"
       },
       "id": "merge-profiles",
       "name": "Merge Profiles",
@@ -77,8 +78,8 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
-            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" }
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" }
           ]
         },
         "options": {}
@@ -106,7 +107,7 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "x-api-key", "value": "YOUR_ANTHROPIC_API_KEY" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
             { "name": "anthropic-version", "value": "2023-06-01" },
             { "name": "content-type", "value": "application/json" }
           ]
@@ -139,8 +140,8 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "YOUR_SUPABASE_SECRET_KEY" },
-            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SECRET_KEY" },
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SECRET_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}" },
             { "name": "Content-Type", "value": "application/json" },
             { "name": "Prefer", "value": "return=representation" }
           ]
@@ -184,15 +185,10 @@
       "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]]
     },
     "Validate Input": {
-      "main": [
-        [
-          { "node": "Fetch Own Posts", "type": "main", "index": 0 },
-          { "node": "Fetch Competitors", "type": "main", "index": 0 }
-        ]
-      ]
+      "main": [[{ "node": "Fetch Own Posts", "type": "main", "index": 0 }]]
     },
     "Fetch Own Posts": {
-      "main": [[{ "node": "Merge Profiles", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Fetch Competitors", "type": "main", "index": 0 }]]
     },
     "Fetch Competitors": {
       "main": [[{ "node": "Merge Profiles", "type": "main", "index": 0 }]]

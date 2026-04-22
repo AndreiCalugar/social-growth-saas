@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { auth } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AddProfileModal } from "@/components/add-profile-modal"
 import { ProfileCardActions } from "@/components/profile-card-actions"
@@ -9,18 +10,24 @@ import { formatNumber, formatRelativeTime } from "@/lib/format"
 import { Users, Clock, FileText, TrendingUp } from "lucide-react"
 
 export default async function ProfilesPage() {
-  const [profilesRes, postsRes] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, username, followers, last_scraped, is_own")
-      .order("is_own", { ascending: false })
-      .order("username", { ascending: true }),
-    supabase
-      .from("posts")
-      .select("profile_id, engagement_rate, likes"),
-  ])
+  const session = await auth()
+  const userId = session!.user.id
+
+  const profilesRes = await supabase
+    .from("profiles")
+    .select("id, username, followers, last_scraped, is_own")
+    .eq("user_id", userId)
+    .order("is_own", { ascending: false })
+    .order("username", { ascending: true })
 
   const profiles = profilesRes.data ?? []
+  const profileIds = profiles.map((p) => p.id)
+
+  const postsRes = await supabase
+    .from("posts")
+    .select("profile_id, engagement_rate, likes")
+    .in("profile_id", profileIds.length > 0 ? profileIds : ["00000000-0000-0000-0000-000000000000"])
+
   const posts = postsRes.data ?? []
 
   // Build per-profile stats

@@ -2,21 +2,25 @@ export const dynamic = "force-dynamic"
 
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { auth } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InsightsClient } from "@/components/insights-client"
 
 export default async function InsightsPage() {
-  // Fetch own profile
+  const session = await auth()
+  const userId = session!.user.id
+
   const { data: ownProfile } = await supabase
     .from("profiles")
     .select("id, username")
+    .eq("user_id", userId)
     .eq("is_own", true)
     .maybeSingle()
 
-  // Count competitors with posts
   const { data: competitorsWithPosts } = await supabase
     .from("profiles")
     .select("id, posts(count)")
+    .eq("user_id", userId)
     .eq("is_own", false)
 
   const competitorCount = (competitorsWithPosts ?? []).filter(
@@ -98,6 +102,7 @@ export default async function InsightsPage() {
   return (
     <InsightsClient
       ownProfileId={ownProfile?.id ?? null}
+      userId={userId}
       initialInsights={insights}
       competitorCount={competitorCount}
     />
