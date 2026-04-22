@@ -1,7 +1,21 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Sparkles, TrendingUp, Users, Zap, RefreshCw, AlertCircle } from "lucide-react"
+import {
+  Sparkles,
+  Users,
+  Zap,
+  RefreshCw,
+  AlertCircle,
+  ChevronDown,
+  Check,
+  Clapperboard,
+  Fish,
+  FileText,
+  Clock,
+  Hash,
+  Copy,
+} from "lucide-react"
 
 interface ExamplePost {
   caption_preview: string
@@ -19,6 +33,15 @@ interface Insight {
   recommendation: string | null
   is_mega_tip: boolean | null
   created_at: string
+  // Structured brief fields — nullable until the Claude prompt + schema migration lands.
+  one_line_summary?: string | null
+  competitor_count?: number | null
+  total_competitors?: number | null
+  content_format?: string | null
+  hook?: string | null
+  caption_structure?: string | null
+  best_time?: string | null
+  hashtags?: string[] | null
 }
 
 interface Props {
@@ -31,129 +54,336 @@ interface Props {
 function parseExamples(raw: unknown): ExamplePost[] {
   try {
     const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
-    if (Array.isArray(parsed)) return parsed.slice(0, 3)
+    if (Array.isArray(parsed)) return parsed
   } catch {}
   return []
 }
 
-function fmt(n: number | null | undefined) {
+function dedupeExamples(examples: ExamplePost[]): ExamplePost[] {
+  const seen = new Set<string>()
+  const out: ExamplePost[] = []
+  for (const ex of examples) {
+    const comp = (ex.competitor || "").replace(/^@/, "").toLowerCase()
+    if (!comp || seen.has(comp)) continue
+    seen.add(comp)
+    out.push(ex)
+    if (out.length === 3) break
+  }
+  return out
+}
+
+function fmtLikes(n: number | null | undefined) {
   if (n == null) return "—"
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return n.toLocaleString()
 }
 
-function InsightCard({ insight }: { insight: Insight }) {
-  const examples = parseExamples(insight.example_posts)
+function truncate(s: string, max: number) {
+  if (s.length <= max) return s
+  return s.slice(0, max - 1).trimEnd() + "…"
+}
+
+function firstSentence(s: string): string {
+  const match = s.match(/^(.+?[.!?])\s/)
+  return match ? match[1] : s
+}
+
+function buildSummary(insight: Insight): string {
+  if (insight.one_line_summary) return truncate(insight.one_line_summary, 100)
+  const rec = insight.recommendation ?? ""
+  return truncate(firstSentence(rec), 100)
+}
+
+function competitorFractionLabel(insight: Insight, fallbackTotal: number): string | null {
+  if (insight.competitor_count != null && insight.total_competitors != null) {
+    return `Found in ${insight.competitor_count} of ${insight.total_competitors} competitors`
+  }
+  if (insight.confidence != null && fallbackTotal > 0) {
+    const matched = Math.max(1, Math.round(insight.confidence * fallbackTotal))
+    return `Found in ${matched} of ${fallbackTotal} competitors`
+  }
+  return null
+}
+
+function buildCopyText(insight: Insight, fraction: string | null): string {
+  const mult = insight.performance_multiplier ?? 0
+  const lines: string[] = []
+  lines.push(`🎬 ${insight.trend_name}`)
+  const meta: string[] = []
+  if (mult > 0) meta.push(`${mult.toFixed(1)}× avg engagement`)
+  if (fraction) meta.push(fraction)
+  if (meta.length) lines.push(`📊 ${meta.join(" | ")}`)
+  lines.push("")
+  if (insight.content_format) lines.push(`CONTENT: ${insight.content_format}`)
+  if (insight.hook) lines.push(`HOOK: ${insight.hook}`)
+  if (insight.caption_structure) lines.push(`CAPTION: ${insight.caption_structure}`)
+  if (insight.best_time) lines.push(`POST: ${insight.best_time}`)
+  if (insight.hashtags && insight.hashtags.length) {
+    lines.push(`TAGS: ${insight.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ")}`)
+  }
+  if (
+    !insight.content_format &&
+    !insight.hook &&
+    !insight.caption_structure &&
+    insight.recommendation
+  ) {
+    lines.push(insight.recommendation)
+  }
+  return lines.join("\n")
+}
+
+function InsightCard({
+  insight,
+  fallbackTotalCompetitors,
+}: {
+  insight: Insight
+  fallbackTotalCompetitors: number
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
+
   const multiplier = insight.performance_multiplier ?? 0
   const isMegaTip = insight.is_mega_tip === true
-  const confidencePct = insight.confidence != null ? Math.round(insight.confidence * 100) : null
+  const userDoingIt = insight.is_mega_tip === false
+  const summary = buildSummary(insight)
+  const fraction = competitorFractionLabel(insight, fallbackTotalCompetitors)
+  const examples = dedupeExamples(parseExamples(insight.example_posts))
+  const showExamples = examples.length >= 2
+
+  const hasStructured = Boolean(
+    insight.content_format ||
+      insight.hook ||
+      insight.caption_structure ||
+      insight.best_time ||
+      (insight.hashtags && insight.hashtags.length)
+  )
+
+  async function handleCopy() {
+    const text = buildCopyText(insight, fraction)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {}
+  }
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden border-l-4 ${
-      isMegaTip ? "border-l-amber-500 border-slate-200" : "border-l-purple-500 border-slate-200"
-    }`}>
+    <div
+      className={`bg-white rounded-xl border shadow-sm overflow-hidden border-l-4 ${
+        isMegaTip ? "border-l-amber-500 border-slate-200" : "border-l-emerald-500 border-slate-200"
+      }`}
+    >
       <div className="p-5">
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="text-sm font-semibold text-slate-900 leading-snug pr-2">
+        {/* Header: name + multiplier */}
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-900 leading-snug">
             {insight.trend_name}
           </h3>
-          {isMegaTip && (
-            <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-700">
-              <Zap className="h-3 w-3" /> MEGA TIP
-            </span>
-          )}
-        </div>
-
-        {/* Badges */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-4">
-          {confidencePct != null && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 font-medium">
-              <Users className="h-3 w-3" />
-              {confidencePct}% of competitors
-            </span>
-          )}
           {multiplier > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium">
-              <TrendingUp className="h-3 w-3" />
-              {multiplier.toFixed(1)}× avg engagement
-            </span>
-          )}
-          {insight.is_mega_tip === false ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium">
-              ✓ You&apos;re doing this
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[11px] font-medium">
-              ✗ You&apos;re not doing this
+            <span className="shrink-0 inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white tabular-nums">
+              {multiplier.toFixed(1)}
+              <span className="text-[10px] font-semibold text-slate-300">×</span>
             </span>
           )}
         </div>
 
-        {/* Large multiplier */}
-        {multiplier > 0 && (
-          <div className="mb-4">
-            <span className="text-4xl font-bold text-slate-900 tabular-nums tracking-tight">
-              {multiplier.toFixed(1)}
-            </span>
-            <span className="text-base font-normal text-slate-400 ml-1.5">× avg engagement</span>
-          </div>
+        {/* One-line summary */}
+        {summary && (
+          <p className="mt-2 text-sm text-slate-600 leading-snug">{summary}</p>
         )}
 
-        {/* Example posts table */}
-        {examples.length > 0 && (
-          <div className="mb-4">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              Top examples
-            </p>
-            <div className="rounded-lg border border-slate-100 overflow-hidden">
-              <table className="w-full text-xs">
-                <tbody>
-                  {examples.map((ex, i) => (
-                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
-                      <td className="px-3 py-2 font-medium text-slate-600 whitespace-nowrap">
-                        @{ex.competitor}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500 max-w-[200px] truncate">
-                        {ex.caption_preview}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-700 text-right">
-                        {fmt(ex.likes)} ♥
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Meta row: competitor count + status */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {fraction && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+              <Users className="h-3 w-3" />
+              {fraction}
+            </span>
+          )}
+          {userDoingIt ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-semibold border border-emerald-100">
+              <Check className="h-3 w-3" /> You&apos;re doing this
+            </span>
+          ) : isMegaTip ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-2 py-0.5 text-[11px] font-semibold border border-amber-100">
+              <Zap className="h-3 w-3" /> Try this
+            </span>
+          ) : null}
+        </div>
+
+        {/* Expand toggle */}
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-purple-700 hover:text-purple-800"
+        >
+          {expanded ? "Hide breakdown" : "View full breakdown"}
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {/* Expanded content — grid-rows animation for smooth expand */}
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+            expanded ? "grid-rows-[1fr] mt-4" : "grid-rows-[0fr]"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="pt-4 border-t border-slate-100 space-y-4">
+              {/* Structured brief sections */}
+              {hasStructured ? (
+                <div className="space-y-3">
+                  {insight.content_format && (
+                    <BriefSection icon={Clapperboard} label="Content">
+                      {insight.content_format}
+                    </BriefSection>
+                  )}
+                  {insight.hook && (
+                    <BriefSection icon={Fish} label="Opening hook">
+                      {insight.hook}
+                    </BriefSection>
+                  )}
+                  {insight.caption_structure && (
+                    <BriefSection icon={FileText} label="Caption structure">
+                      <span className="whitespace-pre-line">{insight.caption_structure}</span>
+                    </BriefSection>
+                  )}
+                  {insight.best_time && (
+                    <BriefSection icon={Clock} label="Best time to post">
+                      {insight.best_time}
+                    </BriefSection>
+                  )}
+                  {insight.hashtags && insight.hashtags.length > 0 && (
+                    <BriefSection icon={Hash} label="Hashtags">
+                      <div className="flex flex-wrap gap-1.5">
+                        {insight.hashtags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-700"
+                          >
+                            #{tag.replace(/^#/, "")}
+                          </span>
+                        ))}
+                      </div>
+                    </BriefSection>
+                  )}
+                </div>
+              ) : insight.recommendation ? (
+                <div
+                  className={`rounded-lg px-4 py-3 ${
+                    isMegaTip
+                      ? "bg-amber-50 border border-amber-100"
+                      : "bg-purple-50 border border-purple-100"
+                  }`}
+                >
+                  <p
+                    className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                      isMegaTip ? "text-amber-700" : "text-purple-700"
+                    }`}
+                  >
+                    {isMegaTip ? "⚡ Do this" : "Recommendation"}
+                  </p>
+                  <p
+                    className={`text-sm leading-relaxed ${
+                      isMegaTip ? "text-amber-900" : "text-purple-900"
+                    }`}
+                  >
+                    {insight.recommendation}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Example posts — dedup + require 2+ unique competitors */}
+              {showExamples && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                    Top examples
+                  </p>
+                  <div className="space-y-2">
+                    {examples.map((ex, i) => {
+                      const handle = ex.competitor.replace(/^@/, "")
+                      const initial = handle.charAt(0).toUpperCase() || "?"
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2"
+                        >
+                          <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                            {initial}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-slate-900 truncate">
+                                @{handle}
+                              </span>
+                              <span className="text-[11px] font-medium text-slate-500 shrink-0">
+                                {fmtLikes(ex.likes)} likes
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 truncate">
+                              {truncate(ex.caption_preview || "", 40)}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Copy Brief button — full width */}
+              <button
+                onClick={handleCopy}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4" /> Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" /> Copy Brief
+                  </>
+                )}
+              </button>
             </div>
           </div>
-        )}
-
-        {/* Recommendation */}
-        {insight.recommendation && (
-          <div className={`rounded-lg px-4 py-3 ${
-            isMegaTip
-              ? "bg-amber-50 border border-amber-100"
-              : "bg-purple-50 border border-purple-100"
-          }`}>
-            <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
-              isMegaTip ? "text-amber-700" : "text-purple-700"
-            }`}>
-              {isMegaTip ? "⚡ Do this now" : "Recommendation"}
-            </p>
-            <p className={`text-sm leading-relaxed ${
-              isMegaTip ? "text-amber-900" : "text-purple-900"
-            }`}>
-              {insight.recommendation}
-            </p>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   )
 }
 
-export function InsightsClient({ ownProfileId, userId, initialInsights, competitorCount }: Props) {
+function BriefSection({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className="h-3.5 w-3.5 text-slate-500" />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          {label}
+        </span>
+      </div>
+      <div className="text-sm text-slate-800 leading-relaxed">{children}</div>
+    </div>
+  )
+}
+
+export function InsightsClient({
+  ownProfileId,
+  userId,
+  initialInsights,
+  competitorCount,
+}: Props) {
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
   const [status, setStatus] = useState<"idle" | "generating" | "done" | "error">(
     initialInsights.length > 0 ? "done" : "idle"
@@ -210,10 +440,14 @@ export function InsightsClient({ ownProfileId, userId, initialInsights, competit
 
       let json: Record<string, unknown> = {}
       if (rawText.trim()) {
-        try { json = JSON.parse(rawText) } catch { /* non-JSON */ }
+        try {
+          json = JSON.parse(rawText)
+        } catch {
+          /* non-JSON */
+        }
       } else {
         throw new Error(
-          "The n8n workflow crashed before finishing. Most likely cause: the trend_insights table doesn't exist in Supabase yet.\n\nFix: Go to Supabase → SQL Editor → run schema/003-trend-insights.sql, then try again."
+          "The n8n workflow crashed before finishing. Check the n8n execution log for the failing node."
         )
       }
 
@@ -274,8 +508,12 @@ export function InsightsClient({ ownProfileId, userId, initialInsights, competit
       {status === "generating" && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center space-y-2">
           <RefreshCw className="h-8 w-8 text-amber-500 animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-amber-900">Analyzing trends across your competitors…</p>
-          <p className="text-xs text-amber-700">Claude is reading all posts. This takes 30–60 seconds.</p>
+          <p className="text-sm font-semibold text-amber-900">
+            Analyzing trends across your competitors…
+          </p>
+          <p className="text-xs text-amber-700">
+            Claude is reading all posts. This takes 30–60 seconds.
+          </p>
         </div>
       )}
 
@@ -283,7 +521,7 @@ export function InsightsClient({ ownProfileId, userId, initialInsights, competit
       {status === "error" && errorMsg && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700 leading-relaxed">{errorMsg}</p>
+          <p className="text-sm text-red-700 leading-relaxed whitespace-pre-line">{errorMsg}</p>
         </div>
       )}
 
@@ -291,20 +529,36 @@ export function InsightsClient({ ownProfileId, userId, initialInsights, competit
       {insights.length > 0 && status !== "generating" && (
         <div className="rounded-xl border border-slate-200 bg-white px-5 py-3 flex items-center gap-6 flex-wrap shadow-sm">
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-slate-900 tabular-nums">{insights.length}</span>
-            <span className="text-xs text-slate-500 leading-tight">trends<br />detected</span>
+            <span className="text-2xl font-bold text-slate-900 tabular-nums">
+              {insights.length}
+            </span>
+            <span className="text-xs text-slate-500 leading-tight">
+              trends
+              <br />
+              detected
+            </span>
           </div>
           <div className="w-px h-8 bg-slate-200" />
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-amber-600 tabular-nums">{megaTips.length}</span>
-            <span className="text-xs text-slate-500 leading-tight">mega-tips<br />to act on</span>
+            <span className="text-2xl font-bold text-amber-600 tabular-nums">
+              {megaTips.length}
+            </span>
+            <span className="text-xs text-slate-500 leading-tight">
+              to try
+              <br />
+              next
+            </span>
           </div>
           <div className="w-px h-8 bg-slate-200" />
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold text-emerald-600 tabular-nums">
               {insights.filter((i) => i.is_mega_tip === false).length}
             </span>
-            <span className="text-xs text-slate-500 leading-tight">already<br />doing</span>
+            <span className="text-xs text-slate-500 leading-tight">
+              already
+              <br />
+              doing
+            </span>
           </div>
         </div>
       )}
@@ -315,12 +569,16 @@ export function InsightsClient({ ownProfileId, userId, initialInsights, competit
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-amber-500" />
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-              Mega Tips — Act on these now
+              Try these next
             </h2>
           </div>
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {megaTips.map((insight) => (
-              <InsightCard key={insight.id} insight={insight} />
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                fallbackTotalCompetitors={competitorCount}
+              />
             ))}
           </div>
         </div>
@@ -330,11 +588,15 @@ export function InsightsClient({ ownProfileId, userId, initialInsights, competit
       {otherInsights.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Other Detected Trends
+            You&apos;re already doing
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3">
             {otherInsights.map((insight) => (
-              <InsightCard key={insight.id} insight={insight} />
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                fallbackTotalCompetitors={competitorCount}
+              />
             ))}
           </div>
         </div>
@@ -349,8 +611,8 @@ export function InsightsClient({ ownProfileId, userId, initialInsights, competit
           <div>
             <p className="font-semibold text-slate-900">No insights generated yet</p>
             <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-              Click &ldquo;Generate Insights&rdquo; to run the cross-competitor analysis and discover
-              what content to create.
+              Click &ldquo;Generate Insights&rdquo; to run the cross-competitor analysis and
+              discover what content to create.
             </p>
           </div>
           <button
