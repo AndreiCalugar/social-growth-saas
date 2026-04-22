@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("trend_insights")
     .select(
-      "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, suggested_schedule, is_mega_tip, created_at"
+      "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, suggested_schedule, is_mega_tip, created_at, one_line_summary, competitor_count, total_competitors, content_format, hook, caption_structure, best_time, hashtags"
     )
     .eq("profile_id", profileId)
     .gte("created_at", cutoff)

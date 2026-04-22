@@ -37,6 +37,14 @@ export default async function InsightsPage() {
     recommendation: string | null
     is_mega_tip: boolean | null
     created_at: string
+    one_line_summary: string | null
+    competitor_count: number | null
+    total_competitors: number | null
+    content_format: string | null
+    hook: string | null
+    caption_structure: string | null
+    best_time: string | null
+    hashtags: string[] | null
   }[] = []
 
   if (ownProfile) {
@@ -53,7 +61,7 @@ export default async function InsightsPage() {
       const { data } = await supabase
         .from("trend_insights")
         .select(
-          "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, is_mega_tip, created_at"
+          "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, is_mega_tip, created_at, one_line_summary, competitor_count, total_competitors, content_format, hook, caption_structure, best_time, hashtags"
         )
         .eq("profile_id", ownProfile.id)
         .gte("created_at", cutoff)
