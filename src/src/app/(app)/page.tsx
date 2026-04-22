@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic"
 
 import { supabase } from "@/lib/supabase"
+import { auth } from "@/lib/auth"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { RunAnalysisButton } from "@/components/run-analysis-button"
@@ -12,21 +13,29 @@ import {
   RefreshCw, PlusCircle, ChevronRight,
 } from "lucide-react"
 
-async function getDashboardData() {
+async function getDashboardData(userId: string) {
   const profileRes = await supabase
     .from("profiles")
     .select("id, username, followers, last_scraped")
+    .eq("user_id", userId)
     .eq("is_own", true)
     .maybeSingle()
 
   const ownProfile = profileRes.data ?? null
   const ownProfileId = ownProfile?.id ?? null
 
+  // Always fetch all of this user's profile ids so child-table queries stay scoped.
+  const { data: allProfiles } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("user_id", userId)
+  const profileIds = (allProfiles ?? []).map((p) => p.id)
+
   if (!ownProfileId) {
-    return { ownProfile: null, postStats: { avgLikes: 0, postCount: 0, avgEngagement: 0 }, posts: [], latestAnalysis: null, recentRecs: [], trendCount: 0, megaTipCount: 0, topInsight: null, recentActivity: [], totalProfiles: 0 }
+    return { ownProfile: null, postStats: { avgLikes: 0, postCount: 0, avgEngagement: 0 }, posts: [], latestAnalysis: null, recentRecs: [], trendCount: 0, megaTipCount: 0, topInsight: null, recentActivity: [], totalProfiles: profileIds.length }
   }
 
-  const [postsRes, analysisRes, recsRes, allProfilesRes, scrapeRunsRes, analysesListRes] = await Promise.all([
+  const [postsRes, analysisRes, recsRes, scrapeRunsRes, analysesListRes] = await Promise.all([
     supabase
       .from("posts")
       .select("posted_at, likes, views, engagement_rate")
@@ -36,25 +45,28 @@ async function getDashboardData() {
     supabase
       .from("analyses")
       .select("created_at, engagement_summary")
+      .eq("profile_id", ownProfileId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
       .from("recommendations")
       .select("title, category, priority, description")
+      .eq("profile_id", ownProfileId)
       .order("priority", { ascending: true })
       .order("created_at", { ascending: false })
       .limit(5),
-    supabase.from("profiles").select("id", { count: "exact", head: true }),
     supabase
       .from("scrape_runs")
       .select("profile_id, status, completed_at, profiles(username)")
+      .in("profile_id", profileIds.length > 0 ? profileIds : ["00000000-0000-0000-0000-000000000000"])
       .eq("status", "completed")
       .order("completed_at", { ascending: false })
       .limit(3),
     supabase
       .from("analyses")
       .select("created_at, profiles(username)")
+      .in("profile_id", profileIds.length > 0 ? profileIds : ["00000000-0000-0000-0000-000000000000"])
       .order("created_at", { ascending: false })
       .limit(3),
   ])
@@ -120,7 +132,7 @@ async function getDashboardData() {
     megaTipCount,
     topInsight,
     recentActivity,
-    totalProfiles: allProfilesRes.count ?? 0,
+    totalProfiles: profileIds.length,
   }
 }
 
@@ -131,8 +143,10 @@ const priorityStyles: Record<string, string> = {
 }
 
 export default async function OverviewPage() {
+  const session = await auth()
+  const userId = session!.user.id
   const { ownProfile, postStats, posts, latestAnalysis, recentRecs, trendCount, megaTipCount, topInsight, recentActivity, totalProfiles } =
-    await getDashboardData()
+    await getDashboardData(userId)
 
   // No profile empty state
   if (!ownProfile) {

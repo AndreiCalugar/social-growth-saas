@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { signOut } from "next-auth/react"
 import {
   LayoutDashboard,
   Users,
@@ -10,6 +11,7 @@ import {
   Star,
   Settings,
   TrendingUp,
+  LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -22,7 +24,13 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ]
 
-export function Sidebar({ username }: { username: string }) {
+export function Sidebar({
+  username,
+  userEmail,
+}: {
+  username: string
+  userEmail?: string | null
+}) {
   const pathname = usePathname()
 
   return (
@@ -67,17 +75,24 @@ export function Sidebar({ username }: { username: string }) {
         })}
       </nav>
 
-      {/* User stub */}
-      <div className="border-t border-slate-200 p-3">
-        <div className="flex items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-slate-50 transition-colors cursor-pointer">
+      {/* User + logout */}
+      <div className="border-t border-slate-200 p-3 flex flex-col gap-1">
+        <div className="flex items-center gap-2.5 rounded-lg px-3 py-2">
           <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-xs font-semibold text-white shrink-0">
             {username.charAt(0).toUpperCase()}
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-semibold text-slate-900 truncate">@{username}</span>
-            <span className="text-[10px] text-slate-400">Free plan</span>
+            <span className="text-[10px] text-slate-400 truncate">{userEmail ?? "Free plan"}</span>
           </div>
         </div>
+        <button
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Log out
+        </button>
       </div>
     </aside>
   )

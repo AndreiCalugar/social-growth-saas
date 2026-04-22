@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic"
 
 import { supabase } from "@/lib/supabase"
+import { auth } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
@@ -11,23 +12,33 @@ import Link from "next/link"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
 
 export default async function CompetitorsPage() {
-  const [profilesRes, postsRes, scrapeRunsRes] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, username, followers, last_scraped, is_own")
-      .order("is_own", { ascending: false })
-      .order("username", { ascending: true }),
+  const session = await auth()
+  const userId = session!.user.id
+
+  const profilesRes = await supabase
+    .from("profiles")
+    .select("id, username, followers, last_scraped, is_own")
+    .eq("user_id", userId)
+    .order("is_own", { ascending: false })
+    .order("username", { ascending: true })
+
+  const profiles = profilesRes.data ?? []
+  const profileIds = profiles.map((p) => p.id)
+  const safeIds = profileIds.length > 0 ? profileIds : ["00000000-0000-0000-0000-000000000000"]
+
+  const [postsRes, scrapeRunsRes] = await Promise.all([
     supabase
       .from("posts")
       .select("id, profile_id, posted_at, caption, likes, comments, views, engagement_rate, content_type")
+      .in("profile_id", safeIds)
       .order("posted_at", { ascending: false }),
     supabase
       .from("scrape_runs")
       .select("profile_id, status, completed_at")
+      .in("profile_id", safeIds)
       .order("completed_at", { ascending: false }),
   ])
 
-  const profiles = profilesRes.data ?? []
   const allPosts = postsRes.data ?? []
   const scrapeRuns = scrapeRunsRes.data ?? []
 

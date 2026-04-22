@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
+import { auth } from "@/lib/auth"
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ profileId: string }> }
 ) {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
   const { profileId } = await params
-  console.log("[/api/scrape-status] GET profileId:", profileId)
+
+  const { data: owned } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", profileId)
+    .eq("user_id", session.user.id)
+    .maybeSingle()
+
+  if (!owned) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
 
   const { data, error } = await supabase
     .from("scrape_runs")
@@ -17,16 +31,13 @@ export async function GET(
     .maybeSingle()
 
   if (error) {
-    console.error("[/api/scrape-status] error:", error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   if (!data) {
-    console.log("[/api/scrape-status] no run found for", profileId)
     return NextResponse.json({ status: "pending" })
   }
 
-  console.log("[/api/scrape-status] status:", data.status, "posts:", data.posts_scraped)
   return NextResponse.json({
     status: data.status,
     posts_scraped: data.posts_scraped,
