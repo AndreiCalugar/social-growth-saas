@@ -75,18 +75,23 @@ export function AddCompetitorForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 flex-wrap">
-      <div className="relative">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+      <div className="relative w-full sm:w-56">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
         <input
           ref={inputRef}
           type="text"
           placeholder="username"
           disabled={state === "loading" || state === "polling"}
-          className="h-9 w-56 rounded-md border border-input bg-background pl-7 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          className="h-9 w-full rounded-md border border-input bg-background pl-7 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
         />
       </div>
-      <Button type="submit" size="sm" disabled={state === "loading" || state === "polling"}>
+      <Button
+        type="submit"
+        size="sm"
+        disabled={state === "loading" || state === "polling"}
+        className="w-full sm:w-auto"
+      >
         {state === "loading" || state === "polling" ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
