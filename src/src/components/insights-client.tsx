@@ -390,7 +390,7 @@ export function InsightsClient({
   )
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const startCountRef = useRef<number>(0)
+  const startTimestampRef = useRef<string>("")
 
   useEffect(() => {
     return () => {
@@ -404,7 +404,8 @@ export function InsightsClient({
       const res = await fetch(`/api/insights?profile_id=${ownProfileId}`)
       const json = await res.json()
       const fetched: Insight[] = json.insights ?? []
-      if (fetched.length > startCountRef.current) {
+      const latest = fetched[0]?.created_at ?? ""
+      if (fetched.length > 0 && latest > startTimestampRef.current) {
         setInsights(fetched)
         setStatus("done")
         if (pollingRef.current) clearInterval(pollingRef.current)
@@ -423,7 +424,7 @@ export function InsightsClient({
 
     setStatus("generating")
     setErrorMsg(null)
-    startCountRef.current = insights.length
+    startTimestampRef.current = insights[0]?.created_at ?? ""
 
     try {
       const res = await fetch("http://localhost:5678/webhook/cross-analysis", {
