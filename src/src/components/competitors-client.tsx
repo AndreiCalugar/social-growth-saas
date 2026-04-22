@@ -348,7 +348,7 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
         </div>
 
         {/* Side-by-side header */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <Card className="border-purple-200 bg-purple-50/30">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">

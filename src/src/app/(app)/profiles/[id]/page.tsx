@@ -138,7 +138,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
   )
 
   return (
-    <div className="p-6 space-y-8 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-8 max-w-5xl">
       {/* Profile header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">

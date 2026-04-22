@@ -72,7 +72,7 @@ export default async function InsightsPage() {
 
   if (competitorCount < 3) {
     return (
-      <div className="p-6 max-w-2xl">
+      <div className="p-4 sm:p-6 max-w-2xl">
         <div className="mb-6">
           <h1 className="text-xl font-semibold">Insights</h1>
           <p className="text-sm text-muted-foreground mt-1">

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
-import { Sidebar } from "@/components/sidebar"
+import { AppShell } from "@/components/app-shell"
 
 export const dynamic = "force-dynamic"
 
@@ -34,9 +34,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     "—"
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar username={displayName} userEmail={user?.email ?? null} />
-      <main className="flex-1 overflow-y-auto">{children}</main>
-    </div>
+    <AppShell username={displayName} userEmail={user?.email ?? null}>
+      {children}
+    </AppShell>
   )
 }
