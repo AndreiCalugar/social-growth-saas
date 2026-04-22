@@ -12,6 +12,7 @@ import {
   Settings,
   TrendingUp,
   LogOut,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -27,24 +28,44 @@ const navItems = [
 export function Sidebar({
   username,
   userEmail,
+  open = false,
+  onClose,
 }: {
   username: string
   userEmail?: string | null
+  open?: boolean
+  onClose?: () => void
 }) {
   const pathname = usePathname()
 
   return (
-    <aside className="flex h-screen w-56 flex-col bg-white border-r border-slate-200">
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-slate-200 px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 shadow-sm">
-          <TrendingUp className="h-4 w-4 text-white" strokeWidth={2.5} />
+    <aside
+      className={cn(
+        "flex h-screen w-64 flex-col bg-white border-r border-slate-200",
+        "fixed inset-y-0 left-0 z-50 shadow-xl transition-transform duration-300 ease-out",
+        open ? "translate-x-0" : "-translate-x-full",
+        "md:static md:z-auto md:w-56 md:translate-x-0 md:shadow-none md:transition-none"
+      )}
+    >
+      <div className="flex h-14 items-center justify-between gap-2.5 border-b border-slate-200 px-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 shadow-sm">
+            <TrendingUp className="h-4 w-4 text-white" strokeWidth={2.5} />
+          </div>
+          <span className="font-bold text-slate-900 tracking-tight">Social Growth</span>
         </div>
-        <span className="font-bold text-slate-900 tracking-tight">Social Growth</span>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Close menu"
+            className="md:hidden inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex flex-col gap-0.5 p-3 flex-1">
+      <nav className="flex flex-col gap-0.5 p-3 flex-1 overflow-y-auto">
         {navItems.map(({ href, label, icon: Icon, badge }) => {
           const isActive = href === "/" ? pathname === href : pathname.startsWith(href)
           return (
@@ -75,7 +96,6 @@ export function Sidebar({
         })}
       </nav>
 
-      {/* User + logout */}
       <div className="border-t border-slate-200 p-3 flex flex-col gap-1">
         <div className="flex items-center gap-2.5 rounded-lg px-3 py-2">
           <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-xs font-semibold text-white shrink-0">
