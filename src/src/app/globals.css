@@ -61,6 +61,52 @@
   }
 }
 
+/* Auth page animations — CSS-only, no JS */
+@keyframes auth-blob-a {
+  0%, 100% { transform: translate3d(0%, 0%, 0) scale(1); }
+  33% { transform: translate3d(30%, -10%, 0) scale(1.15); }
+  66% { transform: translate3d(10%, 20%, 0) scale(0.9); }
+}
+@keyframes auth-blob-b {
+  0%, 100% { transform: translate3d(0%, 0%, 0) scale(1); }
+  33% { transform: translate3d(-20%, 15%, 0) scale(1.1); }
+  66% { transform: translate3d(-35%, -15%, 0) scale(0.95); }
+}
+@keyframes auth-blob-c {
+  0%, 100% { transform: translate3d(0%, 0%, 0) scale(1); }
+  33% { transform: translate3d(15%, -25%, 0) scale(1.05); }
+  66% { transform: translate3d(-15%, 10%, 0) scale(1.2); }
+}
+@keyframes auth-float {
+  0%, 100% { transform: translateY(-5px); }
+  50% { transform: translateY(5px); }
+}
+@keyframes auth-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@keyframes auth-glow {
+  0%, 100% { box-shadow: 0 0 40px -10px rgba(168, 85, 247, 0.25), inset 0 1px 0 rgba(255,255,255,0.15); }
+  50% { box-shadow: 0 0 60px -10px rgba(168, 85, 247, 0.45), inset 0 1px 0 rgba(255,255,255,0.25); }
+}
+
+.auth-blob-a { animation: auth-blob-a 18s ease-in-out infinite; }
+.auth-blob-b { animation: auth-blob-b 22s ease-in-out infinite; }
+.auth-blob-c { animation: auth-blob-c 20s ease-in-out infinite; }
+.auth-float  { animation: auth-float 3.5s ease-in-out infinite; }
+.auth-shake  { animation: auth-shake 0.4s ease-in-out; }
+.auth-glow   { animation: auth-glow 4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-blob-a, .auth-blob-b, .auth-blob-c,
+  .auth-float, .auth-shake, .auth-glow {
+    animation: none;
+  }
+}
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
