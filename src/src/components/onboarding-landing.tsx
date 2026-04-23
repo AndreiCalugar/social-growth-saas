@@ -53,20 +53,23 @@ function HeroSection() {
           caption structure, hashtags, and the best time to post.
         </p>
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <AddProfileModal
+            defaultIsOwn={true}
+            triggerLabel="Add your first profile"
+            triggerIcon={<UserPlus className="h-4 w-4" />}
+            triggerClassName="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-purple-500/30 hover:bg-purple-700 hover:shadow-purple-500/50 transition-all cursor-pointer"
+          />
           <a
             href="#how-it-works"
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-purple-500/30 hover:bg-purple-700 hover:shadow-purple-500/50 transition-all"
-          >
-            Get started
-            <ArrowRight className="h-4 w-4" />
-          </a>
-          <a
-            href="#example"
             className="inline-flex w-full sm:w-auto items-center justify-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-4 py-3"
           >
-            See what a brief looks like
+            See how it works
+            <ArrowRight className="h-4 w-4" />
           </a>
         </div>
+        <p className="mt-4 text-xs text-slate-400">
+          Setup takes 5 minutes · No credit card required · Free during beta
+        </p>
       </div>
     </section>
   )
