@@ -5,9 +5,21 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { UserPlus, Loader2, X } from "lucide-react"
 
-export function AddProfileModal() {
+interface AddProfileModalProps {
+  defaultIsOwn?: boolean
+  triggerLabel?: string
+  triggerClassName?: string
+  triggerIcon?: React.ReactNode
+}
+
+export function AddProfileModal({
+  defaultIsOwn = false,
+  triggerLabel = "Add Profile",
+  triggerClassName,
+  triggerIcon,
+}: AddProfileModalProps = {}) {
   const [open, setOpen] = useState(false)
-  const [isOwn, setIsOwn] = useState(false)
+  const [isOwn, setIsOwn] = useState(defaultIsOwn)
   const [state, setState] = useState<"idle" | "loading" | "polling" | "error">("idle")
   const [message, setMessage] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
@@ -83,10 +95,17 @@ export function AddProfileModal() {
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <UserPlus className="h-4 w-4" />
-        Add Profile
-      </Button>
+      {triggerClassName ? (
+        <button type="button" onClick={() => setOpen(true)} className={triggerClassName}>
+          {triggerIcon ?? <UserPlus className="h-4 w-4" />}
+          {triggerLabel}
+        </button>
+      ) : (
+        <Button size="sm" onClick={() => setOpen(true)}>
+          {triggerIcon ?? <UserPlus className="h-4 w-4" />}
+          {triggerLabel}
+        </Button>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

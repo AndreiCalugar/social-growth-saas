@@ -6,11 +6,12 @@ import { formatNumber, formatRelativeTime } from "@/lib/format"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { LikesChart } from "@/components/likes-chart"
+import { OnboardingLanding } from "@/components/onboarding-landing"
 import Link from "next/link"
 import {
   Users, BarChart2, FileText, Sparkles,
   TrendingUp, TrendingDown, Minus, Zap,
-  RefreshCw, PlusCircle, ChevronRight,
+  RefreshCw, PlusCircle, ChevronRight, ArrowRight,
 } from "lucide-react"
 
 async function getDashboardData(userId: string) {
@@ -27,12 +28,13 @@ async function getDashboardData(userId: string) {
   // Always fetch all of this user's profile ids so child-table queries stay scoped.
   const { data: allProfiles } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, is_own")
     .eq("user_id", userId)
   const profileIds = (allProfiles ?? []).map((p) => p.id)
+  const competitorCount = (allProfiles ?? []).filter((p) => !p.is_own).length
 
   if (!ownProfileId) {
-    return { ownProfile: null, postStats: { avgLikes: 0, postCount: 0, avgEngagement: 0 }, posts: [], latestAnalysis: null, recentRecs: [], trendCount: 0, megaTipCount: 0, topInsight: null, recentActivity: [], totalProfiles: profileIds.length }
+    return { ownProfile: null, postStats: { avgLikes: 0, postCount: 0, avgEngagement: 0 }, posts: [], latestAnalysis: null, recentRecs: [], trendCount: 0, megaTipCount: 0, topInsight: null, recentActivity: [], totalProfiles: profileIds.length, competitorCount }
   }
 
   const [postsRes, analysisRes, recsRes, scrapeRunsRes, analysesListRes] = await Promise.all([
@@ -133,6 +135,7 @@ async function getDashboardData(userId: string) {
     topInsight,
     recentActivity,
     totalProfiles: profileIds.length,
+    competitorCount,
   }
 }
 
@@ -145,10 +148,15 @@ const priorityStyles: Record<string, string> = {
 export default async function OverviewPage() {
   const session = await auth()
   const userId = session!.user.id
-  const { ownProfile, postStats, posts, latestAnalysis, recentRecs, trendCount, megaTipCount, topInsight, recentActivity, totalProfiles } =
+  const { ownProfile, postStats, posts, latestAnalysis, recentRecs, trendCount, megaTipCount, topInsight, recentActivity, totalProfiles, competitorCount } =
     await getDashboardData(userId)
 
-  // No profile empty state
+  // Brand-new user: full onboarding landing page
+  if (totalProfiles === 0) {
+    return <OnboardingLanding />
+  }
+
+  // Has competitors but no own profile yet — narrower prompt to add own
   if (!ownProfile) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -157,9 +165,9 @@ export default async function OverviewPage() {
             <TrendingUp className="h-8 w-8 text-purple-600" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Welcome to Social Growth</h1>
+            <h1 className="text-xl font-semibold text-slate-900">Add your own Instagram profile</h1>
             <p className="text-sm text-slate-500 mt-2">
-              Add your Instagram profile to start tracking analytics and discovering what content to create.
+              You&apos;ve added competitors — now add your own account so we can compare and generate insights for you.
             </p>
           </div>
           <Link
@@ -167,7 +175,7 @@ export default async function OverviewPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-purple-700 transition-colors shadow-sm"
           >
             <PlusCircle className="h-4 w-4" />
-            Add your Instagram profile
+            Add your own profile
           </Link>
         </div>
       </div>
@@ -201,6 +209,43 @@ export default async function OverviewPage() {
           <RunAnalysisButton profileId={ownProfile.id} username={ownProfile.username} />
         </div>
       </div>
+
+      {/* Progressive onboarding banners */}
+      {competitorCount < 3 ? (
+        <Link
+          href="/competitors"
+          className="group flex items-center gap-3 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-white p-4 hover:border-purple-300 hover:shadow-md transition-all"
+        >
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-purple-600 flex items-center justify-center shadow-sm">
+            <Users className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
+              <span className="text-emerald-600">✓</span> Profile added
+            </p>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Now add {3 - competitorCount} more competitor{3 - competitorCount === 1 ? "" : "s"} ({competitorCount}/3) to unlock the Insights Engine.
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-purple-600 shrink-0 transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      ) : trendCount === 0 ? (
+        <Link
+          href="/insights"
+          className="group flex items-center gap-3 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white p-4 hover:border-amber-300 hover:shadow-md transition-all"
+        >
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
+            <Sparkles className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-900">You&apos;re ready!</p>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Generate your first insights — we&apos;ll analyze {competitorCount} competitors to find what content is outperforming in your niche.
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-amber-600 shrink-0 transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      ) : null}
 
       {/* Metric cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
