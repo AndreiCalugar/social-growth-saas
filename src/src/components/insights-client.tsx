@@ -16,6 +16,7 @@ import {
   Hash,
   Copy,
 } from "lucide-react"
+import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 
 interface ExamplePost {
   caption_preview: string
@@ -385,46 +386,41 @@ export function InsightsClient({
   competitorCount,
 }: Props) {
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
-  const [status, setStatus] = useState<"idle" | "generating" | "done" | "error">(
-    initialInsights.length > 0 ? "done" : "idle"
-  )
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const startTimestampRef = useRef<string>("")
+  const lastStatusRef = useRef<string | undefined>(undefined)
+
+  const { jobs, startInsights } = useJobTracker()
+  const job = ownProfileId ? jobs.find((j) => j.id === `insights-${ownProfileId}`) : undefined
+  const running = job?.status === "running"
+  const rotatingMessage = useRotatingMessage("insights", running)
 
   useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current)
-    }
-  }, [])
-
-  async function pollForInsights() {
     if (!ownProfileId) return
-    try {
-      const res = await fetch(`/api/insights?profile_id=${ownProfileId}`)
-      const json = await res.json()
-      const fetched: Insight[] = json.insights ?? []
-      const latest = fetched[0]?.created_at ?? ""
-      if (fetched.length > 0 && latest > startTimestampRef.current) {
-        setInsights(fetched)
-        setStatus("done")
-        if (pollingRef.current) clearInterval(pollingRef.current)
-      }
-    } catch (e) {
-      console.error("[pollForInsights] error:", e)
+    const prev = lastStatusRef.current
+    lastStatusRef.current = job?.status
+
+    if (prev === "running" && job?.status === "done") {
+      fetch(`/api/insights?profile_id=${ownProfileId}`)
+        .then((r) => r.json())
+        .then((json: { insights?: Insight[] }) => {
+          if (json.insights) setInsights(json.insights)
+        })
+        .catch(() => {})
     }
-  }
+    if (job?.status === "error" && job.errorMessage) {
+      setErrorMsg(job.errorMessage)
+    }
+  }, [job?.status, job?.errorMessage, ownProfileId])
 
   async function handleGenerate() {
     if (!ownProfileId) {
       setErrorMsg("No own profile found. Add your own account in Profiles first.")
-      setStatus("error")
       return
     }
 
-    setStatus("generating")
     setErrorMsg(null)
-    startTimestampRef.current = insights[0]?.created_at ?? ""
+    const cursor = insights[0]?.created_at ?? ""
+    startInsights({ ownProfileId, cursor })
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
@@ -433,40 +429,22 @@ export function InsightsClient({
         body: JSON.stringify({ own_profile_id: ownProfileId, user_id: userId }),
       })
 
-      const rawText = await res.text()
-
       if (!res.ok) {
+        const rawText = await res.text()
         throw new Error(`n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`)
       }
-
-      let json: Record<string, unknown> = {}
-      if (rawText.trim()) {
-        try {
-          json = JSON.parse(rawText)
-        } catch {
-          /* non-JSON */
-        }
-      } else {
-        throw new Error(
-          "The n8n workflow crashed before finishing. Check the n8n execution log for the failing node."
-        )
-      }
-
-      if (json.error) throw new Error(`Workflow error: ${json.error}`)
-
-      pollingRef.current = setInterval(pollForInsights, 3000)
-      setTimeout(() => {
-        if (pollingRef.current) clearInterval(pollingRef.current)
-        if (status !== "done") {
-          setStatus("error")
-          setErrorMsg("Analysis completed but insights didn't load. Refresh the page.")
-        }
-      }, 60_000)
     } catch (e) {
-      setStatus("error")
       setErrorMsg(e instanceof Error ? e.message : "Unknown error")
     }
   }
+
+  const status: "idle" | "generating" | "done" | "error" = running
+    ? "generating"
+    : errorMsg
+    ? "error"
+    : insights.length > 0
+    ? "done"
+    : "idle"
 
   const megaTips = insights.filter((i) => i.is_mega_tip)
   const otherInsights = insights.filter((i) => !i.is_mega_tip)
@@ -509,11 +487,9 @@ export function InsightsClient({
       {status === "generating" && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center space-y-2">
           <RefreshCw className="h-8 w-8 text-amber-500 animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-amber-900">
-            Analyzing trends across your competitors…
-          </p>
+          <p className="text-sm font-semibold text-amber-900">{rotatingMessage}</p>
           <p className="text-xs text-amber-700">
-            Claude is reading all posts. This takes 30–60 seconds.
+            Takes {ESTIMATED_DURATION.insights}. You can navigate away — we&apos;ll finish in the background.
           </p>
         </div>
       )}

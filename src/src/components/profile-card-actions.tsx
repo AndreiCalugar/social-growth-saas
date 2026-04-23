@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { RefreshCw, Trash2, Loader2 } from "lucide-react"
+import { useJobTracker } from "@/components/job-tracker"
 
 interface Props {
   profileId: string
@@ -10,39 +11,34 @@ interface Props {
 }
 
 export function ProfileCardActions({ profileId, username }: Props) {
-  const [scrapeState, setScrapeState] = useState<"idle" | "loading" | "polling">("idle")
-  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "loading">("idle")
   const router = useRouter()
+  const { jobs, startScrape } = useJobTracker()
+  const job = jobs.find((j) => j.id === `scrape-${username}`)
+  const scraping = job?.status === "running"
+  const lastStatusRef = useRef<string | undefined>(undefined)
+
+  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "loading">("idle")
+
+  useEffect(() => {
+    if (lastStatusRef.current === "running" && job?.status === "done") {
+      router.refresh()
+    }
+    lastStatusRef.current = job?.status
+  }, [job?.status, router])
 
   async function handleRescrape(e: React.MouseEvent) {
     e.preventDefault()
-    setScrapeState("loading")
+    if (scraping) return
+    startScrape({ username, profileId })
     try {
       await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/scrape-instagram`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),
       })
-      setScrapeState("polling")
-      pollStatus()
     } catch {
-      setScrapeState("idle")
+      // tracker handles timeout
     }
-  }
-
-  function pollStatus() {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/scrape-status/${profileId}`)
-        const data = await res.json()
-        if (data.status === "completed" || data.status === "failed") {
-          clearInterval(interval)
-          setScrapeState("idle")
-          router.refresh()
-        }
-      } catch { /* ignore */ }
-    }, 10_000)
-    setTimeout(() => { clearInterval(interval); setScrapeState("idle") }, 300_000)
   }
 
   async function handleDelete(e: React.MouseEvent) {
@@ -70,14 +66,14 @@ export function ProfileCardActions({ profileId, username }: Props) {
     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.preventDefault()}>
       <button
         onClick={handleRescrape}
-        disabled={scrapeState !== "idle"}
+        disabled={scraping}
         className="text-muted-foreground hover:text-primary disabled:opacity-40"
         title="Rescrape"
       >
-        {scrapeState === "idle" ? (
-          <RefreshCw className="h-3.5 w-3.5" />
-        ) : (
+        {scraping ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <RefreshCw className="h-3.5 w-3.5" />
         )}
       </button>
       <button

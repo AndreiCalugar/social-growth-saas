@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { RefreshCw, Loader2 } from "lucide-react"
+import { useJobTracker } from "@/components/job-tracker"
 
 interface Props {
   profileId: string
@@ -10,53 +11,36 @@ interface Props {
 }
 
 export function RetryScrapeButton({ profileId, username }: Props) {
-  const [state, setState] = useState<"idle" | "loading" | "polling">("idle")
   const router = useRouter()
+  const { jobs, startScrape } = useJobTracker()
+  const job = jobs.find((j) => j.id === `scrape-${username}`)
+  const running = job?.status === "running"
+  const lastStatusRef = useRef<string | undefined>(undefined)
+
+  useEffect(() => {
+    if (lastStatusRef.current === "running" && job?.status === "done") {
+      router.refresh()
+    }
+    lastStatusRef.current = job?.status
+  }, [job?.status, router])
 
   async function handleRetry(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    setState("loading")
+    if (running) return
+    startScrape({ username, profileId })
     try {
       await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/scrape-instagram`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),
       })
-      setState("polling")
-      pollStatus()
     } catch {
-      setState("idle")
+      // tracker times out on its own
     }
   }
 
-  function pollStatus() {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/scrape-status/${profileId}`)
-        const data = await res.json()
-        if (data.status === "completed") {
-          clearInterval(interval)
-          setState("idle")
-          router.refresh()
-        } else if (data.status === "failed") {
-          clearInterval(interval)
-          setState("idle")
-          router.refresh()
-        }
-      } catch {
-        // ignore transient errors
-      }
-    }, 10_000)
-
-    // Stop polling after 5 minutes max
-    setTimeout(() => {
-      clearInterval(interval)
-      setState("idle")
-    }, 300_000)
-  }
-
-  if (state === "polling") {
+  if (running) {
     return (
       <span className="text-xs flex items-center gap-1 text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" />
@@ -67,15 +51,10 @@ export function RetryScrapeButton({ profileId, username }: Props) {
 
   return (
     <button
-      onClick={(e) => handleRetry(e)}
-      disabled={state === "loading"}
-      className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700 disabled:opacity-50"
+      onClick={handleRetry}
+      className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700"
     >
-      {state === "loading" ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      ) : (
-        <RefreshCw className="h-3 w-3" />
-      )}
+      <RefreshCw className="h-3 w-3" />
       Retry scrape
     </button>
   )

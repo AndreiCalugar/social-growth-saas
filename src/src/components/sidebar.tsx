@@ -8,7 +8,6 @@ import {
   Users,
   Swords,
   Sparkles,
-  Star,
   Settings,
   TrendingUp,
   LogOut,
@@ -21,7 +20,6 @@ const navItems = [
   { href: "/profiles", label: "Profiles", icon: Users },
   { href: "/competitors", label: "Competitors", icon: Swords },
   { href: "/insights", label: "Insights", icon: Sparkles, badge: "NEW" },
-  { href: "/recommendations", label: "Recommendations", icon: Star },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
 

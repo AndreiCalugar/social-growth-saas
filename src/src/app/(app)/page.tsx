@@ -198,7 +198,7 @@ export default async function OverviewPage() {
           </p>
         </div>
         <div className="shrink-0">
-          <RunAnalysisButton profileId={ownProfile.id} />
+          <RunAnalysisButton profileId={ownProfile.id} username={ownProfile.username} />
         </div>
       </div>
 
@@ -341,7 +341,7 @@ export default async function OverviewPage() {
                 <div className="flex flex-col items-center gap-3 py-6 text-center">
                   <Sparkles className="h-8 w-8 text-slate-200" />
                   <p className="text-xs text-slate-400">No analysis yet</p>
-                  <RunAnalysisButton profileId={ownProfile.id} />
+                  <RunAnalysisButton profileId={ownProfile.id} username={ownProfile.username} />
                 </div>
               )}
             </CardContent>
