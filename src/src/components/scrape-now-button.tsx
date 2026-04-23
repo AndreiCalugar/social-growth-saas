@@ -18,7 +18,7 @@ export function ScrapeNowButton({ username }: Props) {
     setState("loading")
     setMessage("")
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_BASE_URL}/webhook/scrape-instagram`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/scrape-instagram`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),

@@ -40,3 +40,7 @@ coverage/
 # Misc
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code
+.claude/scheduled_tasks.lock
+social-growth-saas/

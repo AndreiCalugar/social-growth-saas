@@ -18,7 +18,7 @@ export function RetryScrapeButton({ profileId, username }: Props) {
     e.stopPropagation()
     setState("loading")
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_N8N_BASE_URL}/webhook/scrape-instagram`, {
+      await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/scrape-instagram`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username }),

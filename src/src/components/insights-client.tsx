@@ -427,7 +427,7 @@ export function InsightsClient({
     startTimestampRef.current = insights[0]?.created_at ?? ""
 
     try {
-      const res = await fetch("http://localhost:5678/webhook/cross-analysis", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ own_profile_id: ownProfileId, user_id: userId }),

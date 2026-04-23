@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    const n8nBase = process.env.NEXT_PUBLIC_N8N_BASE_URL ?? "http://localhost:5678"
+    const n8nBase = process.env.NEXT_PUBLIC_N8N_URL
     try {
       await fetch(`${n8nBase}/webhook/scrape-instagram`, {
         method: "POST",
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message ?? "Failed to save profile" }, { status: 500 })
   }
 
-  const n8nBase = process.env.NEXT_PUBLIC_N8N_BASE_URL ?? "http://localhost:5678"
+  const n8nBase = process.env.NEXT_PUBLIC_N8N_URL
   try {
     await fetch(`${n8nBase}/webhook/scrape-instagram`, {
       method: "POST",

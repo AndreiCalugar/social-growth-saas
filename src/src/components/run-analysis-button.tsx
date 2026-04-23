@@ -18,7 +18,7 @@ export function RunAnalysisButton({ profileId }: Props) {
     setState("loading")
     setMessage("")
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_BASE_URL}/webhook/analyze-profile`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/analyze-profile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile_id: profileId, analysis_type: "performance" }),
