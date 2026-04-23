@@ -7,7 +7,7 @@ import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { RetryScrapeButton } from "@/components/retry-scrape-button"
-import { Users, Clock, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { Users, Clock, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
 
@@ -60,7 +60,7 @@ export default async function CompetitorsPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Competitors</h1>
           <p className="text-sm text-slate-500">
-            Track and compare against other Instagram accounts
+            Click any card for a deep analysis of that profile's posts
           </p>
         </div>
         <AddCompetitorForm />
@@ -102,7 +102,6 @@ export default async function CompetitorsPage() {
                           </div>
                           <div>
                             <CardTitle className="text-sm font-semibold text-slate-900">@{c.username}</CardTitle>
-                            <p className="text-xs text-slate-500 mt-0.5">{formatNumber(c.followers)} followers</p>
                           </div>
                         </div>
                         <DeleteCompetitorButton profileId={c.id} username={c.username} />
@@ -131,6 +130,10 @@ export default async function CompetitorsPage() {
                       {scrapeStatus === "never" && (
                         <p className="text-xs text-slate-400">Not scraped yet</p>
                       )}
+                      <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100 text-xs font-medium text-purple-600 group-hover:text-purple-700">
+                        <span>View deep analysis</span>
+                        <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                      </div>
                     </CardContent>
                   </Card>
                 </Link>

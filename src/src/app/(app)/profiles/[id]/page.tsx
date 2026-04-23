@@ -10,7 +10,7 @@ import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { ProfileCharts } from "@/components/profile-charts"
 import { PostsTable } from "@/components/posts-table"
 import {
-  Users, Clock, TrendingUp, TrendingDown, Minus,
+  Clock, TrendingUp, TrendingDown, Minus,
   ThumbsUp, ThumbsDown, Sparkles, CalendarClock,
   BarChart3, Eye, Heart, MessageCircle,
 } from "lucide-react"
@@ -154,10 +154,6 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
             <p className="text-sm text-muted-foreground max-w-lg">{profile.bio}</p>
           )}
           <div className="flex items-center gap-4 text-sm text-slate-500">
-            <span className="flex items-center gap-1">
-              <Users className="h-3.5 w-3.5" />
-              {formatNumber(profile.followers)} followers
-            </span>
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
               {profile.last_scraped ? `Scraped ${formatRelativeTime(profile.last_scraped)}` : "Never scraped"}

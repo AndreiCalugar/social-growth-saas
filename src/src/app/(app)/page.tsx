@@ -203,21 +203,7 @@ export default async function OverviewPage() {
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2 pt-4">
-            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" /> Followers
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
-              {formatNumber(ownProfile.followers)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-4">
-            <p className="text-xs text-slate-400">Instagram</p>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2 pt-4">
             <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">

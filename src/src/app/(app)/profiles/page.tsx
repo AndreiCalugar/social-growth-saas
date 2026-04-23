@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { AddProfileModal } from "@/components/add-profile-modal"
 import { ProfileCardActions } from "@/components/profile-card-actions"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
-import { Users, Clock, FileText, TrendingUp } from "lucide-react"
+import { Users, Clock, FileText, TrendingUp, ArrowRight } from "lucide-react"
 
 export default async function ProfilesPage() {
   const session = await auth()
@@ -53,7 +53,7 @@ export default async function ProfilesPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Profiles</h1>
-          <p className="text-sm text-slate-500">Manage tracked Instagram accounts</p>
+          <p className="text-sm text-slate-500">Click any profile for a deep analysis of their posts — top performers, content mix, posting cadence, and trends</p>
         </div>
         <AddProfileModal />
       </div>
@@ -130,7 +130,6 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
                 </div>
                 <div>
                   <CardTitle className="text-sm font-semibold text-slate-900">@{profile.username}</CardTitle>
-                  <p className="text-xs text-slate-500 mt-0.5">{formatNumber(profile.followers)} followers</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -154,6 +153,10 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
               <Clock className="h-3 w-3 text-slate-400" />
               {profile.last_scraped ? `Scraped ${formatRelativeTime(profile.last_scraped)}` : "Never scraped"}
             </p>
+            <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100 text-xs font-medium text-purple-600 group-hover:text-purple-700">
+              <span>View deep analysis</span>
+              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+            </div>
           </CardContent>
         </Card>
       </Link>

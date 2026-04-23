@@ -64,7 +64,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge own posts and competitor list, validate we have enough, build competitor IDs for next query\nconst ownItems = $('Fetch Own Posts').all();\nconst compItems = $('Fetch Competitors').all();\n\n// HTTP node may return either one item whose json is an array, or N items each a row.\nfunction flatten(items) {\n  if (!items || items.length === 0) return [];\n  if (items.length === 1 && Array.isArray(items[0].json)) return items[0].json;\n  return items.map(i => i.json);\n}\n\nconst own_posts = flatten(ownItems);\nconst competitors = flatten(compItems);\n\nconst own_profile_id = $('Validate Input').first().json.own_profile_id;\n\nif (competitors.length < 2) {\n  throw new Error(`Need at least 2 competitor profiles. Found: ${competitors.length}. Add and scrape competitors first.`);\n}\n\nconst competitor_ids = competitors.map(c => c.id);\n\nreturn [{ json: { own_profile_id, own_posts, competitors, competitor_ids } }];"
+        "jsCode": "// Merge own posts and competitor list, validate we have enough, build competitor IDs for next query\n// Fetch Own Posts and Fetch Competitors are parallel branches from Validate Input — both will have executed by now.\nlet ownItems = [];\nlet compItems = [];\ntry { ownItems = $('Fetch Own Posts').all(); } catch (e) { ownItems = []; }\ntry { compItems = $('Fetch Competitors').all(); } catch (e) { compItems = []; }\n\n// HTTP node may return either one item whose json is an array, or N items each a row.\nfunction flatten(items) {\n  if (!items || items.length === 0) return [];\n  if (items.length === 1 && Array.isArray(items[0].json)) return items[0].json;\n  return items.map(i => i.json);\n}\n\nconst own_posts = flatten(ownItems);\nconst competitors = flatten(compItems);\n\nconst own_profile_id = $('Validate Input').first().json.own_profile_id;\n\nif (own_posts.length === 0) {\n  throw new Error(`No posts found for own_profile_id ${own_profile_id}. Scrape your own profile first.`);\n}\nif (competitors.length < 2) {\n  throw new Error(`Need at least 2 competitor profiles. Found: ${competitors.length}. Add and scrape competitors first.`);\n}\n\nconst competitor_ids = competitors.map(c => c.id);\n\nreturn [{ json: { own_profile_id, own_posts, competitors, competitor_ids } }];"
       },
       "id": "merge-profiles",
       "name": "Merge Profiles",
@@ -185,10 +185,10 @@
       "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]]
     },
     "Validate Input": {
-      "main": [[{ "node": "Fetch Own Posts", "type": "main", "index": 0 }]]
-    },
-    "Fetch Own Posts": {
-      "main": [[{ "node": "Fetch Competitors", "type": "main", "index": 0 }]]
+      "main": [[
+        { "node": "Fetch Own Posts", "type": "main", "index": 0 },
+        { "node": "Fetch Competitors", "type": "main", "index": 0 }
+      ]]
     },
     "Fetch Competitors": {
       "main": [[{ "node": "Merge Profiles", "type": "main", "index": 0 }]]

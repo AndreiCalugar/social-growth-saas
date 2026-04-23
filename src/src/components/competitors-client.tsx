@@ -6,7 +6,7 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { PostsTable } from "@/components/posts-table"
-import { Users, Clock, TrendingUp } from "lucide-react"
+import { Clock, TrendingUp } from "lucide-react"
 
 interface Profile {
   id: string
@@ -216,7 +216,6 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Account</th>
-                  <th className="text-right px-4 py-2 font-medium text-muted-foreground">Followers</th>
                   <th className="text-right px-4 py-2 font-medium text-muted-foreground">Posts</th>
                   <th className="text-right px-4 py-2 font-medium text-muted-foreground">Avg Likes</th>
                   <th className="text-right px-4 py-2 font-medium text-muted-foreground">Avg Comments</th>
@@ -236,7 +235,6 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
                           {isOwn && <span className="text-[9px] px-1 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-semibold">You</span>}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-right">{formatNumber(profile.followers)}</td>
                       <td className="px-4 py-2.5 text-right">{postCount}</td>
                       <td className="px-4 py-2.5 text-right">{formatNumber(metrics.avgLikes)}</td>
                       <td className="px-4 py-2.5 text-right">{formatNumber(metrics.avgComments)}</td>
@@ -356,7 +354,6 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
                 <CardTitle className="text-sm font-semibold">You — @{ownProfile?.username ?? "—"}</CardTitle>
               </div>
               <CardDescription className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1"><Users className="h-3 w-3" />{formatNumber(ownProfile?.followers)}</span>
                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatDate(ownProfile?.last_scraped)}</span>
               </CardDescription>
             </CardHeader>
@@ -372,7 +369,6 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
                 <CardTitle className="text-sm font-semibold">@{competitor?.username ?? "—"}</CardTitle>
               </div>
               <CardDescription className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1"><Users className="h-3 w-3" />{formatNumber(competitor?.followers)}</span>
                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatDate(competitor?.last_scraped)}</span>
               </CardDescription>
             </CardHeader>
