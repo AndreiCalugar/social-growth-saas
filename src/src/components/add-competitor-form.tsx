@@ -2,7 +2,6 @@
 
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
 import { UserPlus, Loader2 } from "lucide-react"
 
 export function AddCompetitorForm() {
@@ -74,33 +73,29 @@ export function AddCompetitorForm() {
     }
   }
 
+  const isBusy = state === "loading" || state === "polling"
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-      <div className="relative w-full sm:w-56">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+      <div className="relative w-full sm:w-60">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none font-medium">@</span>
         <input
           ref={inputRef}
           type="text"
           placeholder="username"
-          disabled={state === "loading" || state === "polling"}
-          className="h-9 w-full rounded-md border border-input bg-background pl-7 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          disabled={isBusy}
+          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all disabled:opacity-50"
         />
       </div>
-      <Button
+      <button
         type="submit"
-        size="sm"
-        disabled={state === "loading" || state === "polling"}
-        className="w-full sm:w-auto"
+        disabled={isBusy}
+        className="h-10 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 px-4 text-sm font-medium text-white shadow-sm shadow-purple-500/20 disabled:opacity-70 disabled:cursor-not-allowed active:scale-95 transition-all"
       >
-        {state === "loading" || state === "polling" ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <UserPlus className="h-4 w-4" />
-        )}
+        {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
         {state === "loading" ? "Adding…" : state === "polling" ? "Scraping…" : "Add Competitor"}
-      </Button>
+      </button>
       {message && (
-        <span className={`text-xs ${state === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+        <span className={`text-xs ${state === "error" ? "text-red-600" : "text-slate-500"}`}>
           {message}
         </span>
       )}

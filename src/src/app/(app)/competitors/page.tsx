@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic"
 
 import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
@@ -68,46 +67,58 @@ export default async function CompetitorsPage() {
 
       {/* Empty state */}
       {competitors.length === 0 && (
-        <Card className="border-dashed">
-          <CardContent className="pt-10 pb-10 text-center space-y-4">
-            <div className="text-4xl">🎯</div>
-            <div>
-              <p className="font-semibold text-sm text-slate-900">Add 3–5 competitors in your niche</p>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                The insights engine analyzes posts across all competitor accounts together to detect what
-                content patterns consistently outperform — then tells you exactly what to create.
-                You need at least 3 to unlock trend detection.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 px-6 text-center">
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm mb-5">
+            <Users className="h-7 w-7 text-white" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-800">Add 3–5 competitors in your niche</h3>
+          <p className="text-sm text-slate-500 max-w-md mx-auto mt-2 leading-relaxed">
+            The insights engine analyzes posts across all competitor accounts together to detect what
+            content patterns consistently outperform — then tells you exactly what to create.
+            You need at least 3 to unlock trend detection.
+          </p>
+        </div>
       )}
 
       {/* Competitor cards list */}
       {competitors.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {competitors.map((c) => {
             const lastRun = lastRunByProfile[c.id]
             const scrapeStatus = lastRun?.status ?? (c.last_scraped ? "completed" : "never")
 
+            const statusDot =
+              scrapeStatus === "failed"
+                ? { color: "bg-red-500", label: "Scrape failed" }
+                : scrapeStatus === "never"
+                ? { color: "bg-slate-300", label: "Not scraped yet" }
+                : ageBadge(c.last_scraped)
+
             return (
-              <div key={c.id} className="group relative">
+              <div key={c.id} className="group relative h-full">
                 <Link href={`/profiles/${c.id}`}>
-                  <Card className="hover:border-purple-300 hover:shadow-md transition-all cursor-pointer">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center shrink-0 shadow-sm">
+                  <div className="h-full rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm ring-2 ring-white">
                             <span className="text-sm font-bold text-white">{c.username.charAt(0).toUpperCase()}</span>
                           </div>
-                          <div>
-                            <CardTitle className="text-sm font-semibold text-slate-900">@{c.username}</CardTitle>
-                          </div>
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${statusDot.color}`}
+                            aria-label={statusDot.label}
+                            title={statusDot.label}
+                          />
                         </div>
-                        <DeleteCompetitorButton profileId={c.id} username={c.username} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">@{c.username}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{statusDot.label}</p>
+                        </div>
                       </div>
-                    </CardHeader>
-                    <CardContent className="space-y-1.5 pt-0">
+                      <DeleteCompetitorButton profileId={c.id} username={c.username} />
+                    </div>
+
+                    <div className="mt-4 space-y-1.5 flex-1">
                       <p className="text-xs text-slate-500 flex items-center gap-1.5">
                         <Clock className="h-3 w-3 text-slate-400" />
                         {c.last_scraped ? `Scraped ${formatRelativeTime(c.last_scraped)}` : "Never scraped"}
@@ -116,7 +127,7 @@ export default async function CompetitorsPage() {
                         <div className="space-y-1">
                           <p className="text-xs flex items-center gap-1 text-amber-600">
                             <AlertTriangle className="h-3 w-3" />
-                            Last scrape failed — rate-limited.
+                            Rate-limited by Instagram.
                           </p>
                           <RetryScrapeButton profileId={c.id} username={c.username} />
                         </div>
@@ -127,15 +138,13 @@ export default async function CompetitorsPage() {
                           Scraped successfully
                         </p>
                       )}
-                      {scrapeStatus === "never" && (
-                        <p className="text-xs text-slate-400">Not scraped yet</p>
-                      )}
-                      <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100 text-xs font-medium text-purple-600 group-hover:text-purple-700">
-                        <span>View deep analysis</span>
-                        <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-                      </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs font-medium text-purple-600 group-hover:text-purple-700">
+                      <span>View deep analysis</span>
+                      <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                  </div>
                 </Link>
               </div>
             )
@@ -151,16 +160,22 @@ export default async function CompetitorsPage() {
           allPosts={allPosts}
         />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-slate-500">
-              Own profile not found. Run a scrape from the{" "}
-              <Link href="/" className="text-purple-600 underline underline-offset-2">Overview page</Link>{" "}
-              first.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm">
+          <p className="text-sm text-slate-500">
+            Own profile not found. Run a scrape from the{" "}
+            <Link href="/" className="text-purple-600 underline underline-offset-2">Overview page</Link>{" "}
+            first.
+          </p>
+        </div>
       )}
     </div>
   )
+}
+
+function ageBadge(last_scraped: string | null): { color: string; label: string } {
+  if (!last_scraped) return { color: "bg-slate-300", label: "Never scraped" }
+  const ageHours = (Date.now() - new Date(last_scraped).getTime()) / (1000 * 60 * 60)
+  if (ageHours < 24 * 7) return { color: "bg-emerald-500", label: "Fresh" }
+  if (ageHours < 24 * 30) return { color: "bg-amber-500", label: "Getting stale" }
+  return { color: "bg-red-500", label: "Needs rescrape" }
 }
