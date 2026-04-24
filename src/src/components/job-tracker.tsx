@@ -118,9 +118,22 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
         if (job.kind === "scrape" && job.profileId) {
           const res = await fetch(`/api/scrape-status/${job.profileId}`)
           if (!res.ok) return
-          const data: { status: string } = await res.json()
-          if (data.status === "completed") {
-            markDone(job.id)
+          const data: { status: string; completed_at?: string | null } = await res.json()
+          // The /api/scrape-status endpoint returns the most recent scrape_run
+          // row. n8n only inserts a row at the END of its workflow, so while a
+          // scrape is in flight the latest row is the PREVIOUS completed run —
+          // we'd immediately mark the new job done against a stale timestamp.
+          // Guard by requiring completed_at to be newer than when we started
+          // watching this job (with 3s tolerance for clock skew).
+          if (data.status === "completed" && data.completed_at) {
+            const completedMs = new Date(data.completed_at).getTime()
+            if (completedMs >= job.startedAt - 3000) {
+              markDone(job.id)
+            } else if (Date.now() - job.startedAt > 180_000) {
+              // 3 min without a fresh completed_at row → assume the n8n workflow
+              // died silently. Surface it so the user isn't stuck on a ghost.
+              markError(job.id, "Scrape timed out — check n8n execution log.")
+            }
           } else if (data.status === "failed") {
             markError(job.id, "Scrape failed — Instagram may have rate-limited. Try again later.")
           }
