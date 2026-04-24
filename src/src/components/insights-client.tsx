@@ -171,8 +171,8 @@ function InsightCard({
 
   return (
     <div
-      className={`bg-white rounded-xl border shadow-sm overflow-hidden border-l-4 ${
-        isMegaTip ? "border-l-amber-500 border-slate-200" : "border-l-emerald-500 border-slate-200"
+      className={`bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md transition-all overflow-hidden border-l-4 ${
+        isMegaTip ? "border-l-amber-500" : "border-l-emerald-500"
       }`}
     >
       <div className="p-4 sm:p-5">
@@ -182,9 +182,9 @@ function InsightCard({
             {insight.trend_name}
           </h3>
           {multiplier > 0 && (
-            <span className="shrink-0 inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white tabular-nums">
+            <span className="shrink-0 inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-3 py-1.5 text-sm font-bold text-white tabular-nums shadow-sm">
               {multiplier.toFixed(1)}
-              <span className="text-[10px] font-semibold text-slate-300">×</span>
+              <span className="text-[11px] font-semibold text-slate-300">×</span>
             </span>
           )}
         </div>
@@ -237,32 +237,32 @@ function InsightCard({
               {hasStructured ? (
                 <div className="space-y-3">
                   {insight.content_format && (
-                    <BriefSection icon={Clapperboard} label="Content">
+                    <BriefSection icon={Clapperboard} label="Content" tone="purple">
                       {insight.content_format}
                     </BriefSection>
                   )}
                   {insight.hook && (
-                    <BriefSection icon={Fish} label="Opening hook">
+                    <BriefSection icon={Fish} label="Opening hook" tone="amber">
                       {insight.hook}
                     </BriefSection>
                   )}
                   {insight.caption_structure && (
-                    <BriefSection icon={FileText} label="Caption structure">
+                    <BriefSection icon={FileText} label="Caption structure" tone="slate">
                       <span className="whitespace-pre-line">{insight.caption_structure}</span>
                     </BriefSection>
                   )}
                   {insight.best_time && (
-                    <BriefSection icon={Clock} label="Best time to post">
+                    <BriefSection icon={Clock} label="Best time to post" tone="emerald">
                       {insight.best_time}
                     </BriefSection>
                   )}
                   {insight.hashtags && insight.hashtags.length > 0 && (
-                    <BriefSection icon={Hash} label="Hashtags">
+                    <BriefSection icon={Hash} label="Hashtags" tone="slate">
                       <div className="flex flex-wrap gap-1.5">
                         {insight.hashtags.map((tag) => (
                           <span
                             key={tag}
-                            className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-700"
+                            className="inline-flex items-center rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[11px] font-medium text-slate-700"
                           >
                             #{tag.replace(/^#/, "")}
                           </span>
@@ -334,14 +334,18 @@ function InsightCard({
                 </div>
               )}
 
-              {/* Copy Brief button — full width */}
+              {/* Copy Brief button — full width, flashes emerald on success */}
               <button
                 onClick={handleCopy}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+                className={`w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white active:scale-[0.98] transition-all ${
+                  copied
+                    ? "bg-emerald-600"
+                    : "bg-slate-900 hover:bg-slate-800"
+                }`}
               >
                 {copied ? (
                   <>
-                    <Check className="h-4 w-4" /> Copied
+                    <Check className="h-4 w-4" /> Copied to clipboard
                   </>
                 ) : (
                   <>
@@ -357,20 +361,33 @@ function InsightCard({
   )
 }
 
+const briefTone: Record<
+  "purple" | "amber" | "slate" | "emerald",
+  { bg: string; border: string; icon: string; label: string }
+> = {
+  purple: { bg: "bg-purple-50/60", border: "border-purple-100", icon: "text-purple-600", label: "text-purple-700" },
+  amber:  { bg: "bg-amber-50/60",  border: "border-amber-100",  icon: "text-amber-600",  label: "text-amber-700" },
+  slate:  { bg: "bg-slate-50/80",  border: "border-slate-100",  icon: "text-slate-500",  label: "text-slate-500" },
+  emerald:{ bg: "bg-emerald-50/60",border: "border-emerald-100",icon: "text-emerald-600",label: "text-emerald-700" },
+}
+
 function BriefSection({
   icon: Icon,
   label,
   children,
+  tone = "slate",
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   children: React.ReactNode
+  tone?: "purple" | "amber" | "slate" | "emerald"
 }) {
+  const t = briefTone[tone]
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+    <div className={`rounded-lg border ${t.border} ${t.bg} p-3`}>
       <div className="flex items-center gap-1.5 mb-1">
-        <Icon className="h-3.5 w-3.5 text-slate-500" />
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <Icon className={`h-3.5 w-3.5 ${t.icon}`} />
+        <span className={`text-[10px] font-bold uppercase tracking-wider ${t.label}`}>
           {label}
         </span>
       </div>
