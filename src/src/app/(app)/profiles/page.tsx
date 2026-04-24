@@ -3,11 +3,10 @@ export const dynamic = "force-dynamic"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AddProfileModal } from "@/components/add-profile-modal"
 import { ProfileCardActions } from "@/components/profile-card-actions"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
-import { Users, Clock, FileText, TrendingUp, ArrowRight } from "lucide-react"
+import { Clock, FileText, TrendingUp, ArrowRight, Sparkles } from "lucide-react"
 
 export default async function ProfilesPage() {
   const session = await auth()
@@ -98,13 +97,15 @@ export default async function ProfilesPage() {
       )}
 
       {profiles.length === 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              No profiles yet — click "Add Profile" to get started.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 px-6 text-center">
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm mb-5">
+            <Sparkles className="h-7 w-7 text-white" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-800">No profiles yet</h3>
+          <p className="text-sm text-slate-500 max-w-md mx-auto mt-2">
+            Add your Instagram account and a few competitors to start detecting what content is working.
+          </p>
+        </div>
       )}
     </div>
   )
@@ -116,29 +117,45 @@ interface ProfileCardProps {
   badge?: React.ReactNode
 }
 
+function scrapeStatus(last_scraped: string | null): { dot: string; label: string } {
+  if (!last_scraped) return { dot: "bg-slate-300", label: "Never scraped" }
+  const ageHours = (Date.now() - new Date(last_scraped).getTime()) / (1000 * 60 * 60)
+  if (ageHours < 24 * 7) return { dot: "bg-emerald-500", label: "Fresh" }
+  if (ageHours < 24 * 30) return { dot: "bg-amber-500", label: "Getting stale" }
+  return { dot: "bg-red-500", label: "Needs rescrape" }
+}
+
 function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
   const initials = profile.username.charAt(0).toUpperCase()
+  const status = scrapeStatus(profile.last_scraped)
   return (
-    <div className="group relative">
+    <div className="group relative h-full">
       <Link href={`/profiles/${profile.id}`}>
-        <Card className="hover:border-purple-300 hover:shadow-md transition-all cursor-pointer h-full">
-          <CardHeader className="pb-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shrink-0 shadow-sm">
+        <div className="h-full rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative shrink-0">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm ring-2 ring-white">
                   <span className="text-sm font-bold text-white">{initials}</span>
                 </div>
-                <div>
-                  <CardTitle className="text-sm font-semibold text-slate-900">@{profile.username}</CardTitle>
-                </div>
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${status.dot}`}
+                  aria-label={status.label}
+                  title={status.label}
+                />
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {badge}
-                <ProfileCardActions profileId={profile.id} username={profile.username} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900 truncate">@{profile.username}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{status.label}</p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-1.5 pt-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {badge}
+              <ProfileCardActions profileId={profile.id} username={profile.username} />
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-1.5 flex-1">
             <p className="text-xs text-slate-500 flex items-center gap-1.5">
               <FileText className="h-3 w-3 text-slate-400" />
               {stats.count} posts tracked
@@ -153,12 +170,13 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
               <Clock className="h-3 w-3 text-slate-400" />
               {profile.last_scraped ? `Scraped ${formatRelativeTime(profile.last_scraped)}` : "Never scraped"}
             </p>
-            <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100 text-xs font-medium text-purple-600 group-hover:text-purple-700">
-              <span>View deep analysis</span>
-              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs font-medium text-purple-600 group-hover:text-purple-700">
+            <span>View deep analysis</span>
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          </div>
+        </div>
       </Link>
     </div>
   )
