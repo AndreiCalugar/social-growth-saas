@@ -408,10 +408,11 @@ export function InsightsClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const lastStatusRef = useRef<string | undefined>(undefined)
 
-  const { jobs, startInsights } = useJobTracker()
+  const { jobs, startInsights, finishJob } = useJobTracker()
   const job = ownProfileId ? jobs.find((j) => j.id === `insights-${ownProfileId}`) : undefined
   const running = job?.status === "running"
   const rotatingMessage = useRotatingMessage("insights", running)
+  const [lastRunEmpty, setLastRunEmpty] = useState(false)
 
   useEffect(() => {
     if (!ownProfileId) return
@@ -438,8 +439,10 @@ export function InsightsClient({
     }
 
     setErrorMsg(null)
+    setLastRunEmpty(false)
     const cursor = insights[0]?.created_at ?? ""
     startInsights({ ownProfileId, cursor })
+    const jobId = `insights-${ownProfileId}`
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
@@ -452,8 +455,20 @@ export function InsightsClient({
         const rawText = await res.text()
         throw new Error(`n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`)
       }
+      // The webhook returns a definitive result. Use it to end the tracker job
+      // immediately rather than waiting for polling — important for the
+      // empty-result case, where no fresh DB row exists for polling to see.
+      const body = (await res.json().catch(() => ({}))) as {
+        trends_detected?: number
+      }
+      if (typeof body.trends_detected === "number" && body.trends_detected === 0) {
+        setLastRunEmpty(true)
+      }
+      finishJob(jobId, { success: true })
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : "Unknown error")
+      const message = e instanceof Error ? e.message : "Unknown error"
+      setErrorMsg(message)
+      finishJob(jobId, { success: false, errorMessage: message })
     }
   }
 
@@ -518,6 +533,23 @@ export function InsightsClient({
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
           <p className="text-sm text-red-700 leading-relaxed whitespace-pre-line">{errorMsg}</p>
+        </div>
+      )}
+
+      {/* Empty-run banner — fires when the last Generate Insights call finished
+          successfully but Claude found zero validated cross-competitor
+          patterns. Distinct from "no insights ever generated" — it tells the
+          user the engine ran and the niche/competitor set is the bottleneck,
+          not the engine. */}
+      {lastRunEmpty && status !== "generating" && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-900 leading-relaxed">
+            <p className="font-semibold">We analyzed {competitorCount} competitor{competitorCount === 1 ? "" : "s"} and found no patterns in 2+ of them this run.</p>
+            <p className="text-amber-800 mt-1">
+              Your niche may need {competitorCount < 5 ? "more competitors (5–7 is the sweet spot)" : "broader competitor coverage — try adding creators in adjacent sub-niches"}. Trends need to repeat across multiple accounts to count as validated.
+            </p>
+          </div>
         </div>
       )}
 

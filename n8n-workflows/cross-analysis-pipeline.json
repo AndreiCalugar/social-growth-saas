@@ -125,13 +125,42 @@
     },
     {
       "parameters": {
-        "jsCode": "const resp = $input.first().json;\nconst rawText = resp?.content?.[0]?.text;\nif (!rawText) throw new Error('Claude returned no content. Response: ' + JSON.stringify(resp));\n\nconst cleaned = rawText\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nlet trends;\ntry {\n  trends = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Failed to parse Claude JSON: ' + e.message + '\\nRaw: ' + cleaned.slice(0, 500));\n}\n\nif (!Array.isArray(trends)) throw new Error('Expected JSON array from Claude, got: ' + typeof trends);\n\nconst upstream = $('Build Claude Prompt').first().json;\nconst own_profile_id = upstream.own_profile_id;\nconst total_competitors = upstream.competitor_count;\n\nconst filtered = trends.filter(t => {\n  const mult = typeof t.performance_multiplier === 'number' ? t.performance_multiplier : parseFloat(t.performance_multiplier) || 0;\n  const compCount = Number.isFinite(t.competitor_count) ? Math.round(t.competitor_count) : 0;\n  // Hard safety net independent of the prompt — if Claude drifts, drop the row here.\n  if (compCount < 2) {\n    console.log(`DROP \"${t.trend_name}\" — competitor_count ${compCount} < 2 (prompt violation)`);\n    return false;\n  }\n  if (mult < 1.5) {\n    console.log(`DROP \"${t.trend_name}\" — multiplier ${mult} < 1.5 (not meaningfully outperforming)`);\n    return false;\n  }\n  if (mult > 25) {\n    console.log(`DROP \"${t.trend_name}\" — multiplier ${mult} > 25 (almost certainly a ratio/count confusion)`);\n    return false;\n  }\n  return true;\n}).map(t => {\n  const examples = Array.isArray(t.example_posts) ? t.example_posts : [];\n  const cleaned = examples.filter(ex => {\n    const comp = String(ex.competitor || '').toLowerCase();\n    const isOwn = comp === 'own_account' || comp === 'user' || comp === '@own_account';\n    if (isOwn) console.log(`Removed own_account example from trend \"${t.trend_name}\"`);\n    return !isOwn;\n  });\n  return { ...t, example_posts: cleaned };\n});\n\nconsole.log(`After safety filter: ${filtered.length} of ${trends.length} trends kept`);\n\nconst enriched = filtered.map(t => {\n  const brief = (t.brief && typeof t.brief === 'object') ? t.brief : {};\n  const multiplier = typeof t.performance_multiplier === 'number' ? t.performance_multiplier : parseFloat(t.performance_multiplier) || 0;\n  const competitor_count = Number.isFinite(t.competitor_count) ? Math.round(t.competitor_count) : null;\n  const effective_total = Number.isFinite(t.total_competitors) ? Math.round(t.total_competitors) : total_competitors;\n  const confidence = competitor_count != null && effective_total > 0\n    ? competitor_count / effective_total\n    : 0;\n  const hashtags = Array.isArray(brief.hashtags)\n    ? brief.hashtags.map(h => String(h).replace(/^#/, '').trim()).filter(Boolean)\n    : null;\n  return {\n    profile_id: own_profile_id,\n    trend_name: t.trend_name || 'Unknown Trend',\n    one_line_summary: typeof t.one_line_summary === 'string' ? t.one_line_summary.slice(0, 140) : null,\n    competitor_count,\n    total_competitors: effective_total,\n    confidence,\n    performance_multiplier: multiplier,\n    why_it_works: t.why_it_works || '',\n    example_posts: JSON.stringify(t.example_posts || []),\n    content_format: typeof brief.content === 'string' ? brief.content : null,\n    hook: typeof brief.hook === 'string' ? brief.hook : null,\n    caption_structure: typeof brief.caption_structure === 'string' ? brief.caption_structure : null,\n    best_time: typeof brief.best_time === 'string' ? brief.best_time : null,\n    hashtags: hashtags ? JSON.stringify(hashtags) : null,\n    recommendation: t.mega_tip || t.one_line_summary || '',\n    suggested_schedule: typeof brief.best_time === 'string' ? brief.best_time : '',\n    is_mega_tip: t.user_doing_it === false && multiplier > 2,\n    user_doing_it: t.user_doing_it === true\n  };\n});\n\nconsole.log(`Parsed ${enriched.length} trends. Mega-tips: ${enriched.filter(t => t.is_mega_tip).length}`);\n\nreturn enriched.map(r => ({ json: r }));"
+        "jsCode": "const resp = $input.first().json;\nconst rawText = resp?.content?.[0]?.text;\nif (!rawText) throw new Error('Claude returned no content. Response: ' + JSON.stringify(resp));\n\nconst cleaned = rawText\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nlet trends;\ntry {\n  trends = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('Failed to parse Claude JSON: ' + e.message + '\\nRaw: ' + cleaned.slice(0, 500));\n}\n\nif (!Array.isArray(trends)) throw new Error('Expected JSON array from Claude, got: ' + typeof trends);\n\nconst upstream = $('Build Claude Prompt').first().json;\nconst own_profile_id = upstream.own_profile_id;\nconst total_competitors = upstream.competitor_count;\n\nconst filtered = trends.filter(t => {\n  const mult = typeof t.performance_multiplier === 'number' ? t.performance_multiplier : parseFloat(t.performance_multiplier) || 0;\n  const compCount = Number.isFinite(t.competitor_count) ? Math.round(t.competitor_count) : 0;\n  // Hard safety net independent of the prompt — if Claude drifts, drop the row here.\n  if (compCount < 2) {\n    console.log(`DROP \"${t.trend_name}\" — competitor_count ${compCount} < 2 (prompt violation)`);\n    return false;\n  }\n  if (mult < 1.5) {\n    console.log(`DROP \"${t.trend_name}\" — multiplier ${mult} < 1.5 (not meaningfully outperforming)`);\n    return false;\n  }\n  if (mult > 25) {\n    console.log(`DROP \"${t.trend_name}\" — multiplier ${mult} > 25 (almost certainly a ratio/count confusion)`);\n    return false;\n  }\n  return true;\n}).map(t => {\n  const examples = Array.isArray(t.example_posts) ? t.example_posts : [];\n  const cleaned = examples.filter(ex => {\n    const comp = String(ex.competitor || '').toLowerCase();\n    const isOwn = comp === 'own_account' || comp === 'user' || comp === '@own_account';\n    if (isOwn) console.log(`Removed own_account example from trend \"${t.trend_name}\"`);\n    return !isOwn;\n  });\n  return { ...t, example_posts: cleaned };\n});\n\nconsole.log(`After safety filter: ${filtered.length} of ${trends.length} trends kept`);\n\nconst enriched = filtered.map(t => {\n  const brief = (t.brief && typeof t.brief === 'object') ? t.brief : {};\n  const multiplier = typeof t.performance_multiplier === 'number' ? t.performance_multiplier : parseFloat(t.performance_multiplier) || 0;\n  const competitor_count = Number.isFinite(t.competitor_count) ? Math.round(t.competitor_count) : null;\n  const effective_total = Number.isFinite(t.total_competitors) ? Math.round(t.total_competitors) : total_competitors;\n  const confidence = competitor_count != null && effective_total > 0\n    ? competitor_count / effective_total\n    : 0;\n  const hashtags = Array.isArray(brief.hashtags)\n    ? brief.hashtags.map(h => String(h).replace(/^#/, '').trim()).filter(Boolean)\n    : null;\n  return {\n    profile_id: own_profile_id,\n    trend_name: t.trend_name || 'Unknown Trend',\n    one_line_summary: typeof t.one_line_summary === 'string' ? t.one_line_summary.slice(0, 140) : null,\n    competitor_count,\n    total_competitors: effective_total,\n    confidence,\n    performance_multiplier: multiplier,\n    why_it_works: t.why_it_works || '',\n    example_posts: JSON.stringify(t.example_posts || []),\n    content_format: typeof brief.content === 'string' ? brief.content : null,\n    hook: typeof brief.hook === 'string' ? brief.hook : null,\n    caption_structure: typeof brief.caption_structure === 'string' ? brief.caption_structure : null,\n    best_time: typeof brief.best_time === 'string' ? brief.best_time : null,\n    hashtags: hashtags ? JSON.stringify(hashtags) : null,\n    recommendation: t.mega_tip || t.one_line_summary || '',\n    suggested_schedule: typeof brief.best_time === 'string' ? brief.best_time : '',\n    is_mega_tip: t.user_doing_it === false && multiplier > 2,\n    user_doing_it: t.user_doing_it === true\n  };\n});\n\nconsole.log(`Parsed ${enriched.length} trends. Mega-tips: ${enriched.filter(t => t.is_mega_tip).length}`);\n\n// Always emit at least one item so downstream nodes run. When no validated\n// trends survived the filter, emit a sentinel that the If-Has-Trends node\n// routes around Insert Trend Insight directly to Build Response. Without\n// this, n8n skips every downstream node (Insert / Build Response / Respond\n// Success) because Code nodes that return [] terminate the branch — the\n// webhook would hang forever instead of returning { trends_detected: 0 }.\nif (enriched.length === 0) {\n  return [{ json: { _empty: true, profile_id: own_profile_id, total_competitors } }];\n}\n\nreturn enriched.map(r => ({ json: r }));"
       },
       "id": "parse-response",
       "name": "Parse & Enrich Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-trends-check",
+              "leftValue": "={{ $json._empty !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-trends",
+      "name": "If Has Trends",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1900, 500]
     },
     {
       "parameters": {
@@ -159,7 +188,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const allInserted = $input.all();\nconst upstream = $('Parse & Enrich Response').all();\n\nconst megaTips = upstream.filter(i => i.json.is_mega_tip).length;\nconst total = upstream.length;\n\nreturn [{\n  json: {\n    success: true,\n    trends_detected: total,\n    mega_tips: megaTips,\n    insights: upstream.map(i => ({\n      trend_name: i.json.trend_name,\n      confidence_label: i.json.confidence_label,\n      performance_multiplier: i.json.performance_multiplier,\n      is_mega_tip: i.json.is_mega_tip,\n      user_doing_it: i.json.user_doing_it\n    }))\n  }\n}];"
+        "jsCode": "// Filter out the _empty sentinel that If-Has-Trends routes around the\n// Insert step. Without this, an empty-result run would be reported as\n// trends_detected: 1 with a garbage row in the response.\nconst allUpstream = $('Parse & Enrich Response').all();\nconst upstream = allUpstream.filter(i => !(i.json && i.json._empty));\n\nconst megaTips = upstream.filter(i => i.json.is_mega_tip).length;\nconst total = upstream.length;\n\nreturn [{\n  json: {\n    success: true,\n    trends_detected: total,\n    mega_tips: megaTips,\n    insights: upstream.map(i => ({\n      trend_name: i.json.trend_name,\n      confidence_label: i.json.confidence_label,\n      performance_multiplier: i.json.performance_multiplier,\n      is_mega_tip: i.json.is_mega_tip,\n      user_doing_it: i.json.user_doing_it\n    }))\n  }\n}];"
       },
       "id": "build-response",
       "name": "Build Response",
@@ -206,7 +235,13 @@
       "main": [[{ "node": "Parse & Enrich Response", "type": "main", "index": 0 }]]
     },
     "Parse & Enrich Response": {
-      "main": [[{ "node": "Insert Trend Insight", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "If Has Trends", "type": "main", "index": 0 }]]
+    },
+    "If Has Trends": {
+      "main": [
+        [{ "node": "Insert Trend Insight", "type": "main", "index": 0 }],
+        [{ "node": "Build Response", "type": "main", "index": 0 }]
+      ]
     },
     "Insert Trend Insight": {
       "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]]

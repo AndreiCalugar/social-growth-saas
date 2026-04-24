@@ -33,6 +33,11 @@ type JobTrackerValue = {
   startScrape: (args: { username: string; profileId?: string }) => void
   startAnalysis: (args: { profileId: string; username: string }) => void
   startInsights: (args: { ownProfileId: string; cursor: string }) => void
+  // End a running job imperatively (e.g. when the originating webhook has
+  // returned a definitive success / empty / error response that the tracker's
+  // polling can't discover — an empty-result insights run leaves no fresh
+  // DB row for polling to latch onto).
+  finishJob: (id: string, opts?: { success?: boolean; errorMessage?: string }) => void
   dismissJob: (id: string) => void
 }
 
@@ -96,14 +101,6 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
     saveJobs(jobs)
   }, [jobs])
 
-  const updateJob = useCallback((id: string, patch: Partial<Job>) => {
-    setJobs((prev) => {
-      const existing = prev[id]
-      if (!existing) return prev
-      return { ...prev, [id]: { ...existing, ...patch } }
-    })
-  }, [])
-
   const dismissJob = useCallback((id: string) => {
     setJobs((prev) => {
       if (!(id in prev)) return prev
@@ -113,8 +110,40 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
     })
   }, [])
 
+  const markJobDone = useCallback((id: string) => {
+    setJobs((prev) => {
+      const existing = prev[id]
+      if (!existing || existing.status === "done") return prev
+      return { ...prev, [id]: { ...existing, status: "done", finishedAt: Date.now() } }
+    })
+    routerRef.current.refresh()
+    setTimeout(() => dismissJob(id), AUTO_DISMISS_MS)
+  }, [dismissJob])
+
+  const markJobError = useCallback((id: string, message: string) => {
+    setJobs((prev) => {
+      const existing = prev[id]
+      if (!existing || existing.status === "error") return prev
+      return { ...prev, [id]: { ...existing, status: "error", finishedAt: Date.now(), errorMessage: message } }
+    })
+    routerRef.current.refresh()
+    setTimeout(() => dismissJob(id), AUTO_DISMISS_MS * 2)
+  }, [dismissJob])
+
+  const finishJob = useCallback<JobTrackerValue["finishJob"]>((id, opts) => {
+    if (opts?.success === false) {
+      markJobError(id, opts.errorMessage ?? "Failed")
+    } else {
+      markJobDone(id)
+    }
+  }, [markJobDone, markJobError])
+
   // Poll running jobs
   useEffect(() => {
+    // Alias the stable callbacks for concise use in checkJob.
+    const markDone = markJobDone
+    const markError = markJobError
+
     const interval = setInterval(async () => {
       const current = jobsRef.current
       const running = Object.values(current).filter((j) => j.status === "running")
@@ -172,25 +201,8 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
       }
     }
 
-    function markDone(id: string) {
-      updateJob(id, { status: "done", finishedAt: Date.now() })
-      // Refresh whatever route the user is currently on so its server-rendered
-      // data reflects the just-completed scrape (post counts, last_scraped,
-      // trend insights etc). Per-button useEffects can't cover the case where
-      // the user navigated away after starting the scrape — by the time the
-      // job flips, the originating component is unmounted.
-      routerRef.current.refresh()
-      setTimeout(() => dismissJob(id), AUTO_DISMISS_MS)
-    }
-
-    function markError(id: string, message: string) {
-      updateJob(id, { status: "error", finishedAt: Date.now(), errorMessage: message })
-      routerRef.current.refresh()
-      setTimeout(() => dismissJob(id), AUTO_DISMISS_MS * 2)
-    }
-
     return () => clearInterval(interval)
-  }, [updateJob, dismissJob])
+  }, [markJobDone, markJobError])
 
   const startScrape = useCallback<JobTrackerValue["startScrape"]>(({ username, profileId }) => {
     const id = `scrape-${username}`
@@ -249,9 +261,10 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
       startScrape,
       startAnalysis,
       startInsights,
+      finishJob,
       dismissJob,
     }),
-    [jobs, getJob, startScrape, startAnalysis, startInsights, dismissJob]
+    [jobs, getJob, startScrape, startAnalysis, startInsights, finishJob, dismissJob]
   )
 
   return <JobTrackerContext.Provider value={value}>{children}</JobTrackerContext.Provider>
