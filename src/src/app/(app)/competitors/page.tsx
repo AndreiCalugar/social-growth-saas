@@ -6,6 +6,7 @@ import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { RetryScrapeButton } from "@/components/retry-scrape-button"
+import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
 import { Users, Clock, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
@@ -96,6 +97,7 @@ export default async function CompetitorsPage() {
 
             return (
               <div key={c.id} className="group relative h-full">
+                <ScrapingCardOverlay profileId={c.id} />
                 <Link href={`/profiles/${c.id}`}>
                   <div className="h-full rounded-xl border border-slate-200/60 bg-white hover:bg-gradient-to-br hover:from-white hover:to-purple-50/30 p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
                     <div className="flex items-start justify-between gap-2">

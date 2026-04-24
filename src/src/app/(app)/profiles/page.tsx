@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
 import { AddProfileModal } from "@/components/add-profile-modal"
 import { ProfileCardActions } from "@/components/profile-card-actions"
+import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
 import { Clock, FileText, TrendingUp, ArrowRight, Sparkles } from "lucide-react"
 
@@ -130,6 +131,7 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
   const status = scrapeStatus(profile.last_scraped)
   return (
     <div className="group relative h-full">
+      <ScrapingCardOverlay profileId={profile.id} />
       <Link href={`/profiles/${profile.id}`}>
         <div className="h-full rounded-xl border border-slate-200/60 bg-white hover:bg-gradient-to-br hover:from-white hover:to-purple-50/30 p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
           <div className="flex items-start justify-between gap-2">

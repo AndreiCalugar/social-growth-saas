@@ -3,12 +3,14 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { UserPlus, Loader2 } from "lucide-react"
+import { useJobTracker } from "@/components/job-tracker"
 
 export function AddCompetitorForm() {
   const [state, setState] = useState<"idle" | "loading" | "polling" | "error">("idle")
   const [message, setMessage] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
+  const { startScrape } = useJobTracker()
 
   function startPolling(profileId: string) {
     setState("polling")
@@ -62,6 +64,7 @@ export function AddCompetitorForm() {
 
       if (data.success) {
         if (inputRef.current) inputRef.current.value = ""
+        startScrape({ username, profileId: data.profile.id })
         router.refresh()
         startPolling(data.profile.id)
       } else {

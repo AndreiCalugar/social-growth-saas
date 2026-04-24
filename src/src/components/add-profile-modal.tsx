@@ -4,6 +4,7 @@ import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { UserPlus, Loader2, X } from "lucide-react"
+import { useJobTracker } from "@/components/job-tracker"
 
 interface AddProfileModalProps {
   defaultIsOwn?: boolean
@@ -24,6 +25,7 @@ export function AddProfileModal({
   const [message, setMessage] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
+  const { startScrape } = useJobTracker()
 
   function startPolling(profileId: string) {
     setState("polling")
@@ -75,6 +77,7 @@ export function AddProfileModal({
 
       if (data.success) {
         if (inputRef.current) inputRef.current.value = ""
+        startScrape({ username, profileId: data.profile.id })
         router.refresh()
         startPolling(data.profile.id)
       } else {
