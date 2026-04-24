@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
 import {
   Sparkles,
   Users,
@@ -15,6 +16,7 @@ import {
   Clock,
   Hash,
   Copy,
+  ArrowRight,
 } from "lucide-react"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 
@@ -598,6 +600,43 @@ export function InsightsClient({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Sparse-insights nudge — shown when the user has insights but the
+          engine is visibly light on data (few competitors or few trends).
+          The /insights page is only meaningful when enough competitors are
+          tracked; this card tells the user why the list is short. */}
+      {insights.length > 0 && (competitorCount < 5 || insights.length <= 3) && (
+        <Link
+          href="/competitors"
+          className="group block rounded-xl border border-slate-200/60 bg-gradient-to-br from-purple-50/70 to-white p-5 shadow-sm hover:shadow-md hover:border-purple-200 transition-all"
+        >
+          <div className="flex items-start gap-4">
+            <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-700 flex items-center justify-center shadow-sm">
+              <Users className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                Want richer insights?
+                <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+              </p>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                {competitorCount < 5 ? (
+                  <>
+                    Trend detection works best with <span className="font-semibold">5–7 competitors</span>. You&apos;re tracking {competitorCount}. Adding more creators in your niche unlocks deeper, higher-confidence patterns.
+                  </>
+                ) : (
+                  <>
+                    Only {insights.length} trend{insights.length === 1 ? "" : "s"} met the threshold this run. Broader niche coverage — competitors in adjacent sub-niches — typically surfaces more patterns.
+                  </>
+                )}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-2 font-medium">
+                Currently tracking {competitorCount} competitor{competitorCount === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
+        </Link>
       )}
 
       {/* Empty state */}
