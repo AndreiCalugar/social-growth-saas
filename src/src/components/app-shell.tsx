@@ -66,7 +66,17 @@ export function AppShell({
               <Menu className="h-5 w-5" />
             </button>
           </header>
-          <main key={pathname} className="flex-1 overflow-y-auto page-fade-in">{children}</main>
+          <main
+            key={pathname}
+            className="relative flex-1 overflow-y-auto page-fade-in bg-gradient-to-b from-purple-50/40 via-slate-50 to-slate-50"
+          >
+            {/* Faint dot-grid texture — decorative, non-interactive */}
+            <div
+              className="pointer-events-none absolute inset-0 bg-dot-grid opacity-[0.025]"
+              aria-hidden
+            />
+            <div className="relative">{children}</div>
+          </main>
         </div>
       </div>
       <JobNotification />

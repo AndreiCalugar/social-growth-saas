@@ -83,7 +83,7 @@ export function Sidebar({
               className={cn(
                 "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all border-l-2",
                 isActive
-                  ? "border-l-purple-400 bg-white/10 text-white"
+                  ? "border-l-purple-400 bg-white/10 text-white nav-bloom"
                   : "border-l-transparent text-slate-400 hover:bg-white/5 hover:text-white"
               )}
             >
@@ -95,8 +95,9 @@ export function Sidebar({
               />
               {label}
               {badge && !isActive && (
-                <span className="ml-auto rounded-full bg-gradient-to-br from-purple-500 to-purple-700 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none shadow-sm">
-                  {badge}
+                <span className="ml-auto relative rounded-full bg-gradient-to-br from-purple-500 to-purple-700 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none shadow-sm">
+                  <span className="absolute inset-0 rounded-full bg-purple-400/40 animate-ping" aria-hidden />
+                  <span className="relative">{badge}</span>
                 </span>
               )}
             </Link>
@@ -104,7 +105,13 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-white/10 p-3 flex flex-col gap-1">
+      {/* Thin gradient divider between nav and user section */}
+      <div
+        className="mx-3 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
+        aria-hidden
+      />
+
+      <div className="p-3 flex flex-col gap-1">
         <div className="flex items-center gap-2.5 rounded-lg px-3 py-2">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-xs font-semibold text-white shrink-0 shadow-sm ring-1 ring-white/20">
             {username.charAt(0).toUpperCase()}
