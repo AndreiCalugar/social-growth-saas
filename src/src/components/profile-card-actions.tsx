@@ -2,13 +2,17 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { RefreshCw, Trash2, Loader2 } from "lucide-react"
+import { RefreshCw, Trash2, Loader2, Clock } from "lucide-react"
 import { useJobTracker } from "@/components/job-tracker"
+import { triggerScrape } from "@/lib/trigger-scrape"
+import { formatMinutesUntil } from "@/lib/scrape-cooldown"
 
 interface Props {
   profileId: string
   username: string
 }
+
+type Cooldown = { reason: "hard" | "soft"; minutesUntilNext: number }
 
 export function ProfileCardActions({ profileId, username }: Props) {
   const router = useRouter()
@@ -18,6 +22,7 @@ export function ProfileCardActions({ profileId, username }: Props) {
   const lastStatusRef = useRef<string | undefined>(undefined)
 
   const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "loading">("idle")
+  const [cooldown, setCooldown] = useState<Cooldown | null>(null)
 
   useEffect(() => {
     if (lastStatusRef.current === "running" && job?.status === "done") {
@@ -26,18 +31,20 @@ export function ProfileCardActions({ profileId, username }: Props) {
     lastStatusRef.current = job?.status
   }, [job?.status, router])
 
-  async function handleRescrape(e: React.MouseEvent) {
+  async function attempt(force: boolean, e: React.MouseEvent) {
     e.preventDefault()
+    e.stopPropagation()
     if (scraping) return
-    startScrape({ username, profileId })
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/scrape-instagram`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-      })
-    } catch {
-      // tracker handles timeout
+    const result = await triggerScrape(profileId, { force })
+    if (result.status === "fired") {
+      setCooldown(null)
+      startScrape({ username, profileId })
+      return
+    }
+    if (result.status === "cooldown") {
+      setCooldown({ reason: result.reason, minutesUntilNext: result.minutesUntilNext })
+      // Auto-clear the inline message after 4s so the row isn't permanently "locked"
+      setTimeout(() => setCooldown(null), 4000)
     }
   }
 
@@ -62,10 +69,30 @@ export function ProfileCardActions({ profileId, username }: Props) {
     )
   }
 
+  if (cooldown) {
+    const isForceable = cooldown.reason === "soft"
+    return (
+      <div className="flex items-center gap-1.5" onClick={(e) => e.preventDefault()} title={`Last scraped recently`}>
+        <Clock className="h-3 w-3 text-slate-400" />
+        <span className="text-[10px] text-slate-500">
+          {cooldown.reason === "hard" ? "Just scraped" : `Fresh · ${formatMinutesUntil(cooldown.minutesUntilNext)}`}
+        </span>
+        {isForceable && (
+          <button
+            onClick={(e) => attempt(true, e)}
+            className="text-[10px] font-medium text-purple-600 hover:underline"
+          >
+            Force
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.preventDefault()}>
       <button
-        onClick={handleRescrape}
+        onClick={(e) => attempt(false, e)}
         disabled={scraping}
         className="text-muted-foreground hover:text-primary disabled:opacity-40"
         title="Rescrape"

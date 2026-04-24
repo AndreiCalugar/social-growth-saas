@@ -1,14 +1,18 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { RefreshCw, Loader2 } from "lucide-react"
 import { useJobTracker } from "@/components/job-tracker"
+import { triggerScrape } from "@/lib/trigger-scrape"
+import { formatMinutesUntil } from "@/lib/scrape-cooldown"
 
 interface Props {
   profileId: string
   username: string
 }
+
+type Cooldown = { reason: "hard" | "soft"; minutesUntilNext: number }
 
 export function RetryScrapeButton({ profileId, username }: Props) {
   const router = useRouter()
@@ -17,6 +21,8 @@ export function RetryScrapeButton({ profileId, username }: Props) {
   const running = job?.status === "running"
   const lastStatusRef = useRef<string | undefined>(undefined)
 
+  const [cooldown, setCooldown] = useState<Cooldown | null>(null)
+
   useEffect(() => {
     if (lastStatusRef.current === "running" && job?.status === "done") {
       router.refresh()
@@ -24,19 +30,18 @@ export function RetryScrapeButton({ profileId, username }: Props) {
     lastStatusRef.current = job?.status
   }, [job?.status, router])
 
-  async function handleRetry(e: React.MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation()
+  async function attempt(force: boolean, e?: React.MouseEvent) {
+    e?.preventDefault()
+    e?.stopPropagation()
     if (running) return
-    startScrape({ username, profileId })
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/scrape-instagram`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-      })
-    } catch {
-      // tracker times out on its own
+    const result = await triggerScrape(profileId, { force })
+    if (result.status === "fired") {
+      setCooldown(null)
+      startScrape({ username, profileId })
+      return
+    }
+    if (result.status === "cooldown") {
+      setCooldown({ reason: result.reason, minutesUntilNext: result.minutesUntilNext })
     }
   }
 
@@ -49,9 +54,33 @@ export function RetryScrapeButton({ profileId, username }: Props) {
     )
   }
 
+  if (cooldown?.reason === "hard") {
+    return (
+      <span className="text-xs text-slate-500">
+        Just scraped — try again in {formatMinutesUntil(cooldown.minutesUntilNext)}
+      </span>
+    )
+  }
+
+  if (cooldown?.reason === "soft") {
+    return (
+      <div className="flex flex-col gap-1 items-start">
+        <span className="text-xs text-slate-500">
+          Already fresh — next refresh in {formatMinutesUntil(cooldown.minutesUntilNext)}.
+        </span>
+        <button
+          onClick={(e) => attempt(true, e)}
+          className="text-xs font-medium text-purple-600 hover:text-purple-700 underline underline-offset-2"
+        >
+          Rescrape anyway
+        </button>
+      </div>
+    )
+  }
+
   return (
     <button
-      onClick={handleRetry}
+      onClick={(e) => attempt(false, e)}
       className="text-xs flex items-center gap-1 text-amber-600 hover:text-amber-700"
     >
       <RefreshCw className="h-3 w-3" />

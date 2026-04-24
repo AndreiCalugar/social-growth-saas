@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
+import { canScrape } from "@/lib/scrape-cooldown"
 
 // Fire the n8n scrape webhook after the response is sent so the client isn't
 // blocked for the full ~2-minute Apify run. `after()` keeps the request alive
@@ -54,14 +55,28 @@ export async function POST(req: NextRequest) {
   // Only dedupe within the same user — two users can track the same handle.
   const { data: existing } = await supabase
     .from("profiles")
-    .select("id, username, is_own")
+    .select("id, username, is_own, last_scraped")
     .eq("user_id", userId)
     .eq("username", clean)
     .maybeSingle()
 
   if (existing) {
-    fireScrapeWebhook(clean)
-    return NextResponse.json({ success: true, profile: existing })
+    // Adding a profile that's already tracked — skip rescrape if data is fresh.
+    const gate = canScrape(existing.last_scraped)
+    if (gate.ok) {
+      fireScrapeWebhook(clean)
+      return NextResponse.json({ success: true, profile: existing, scrape_fired: true })
+    }
+    return NextResponse.json({
+      success: true,
+      profile: existing,
+      scrape_fired: false,
+      cooldown: {
+        reason: gate.reason,
+        minutesUntilNext: gate.minutesUntilNext,
+        lastScrapedAt: gate.lastScrapedAt,
+      },
+    })
   }
 
   const { data: profile, error } = await supabase

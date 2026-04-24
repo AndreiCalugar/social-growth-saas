@@ -77,8 +77,19 @@ export function AddProfileModal({
 
       if (data.success) {
         if (inputRef.current) inputRef.current.value = ""
-        startScrape({ username, profileId: data.profile.id })
         router.refresh()
+        if (data.scrape_fired === false && data.cooldown) {
+          const mins = data.cooldown.minutesUntilNext as number
+          setState("idle")
+          setMessage(
+            data.cooldown.reason === "hard"
+              ? `Already tracking @${username} — scraped recently, showing existing data.`
+              : `Already tracking @${username} — last scraped within ${mins >= 60 ? `${Math.round(mins / 60)}h` : `${mins}min`}.`
+          )
+          // Let the user close the modal manually so they can read the message
+          return
+        }
+        startScrape({ username, profileId: data.profile.id })
         startPolling(data.profile.id)
       } else {
         throw new Error(data.error ?? "Unknown error")

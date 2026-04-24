@@ -64,8 +64,21 @@ export function AddCompetitorForm() {
 
       if (data.success) {
         if (inputRef.current) inputRef.current.value = ""
-        startScrape({ username, profileId: data.profile.id })
         router.refresh()
+        if (data.scrape_fired === false && data.cooldown) {
+          // Profile already existed and is within the cooldown window — no
+          // scrape was queued. Surface that to the user instead of lying
+          // with a running spinner.
+          const mins = data.cooldown.minutesUntilNext as number
+          setState("idle")
+          setMessage(
+            data.cooldown.reason === "hard"
+              ? `Already tracking @${username} — scraped recently, no refresh needed.`
+              : `Already tracking @${username} — last scraped within ${mins >= 60 ? `${Math.round(mins / 60)}h` : `${mins}min`}, showing existing data.`
+          )
+          return
+        }
+        startScrape({ username, profileId: data.profile.id })
         startPolling(data.profile.id)
       } else {
         throw new Error(data.error ?? "Unknown error")
