@@ -11,6 +11,7 @@ import {
   TrendingUp, TrendingDown, Minus,
   Clapperboard, Fish, FileText, Clock, Hash,
   Heart, Calendar, Trophy, Clock3,
+  RefreshCw, UserPlus,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -59,7 +60,14 @@ interface DashboardData {
   topBrief: TopBrief | null
   trendCount: number
   megaTipCount: number
+  activity: ActivityItem[]
 }
+
+type ActivityItem =
+  | { kind: "scrape"; at: string; username: string; posts: number | null }
+  | { kind: "analysis"; at: string; username: string; trend: string | null }
+  | { kind: "insights"; at: string; count: number; megaTipCount: number }
+  | { kind: "competitor_added"; at: string; username: string }
 
 interface TopBrief {
   trend_name: string
@@ -111,6 +119,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     topBrief: null,
     trendCount: 0,
     megaTipCount: 0,
+    activity: [],
   }
 
   if (!ownProfileId) return empty
@@ -255,6 +264,18 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   if (hasOwnProfile && hasAnalysis && hasInsights) stage = 3
   else if (hasOwnProfile && hasAnalysis) stage = 2
 
+  // Activity feed is only shown on Stage 3 — no point paying the queries
+  // earlier when the section won't render.
+  const allProfileIds = (allProfiles ?? []).map((p) => p.id)
+  const activity =
+    stage === 3
+      ? await fetchRecentActivity({
+          userId,
+          ownProfileId,
+          allProfileIds,
+        })
+      : []
+
   return {
     ownProfile: ownProfile ?? null,
     stage,
@@ -272,7 +293,92 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     topBrief,
     trendCount: insights.length,
     megaTipCount: megaTips.length,
+    activity,
   }
+}
+
+async function fetchRecentActivity({
+  userId,
+  ownProfileId,
+  allProfileIds,
+}: {
+  userId: string
+  ownProfileId: string
+  allProfileIds: string[]
+}): Promise<ActivityItem[]> {
+  const safeIds = allProfileIds.length > 0 ? allProfileIds : ["00000000-0000-0000-0000-000000000000"]
+
+  const [scrapeRes, analysisRes, insightsRes, competitorsRes] = await Promise.all([
+    supabase
+      .from("scrape_runs")
+      .select("completed_at, posts_scraped, profiles(username)")
+      .in("profile_id", safeIds)
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("analyses")
+      .select("created_at, engagement_summary, profiles(username)")
+      .in("profile_id", safeIds)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("trend_insights")
+      .select("created_at, is_mega_tip")
+      .eq("profile_id", ownProfileId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("profiles")
+      .select("username, created_at")
+      .eq("user_id", userId)
+      .eq("is_own", false)
+      .order("created_at", { ascending: false })
+      .limit(5),
+  ])
+
+  const items: ActivityItem[] = []
+
+  for (const r of scrapeRes.data ?? []) {
+    const uname = (r.profiles as unknown as { username: string } | null)?.username
+    if (!r.completed_at || !uname) continue
+    items.push({ kind: "scrape", at: r.completed_at, username: uname, posts: r.posts_scraped ?? null })
+  }
+
+  for (const r of analysisRes.data ?? []) {
+    const uname = (r.profiles as unknown as { username: string } | null)?.username
+    if (!r.created_at || !uname) continue
+    const trend = (r.engagement_summary as { trend?: string } | null)?.trend ?? null
+    items.push({ kind: "analysis", at: r.created_at, username: uname, trend })
+  }
+
+  // Group trend_insights rows that were generated in the same batch (within
+  // a 10-minute window) into a single "insights refreshed" event. Most runs
+  // produce 3–7 rows; showing each as its own line would dominate the feed.
+  const insightRows = (insightsRes.data ?? []).filter((r) => r.created_at)
+  const batches: { at: string; count: number; megaTipCount: number }[] = []
+  for (const r of insightRows) {
+    const t = new Date(r.created_at as string).getTime()
+    const mega = r.is_mega_tip === true
+    const last = batches[batches.length - 1]
+    if (last && t >= new Date(last.at).getTime() - 10 * 60 * 1000) {
+      last.count += 1
+      if (mega) last.megaTipCount += 1
+    } else {
+      batches.push({ at: r.created_at as string, count: 1, megaTipCount: mega ? 1 : 0 })
+    }
+  }
+  for (const b of batches) {
+    items.push({ kind: "insights", at: b.at, count: b.count, megaTipCount: b.megaTipCount })
+  }
+
+  for (const r of competitorsRes.data ?? []) {
+    if (!r.created_at || !r.username) continue
+    items.push({ kind: "competitor_added", at: r.created_at, username: r.username })
+  }
+
+  items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+  return items.slice(0, 5)
 }
 
 function parseHashtags(raw: unknown): string[] | null {
@@ -438,8 +544,114 @@ function Stage3({ data }: { data: DashboardData }) {
           </div>
         </Link>
       )}
+
+      {data.activity.length > 0 && <RecentActivitySection items={data.activity} />}
     </div>
   )
+}
+
+function RecentActivitySection({ items }: { items: ActivityItem[] }) {
+  return (
+    <section className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm">
+      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-purple-700">
+        What&apos;s been happening
+      </h2>
+      <ul className="mt-4 space-y-3">
+        {items.map((item, i) => (
+          <li key={i}>
+            <ActivityRow item={item} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  const { icon: Icon, tint, label, detail } = formatActivity(item)
+  return (
+    <div className="flex items-start gap-3">
+      <div className={`h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${tint}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-slate-900 leading-snug">{label}</p>
+        {detail && <p className="text-[11px] text-slate-500 mt-0.5">{detail}</p>}
+      </div>
+      <span className="text-[11px] text-slate-400 shrink-0 tabular-nums mt-0.5">
+        {formatRelativeTime(item.at)}
+      </span>
+    </div>
+  )
+}
+
+function formatActivity(item: ActivityItem): {
+  icon: React.ComponentType<{ className?: string }>
+  tint: string
+  label: React.ReactNode
+  detail?: string
+} {
+  if (item.kind === "scrape") {
+    return {
+      icon: RefreshCw,
+      tint: "bg-purple-50 text-purple-600",
+      label: (
+        <>
+          Scraped <span className="font-semibold">@{item.username}</span>
+        </>
+      ),
+      detail: item.posts != null ? `${item.posts} posts` : undefined,
+    }
+  }
+  if (item.kind === "analysis") {
+    const trendColor =
+      item.trend === "growing"
+        ? "text-emerald-600"
+        : item.trend === "declining"
+        ? "text-red-600"
+        : "text-amber-600"
+    return {
+      icon: Sparkles,
+      tint: "bg-amber-50 text-amber-600",
+      label: (
+        <>
+          Analysis ran for <span className="font-semibold">@{item.username}</span>
+          {item.trend && (
+            <>
+              {" — "}
+              <span className={`font-medium ${trendColor}`}>{item.trend}</span>
+            </>
+          )}
+        </>
+      ),
+    }
+  }
+  if (item.kind === "insights") {
+    return {
+      icon: Zap,
+      tint: "bg-amber-50 text-amber-600",
+      label: (
+        <>
+          Insights refreshed —{" "}
+          <span className="font-semibold">
+            {item.count} trend{item.count !== 1 ? "s" : ""}
+          </span>{" "}
+          detected
+        </>
+      ),
+      detail: item.megaTipCount > 0 ? `${item.megaTipCount} mega-tip${item.megaTipCount !== 1 ? "s" : ""} ready` : undefined,
+    }
+  }
+  // competitor_added
+  return {
+    icon: UserPlus,
+    tint: "bg-indigo-50 text-indigo-600",
+    label: (
+      <>
+        Added <span className="font-semibold">@{item.username}</span> to tracking
+      </>
+    ),
+  }
 }
 
 // ---------------------------------------------------------------------------
