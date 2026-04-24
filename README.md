@@ -10,15 +10,15 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14, Tailwind CSS, shadcn/ui |
+| Frontend | Next.js 16 (App Router, Turbopack), Tailwind CSS v4, shadcn/ui, Recharts |
 | Backend API | Next.js API routes |
 | Automation engine | n8n (self-hosted via Docker) |
-| Scraping | Apify (Instagram Post Scraper, TikTok Scraper) |
-| AI analysis | Claude API (claude-sonnet-4-6) |
-| Database | Supabase (PostgreSQL) |
-| ORM | Prisma |
-| Auth | NextAuth.js |
-| Billing | Stripe |
+| Scraping | Apify (Instagram Post Scraper) |
+| AI analysis | Claude API (claude-sonnet-4-5) |
+| Database | Supabase (PostgreSQL, REST) |
+| Auth | NextAuth.js (credentials, bcrypt) |
+| Hosting | Vercel (production: api.narativ.space) |
+| Billing | Stripe (planned) |
 
 ## Architecture
 
@@ -52,15 +52,29 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 
 ## Current Status
 
-- [x] Project infrastructure (Docker, n8n, Supabase schema)
-- [x] Database schema (`profiles`, `posts`, `scrape_runs`, `analyses`, `recommendations`, `trend_insights`)
-- [x] Workflow 1: Instagram scrape pipeline (working end-to-end, 7 competitor accounts tracked)
-- [x] Workflow 2: AI analysis pipeline (Claude API — engagement summary, top/worst posts, recommendations)
-- [x] Workflow 3: Insights Engine — cross-competitor trend detection with mega-tips (Claude API, working end-to-end)
-- [x] Frontend dashboard (Next.js) — overview, profile analytics, competitor comparison, insights page
-- [ ] Auth system (NextAuth)
+### Shipped
+
+- [x] Infrastructure (Docker, n8n, Supabase schema)
+- [x] Database schema (`profiles`, `posts`, `scrape_runs`, `analyses`, `recommendations`, `trend_insights`, `users`)
+- [x] Workflow 1: Instagram scrape pipeline (poll-loop fixed to wait for full Apify run; returns 100 posts per account)
+- [x] Workflow 2: AI analysis pipeline (single-profile Claude analysis → engagement summary + top/worst posts + recommendations)
+- [x] Workflow 3: Insights Engine — cross-competitor trend detection (Claude Sonnet 4.5, validated-only trends with competitor_count ≥ 2, multiplier range 1.5–25, safe empty-result handling)
+- [x] Auth (NextAuth + Supabase `users` table, signup / login / session)
+- [x] Split-screen login / signup pages with animated gradient showcase panel
+- [x] Onboarding landing page for zero-profile users (hero + how-it-works + example brief + final CTA)
+- [x] Stage-based Overview dashboard (snapshot → account health → content brief as the user progresses)
+- [x] Real-time job tracker with bottom-right toast pills + on-card overlays + persistent state across navigation (scrape / analysis / insights)
+- [x] Two-tier scrape cooldown (15-min hard block, 24-h soft block with force override)
+- [x] Click-guard + freshness check on all action buttons (prevents double-firing Apify runs)
+- [x] Insights page: sparse-data CTA, empty-run banner, safety filter that drops fabricated rows
+- [x] Deployed to Vercel (production: api.narativ.space)
+
+### Next
+
+- [ ] Data-freshness cooldown for analysis + insights (skip re-runs when inputs haven't changed)
 - [ ] Stripe billing
-- [ ] Landing page
+- [ ] Public marketing landing (/ when signed out)
+- [ ] TikTok support
 
 ## Local Development Setup
 
