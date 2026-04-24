@@ -43,6 +43,16 @@ const MAX_AGE_MS = 15 * 60 * 1000
 const POLL_MS = 4000
 const AUTO_DISMISS_MS = 5000
 
+// Per-kind timeouts. Real-world observed durations under normal load:
+//   scrape    — Apify Instagram scraper: 85–120s. 180s gives 50% buffer.
+//   analysis  — single-profile Claude Sonnet call: 15–60s. 180s is plenty.
+//   insights  — cross-competitor analysis = large prompt + Claude Sonnet
+//               + multiple DB inserts. Routinely 120–180s with 5+
+//               competitors; 240s prevents the common false-positive.
+const SCRAPE_TIMEOUT_MS = 180_000
+const ANALYSIS_TIMEOUT_MS = 180_000
+const INSIGHTS_TIMEOUT_MS = 240_000
+
 function loadJobs(): Record<string, Job> {
   if (typeof window === "undefined") return {}
   try {
@@ -129,10 +139,10 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
             const completedMs = new Date(data.completed_at).getTime()
             if (completedMs >= job.startedAt - 3000) {
               markDone(job.id)
-            } else if (Date.now() - job.startedAt > 180_000) {
-              // 3 min without a fresh completed_at row → assume the n8n workflow
-              // died silently. Surface it so the user isn't stuck on a ghost.
-              markError(job.id, "Scrape timed out — check n8n execution log.")
+            } else if (Date.now() - job.startedAt > SCRAPE_TIMEOUT_MS) {
+              // No fresh completed_at row by the deadline → assume the n8n
+              // workflow died silently. Surface it so the user isn't stuck.
+              markError(job.id, "Scrape is taking longer than expected — check the n8n execution log, and refresh in a minute (the workflow may still finish).")
             }
           } else if (data.status === "failed") {
             markError(job.id, "Scrape failed — Instagram may have rate-limited. Try again later.")
@@ -143,8 +153,8 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
           const data: { latest: string | null } = await res.json()
           if (data.latest && (!job.cursor || data.latest > job.cursor)) {
             markDone(job.id)
-          } else if (Date.now() - job.startedAt > 120_000) {
-            markError(job.id, "Analysis timed out. Check n8n execution log.")
+          } else if (Date.now() - job.startedAt > ANALYSIS_TIMEOUT_MS) {
+            markError(job.id, "Analysis is taking longer than expected — check the n8n execution log, and refresh in a minute.")
           }
         } else if (job.kind === "insights" && job.ownProfileId) {
           const res = await fetch(`/api/insights?profile_id=${job.ownProfileId}`)
@@ -153,8 +163,8 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
           const latest = data.insights?.[0]?.created_at
           if (latest && (!job.cursor || latest > job.cursor)) {
             markDone(job.id)
-          } else if (Date.now() - job.startedAt > 120_000) {
-            markError(job.id, "Insights timed out. Check n8n execution log.")
+          } else if (Date.now() - job.startedAt > INSIGHTS_TIMEOUT_MS) {
+            markError(job.id, "Insights is taking longer than expected — check the n8n execution log, and refresh in a minute (the workflow may still finish).")
           }
         }
       } catch {
