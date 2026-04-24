@@ -66,7 +66,7 @@ export function AppShell({
               <Menu className="h-5 w-5" />
             </button>
           </header>
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          <main key={pathname} className="flex-1 overflow-y-auto page-fade-in">{children}</main>
         </div>
       </div>
       <JobNotification />
