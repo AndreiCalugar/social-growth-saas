@@ -27,7 +27,7 @@ export function AddProfileModal({
 
   function startPolling(profileId: string) {
     setState("polling")
-    setMessage("Scraping in background… ~2 min")
+    setMessage("Scraping in the background — keep working, ready in ~2 min")
 
     const interval = setInterval(async () => {
       try {

@@ -12,7 +12,7 @@ export function AddCompetitorForm() {
 
   function startPolling(profileId: string) {
     setState("polling")
-    setMessage("Feel free to navigate away — profile ready in ~30s")
+    setMessage("Scraping in the background — keep working, ready in ~2 min")
 
     const interval = setInterval(async () => {
       try {

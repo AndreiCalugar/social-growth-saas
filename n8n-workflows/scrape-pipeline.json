@@ -396,6 +396,11 @@
     },
     "Is Run Done?": {
       "main": [
+        [{ "node": "If Done", "type": "main", "index": 0 }]
+      ]
+    },
+    "If Done": {
+      "main": [
         [{ "node": "Wait Dataset Finalize", "type": "main", "index": 0 }],
         [{ "node": "Wait 15s", "type": "main", "index": 0 }]
       ]
