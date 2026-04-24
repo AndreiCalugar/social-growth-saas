@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { RefreshCw, Loader2 } from "lucide-react"
+import { RefreshCw, Loader2, AlertCircle } from "lucide-react"
 import { useJobTracker } from "@/components/job-tracker"
 import { triggerScrape } from "@/lib/trigger-scrape"
 import { formatMinutesUntil } from "@/lib/scrape-cooldown"
@@ -21,7 +21,9 @@ export function RetryScrapeButton({ profileId, username }: Props) {
   const running = job?.status === "running"
   const lastStatusRef = useRef<string | undefined>(undefined)
 
+  const [submitting, setSubmitting] = useState(false)
   const [cooldown, setCooldown] = useState<Cooldown | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (lastStatusRef.current === "running" && job?.status === "done") {
@@ -33,15 +35,24 @@ export function RetryScrapeButton({ profileId, username }: Props) {
   async function attempt(force: boolean, e?: React.MouseEvent) {
     e?.preventDefault()
     e?.stopPropagation()
-    if (running) return
-    const result = await triggerScrape(profileId, { force })
-    if (result.status === "fired") {
-      setCooldown(null)
-      startScrape({ username, profileId })
-      return
-    }
-    if (result.status === "cooldown") {
-      setCooldown({ reason: result.reason, minutesUntilNext: result.minutesUntilNext })
+    if (submitting || running) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const result = await triggerScrape(profileId, { force })
+      if (result.status === "fired") {
+        setCooldown(null)
+        startScrape({ username, profileId })
+        return
+      }
+      if (result.status === "cooldown") {
+        setCooldown({ reason: result.reason, minutesUntilNext: result.minutesUntilNext })
+        return
+      }
+      setError(result.message || "Something went wrong")
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -50,6 +61,15 @@ export function RetryScrapeButton({ profileId, username }: Props) {
       <span className="text-xs flex items-center gap-1 text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" />
         Scraping… ~2 min
+      </span>
+    )
+  }
+
+  if (submitting) {
+    return (
+      <span className="text-xs flex items-center gap-1 text-slate-500">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Starting…
       </span>
     )
   }
@@ -70,11 +90,21 @@ export function RetryScrapeButton({ profileId, username }: Props) {
         </span>
         <button
           onClick={(e) => attempt(true, e)}
-          className="text-xs font-medium text-purple-600 hover:text-purple-700 underline underline-offset-2"
+          disabled={submitting}
+          className="text-xs font-medium text-purple-600 hover:text-purple-700 disabled:text-slate-400 disabled:cursor-not-allowed underline underline-offset-2"
         >
           Rescrape anyway
         </button>
       </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <span className="text-xs flex items-center gap-1 text-red-600">
+        <AlertCircle className="h-3 w-3" />
+        {error}
+      </span>
     )
   }
 
