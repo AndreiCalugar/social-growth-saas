@@ -1,6 +1,24 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
+
+// Fire the n8n scrape webhook after the response is sent so the client isn't
+// blocked for the full ~2-minute Apify run. `after()` keeps the request alive
+// on Vercel until the work completes.
+function fireScrapeWebhook(username: string) {
+  const n8nBase = process.env.NEXT_PUBLIC_N8N_URL
+  after(async () => {
+    try {
+      await fetch(`${n8nBase}/webhook/scrape-instagram`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+      })
+    } catch (e) {
+      console.error("[/api/profiles] scrape webhook error:", e)
+    }
+  })
+}
 
 export async function GET() {
   const session = await auth()
@@ -42,14 +60,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    const n8nBase = process.env.NEXT_PUBLIC_N8N_URL
-    try {
-      await fetch(`${n8nBase}/webhook/scrape-instagram`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: clean }),
-      })
-    } catch { /* best-effort */ }
+    fireScrapeWebhook(clean)
     return NextResponse.json({ success: true, profile: existing })
   }
 
@@ -64,16 +75,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message ?? "Failed to save profile" }, { status: 500 })
   }
 
-  const n8nBase = process.env.NEXT_PUBLIC_N8N_URL
-  try {
-    await fetch(`${n8nBase}/webhook/scrape-instagram`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: clean }),
-    })
-  } catch (e) {
-    console.error("[/api/profiles POST] scrape webhook error:", e)
-  }
+  fireScrapeWebhook(clean)
 
   return NextResponse.json({ success: true, profile })
 }
