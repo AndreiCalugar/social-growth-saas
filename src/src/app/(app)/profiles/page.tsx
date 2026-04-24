@@ -69,7 +69,7 @@ export default async function ProfilesPage() {
                   key={profile.id}
                   profile={profile}
                   stats={stats}
-                  badge={<span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">Own</span>}
+                  badge={<span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-sm">Own</span>}
                 />
               )
             })}
@@ -117,12 +117,12 @@ interface ProfileCardProps {
   badge?: React.ReactNode
 }
 
-function scrapeStatus(last_scraped: string | null): { dot: string; label: string } {
-  if (!last_scraped) return { dot: "bg-slate-300", label: "Never scraped" }
+function scrapeStatus(last_scraped: string | null): { dot: string; label: string; pulse: boolean } {
+  if (!last_scraped) return { dot: "bg-slate-300", label: "Never scraped", pulse: false }
   const ageHours = (Date.now() - new Date(last_scraped).getTime()) / (1000 * 60 * 60)
-  if (ageHours < 24 * 7) return { dot: "bg-emerald-500", label: "Fresh" }
-  if (ageHours < 24 * 30) return { dot: "bg-amber-500", label: "Getting stale" }
-  return { dot: "bg-red-500", label: "Needs rescrape" }
+  if (ageHours < 24 * 7) return { dot: "bg-emerald-500", label: "Fresh", pulse: false }
+  if (ageHours < 24 * 30) return { dot: "bg-amber-500", label: "Getting stale", pulse: true }
+  return { dot: "bg-red-500", label: "Needs rescrape", pulse: true }
 }
 
 function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
@@ -131,7 +131,7 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
   return (
     <div className="group relative h-full">
       <Link href={`/profiles/${profile.id}`}>
-        <div className="h-full rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
+        <div className="h-full rounded-xl border border-slate-200/60 bg-white hover:bg-gradient-to-br hover:from-white hover:to-purple-50/30 p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative shrink-0">
@@ -139,7 +139,7 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
                   <span className="text-sm font-bold text-white">{initials}</span>
                 </div>
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${status.dot}`}
+                  className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${status.dot} ${status.pulse ? "animate-pulse" : ""}`}
                   aria-label={status.label}
                   title={status.label}
                 />

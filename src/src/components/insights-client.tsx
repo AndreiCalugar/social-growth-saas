@@ -521,7 +521,7 @@ export function InsightsClient({
 
       {/* Summary bar */}
       {insights.length > 0 && status !== "generating" && (
-        <div className="rounded-xl border border-slate-200 bg-white px-5 py-3 grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-6 shadow-sm">
+        <div className="rounded-xl border border-slate-200/60 backdrop-blur-sm bg-white/80 px-5 py-3 grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-6 shadow-sm">
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold text-slate-900 tabular-nums">
               {insights.length}
@@ -560,11 +560,12 @@ export function InsightsClient({
       {/* Mega tips section */}
       {megaTips.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber-500" />
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+          <div className="flex items-center gap-3">
+            <Zap className="h-4 w-4 text-amber-500 shrink-0" />
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide shrink-0">
               Try these next
             </h2>
+            <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
           </div>
           <div className="grid gap-3">
             {megaTips.map((insight) => (
@@ -581,9 +582,12 @@ export function InsightsClient({
       {/* Other trends section */}
       {otherInsights.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            You&apos;re already doing
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider shrink-0">
+              You&apos;re already doing
+            </h2>
+            <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
+          </div>
           <div className="grid gap-3">
             {otherInsights.map((insight) => (
               <InsightCard

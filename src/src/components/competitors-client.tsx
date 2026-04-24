@@ -214,7 +214,7 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b bg-muted/40">
+                <tr className="border-b bg-gradient-to-r from-slate-100 to-slate-50">
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground">Account</th>
                   <th className="text-right px-4 py-2 font-medium text-muted-foreground">Posts</th>
                   <th className="text-right px-4 py-2 font-medium text-muted-foreground">Avg Likes</th>
@@ -226,13 +226,18 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
               <tbody>
                 {allProfiles.map(({ profile, metrics, isOwn }, i) => {
                   const postCount = allPosts.filter((p) => p.profile_id === profile.id).length
+                  const zebra = !isOwn && i % 2 === 1 ? "bg-purple-50/20" : ""
                   return (
-                    <tr key={profile.id} className={`border-b last:border-0 ${isOwn ? "bg-purple-50/50" : "hover:bg-slate-50"}`}>
+                    <tr key={profile.id} className={`border-b last:border-0 transition-colors ${isOwn ? "bg-purple-50/50" : `${zebra} hover:bg-slate-50`}`}>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                           <span className="font-medium">@{profile.username}</span>
-                          {isOwn && <span className="text-[9px] px-1 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-semibold">You</span>}
+                          {isOwn && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold uppercase tracking-wider shadow-sm">
+                              You
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right">{postCount}</td>

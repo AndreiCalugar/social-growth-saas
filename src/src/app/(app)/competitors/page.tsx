@@ -89,15 +89,15 @@ export default async function CompetitorsPage() {
 
             const statusDot =
               scrapeStatus === "failed"
-                ? { color: "bg-red-500", label: "Scrape failed" }
+                ? { color: "bg-red-500", label: "Scrape failed", pulse: true }
                 : scrapeStatus === "never"
-                ? { color: "bg-slate-300", label: "Not scraped yet" }
+                ? { color: "bg-slate-300", label: "Not scraped yet", pulse: false }
                 : ageBadge(c.last_scraped)
 
             return (
               <div key={c.id} className="group relative h-full">
                 <Link href={`/profiles/${c.id}`}>
-                  <div className="h-full rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
+                  <div className="h-full rounded-xl border border-slate-200/60 bg-white hover:bg-gradient-to-br hover:from-white hover:to-purple-50/30 p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="relative shrink-0">
@@ -105,7 +105,7 @@ export default async function CompetitorsPage() {
                             <span className="text-sm font-bold text-white">{c.username.charAt(0).toUpperCase()}</span>
                           </div>
                           <span
-                            className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${statusDot.color}`}
+                            className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${statusDot.color} ${statusDot.pulse ? "animate-pulse" : ""}`}
                             aria-label={statusDot.label}
                             title={statusDot.label}
                           />
@@ -172,10 +172,10 @@ export default async function CompetitorsPage() {
   )
 }
 
-function ageBadge(last_scraped: string | null): { color: string; label: string } {
-  if (!last_scraped) return { color: "bg-slate-300", label: "Never scraped" }
+function ageBadge(last_scraped: string | null): { color: string; label: string; pulse: boolean } {
+  if (!last_scraped) return { color: "bg-slate-300", label: "Never scraped", pulse: false }
   const ageHours = (Date.now() - new Date(last_scraped).getTime()) / (1000 * 60 * 60)
-  if (ageHours < 24 * 7) return { color: "bg-emerald-500", label: "Fresh" }
-  if (ageHours < 24 * 30) return { color: "bg-amber-500", label: "Getting stale" }
-  return { color: "bg-red-500", label: "Needs rescrape" }
+  if (ageHours < 24 * 7) return { color: "bg-emerald-500", label: "Fresh", pulse: false }
+  if (ageHours < 24 * 30) return { color: "bg-amber-500", label: "Getting stale", pulse: true }
+  return { color: "bg-red-500", label: "Needs rescrape", pulse: true }
 }

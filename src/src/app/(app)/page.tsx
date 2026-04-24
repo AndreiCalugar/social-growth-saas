@@ -291,7 +291,7 @@ export default async function OverviewPage() {
 
       {/* Chart + sidebar */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
+        <Card className="lg:col-span-3 relative overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-purple-300 before:to-transparent">
           <CardHeader>
             <CardTitle className="text-sm font-semibold text-slate-900">Likes over time</CardTitle>
             <CardDescription className="text-xs">Solid line = likes · Dashed = views ÷ 10</CardDescription>
@@ -349,7 +349,11 @@ export default async function OverviewPage() {
       {/* Top mega-tip preview — styled like the real InsightCard for continuity */}
       {topInsight ? (
         <Link href="/insights" className="block group">
-          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-amber-200 transition-all overflow-hidden border-l-4 border-l-amber-500">
+          <div className="relative bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-amber-200 transition-all overflow-hidden border-l-4 border-l-amber-500">
+            <div
+              className="border-shimmer pointer-events-none absolute inset-x-0 top-0 h-[3px]"
+              aria-hidden
+            />
             <div className="p-5 flex items-start gap-4">
               <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
                 <Zap className="h-5 w-5 text-white" />
@@ -433,9 +437,14 @@ const metricAccent: Record<"purple" | "emerald" | "amber", string> = {
   amber: "before:bg-amber-500",
 }
 const metricIconTint: Record<"purple" | "emerald" | "amber", string> = {
-  purple: "bg-purple-50 text-purple-600",
-  emerald: "bg-emerald-50 text-emerald-600",
-  amber: "bg-amber-50 text-amber-600",
+  purple: "bg-purple-100 text-purple-600",
+  emerald: "bg-emerald-100 text-emerald-600",
+  amber: "bg-amber-100 text-amber-600",
+}
+const metricCardBg: Record<"purple" | "emerald" | "amber", string> = {
+  purple: "bg-gradient-to-br from-purple-50/50 to-white",
+  emerald: "bg-gradient-to-br from-emerald-50/50 to-white",
+  amber: "bg-gradient-to-br from-amber-50/50 to-white",
 }
 
 function MetricCard({
@@ -455,7 +464,7 @@ function MetricCard({
 }) {
   return (
     <div
-      className={`relative overflow-hidden rounded-xl border border-slate-200/60 bg-white p-5 shadow-sm hover:shadow-md transition-all before:absolute before:top-0 before:left-0 before:right-0 before:h-1 ${metricAccent[accent]}`}
+      className={`relative overflow-hidden rounded-xl border border-slate-200/60 p-5 shadow-sm hover:shadow-md transition-all before:absolute before:top-0 before:left-0 before:right-0 before:h-1 ${metricAccent[accent]} ${metricCardBg[accent]}`}
     >
       <div className="flex items-center gap-2.5">
         <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${metricIconTint[accent]}`}>
