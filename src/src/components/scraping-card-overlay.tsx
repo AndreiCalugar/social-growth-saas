@@ -30,8 +30,17 @@ export function ScrapingCardOverlay({ profileId }: { profileId: string }) {
   const elapsedMs = Math.max(0, now - job.startedAt)
   const pct = Math.min(100, Math.round((elapsedMs / ESTIMATED_SCRAPE_MS) * 100))
 
+  // Overlay absorbs clicks (cursor-not-allowed + stopPropagation) so users
+  // can't navigate into a mid-scrape profile and see partial data; the card
+  // becomes interactive again the moment the tracker flips the job to done.
   return (
-    <div className="absolute inset-0 z-10 rounded-xl bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-center px-4 pointer-events-none">
+    <div
+      className="absolute inset-0 z-10 rounded-xl bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-center px-4 cursor-not-allowed"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+    >
       <div className="relative">
         <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
           <Loader2 className="h-6 w-6 text-purple-600 animate-spin" />

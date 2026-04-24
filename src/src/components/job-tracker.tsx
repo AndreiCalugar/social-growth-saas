@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { useRouter } from "next/navigation"
 
 export type JobKind = "scrape" | "analysis" | "insights"
 export type JobStatus = "running" | "done" | "error"
@@ -68,6 +69,9 @@ function saveJobs(jobs: Record<string, Job>) {
 }
 
 export function JobTrackerProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const routerRef = useRef(router)
+  routerRef.current = router
   const [jobs, setJobs] = useState<Record<string, Job>>({})
   const jobsRef = useRef(jobs)
   jobsRef.current = jobs
@@ -147,11 +151,18 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
 
     function markDone(id: string) {
       updateJob(id, { status: "done", finishedAt: Date.now() })
+      // Refresh whatever route the user is currently on so its server-rendered
+      // data reflects the just-completed scrape (post counts, last_scraped,
+      // trend insights etc). Per-button useEffects can't cover the case where
+      // the user navigated away after starting the scrape — by the time the
+      // job flips, the originating component is unmounted.
+      routerRef.current.refresh()
       setTimeout(() => dismissJob(id), AUTO_DISMISS_MS)
     }
 
     function markError(id: string, message: string) {
       updateJob(id, { status: "error", finishedAt: Date.now(), errorMessage: message })
+      routerRef.current.refresh()
       setTimeout(() => dismissJob(id), AUTO_DISMISS_MS * 2)
     }
 
