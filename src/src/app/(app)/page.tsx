@@ -249,78 +249,44 @@ export default async function OverviewPage() {
 
       {/* Metric cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2 pt-4">
-            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
-              <BarChart2 className="h-3.5 w-3.5" /> Avg Likes
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
-              {formatNumber(engagementSummary?.avg_likes ?? postStats.avgLikes)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-4">
-            <p className="text-xs text-slate-400">per post</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 pt-4">
-            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5" /> Posts Tracked
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold tabular-nums text-slate-900">
-              {postStats.postCount}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-4">
-            <p className="text-xs text-slate-400">
-              across {totalProfiles} profile{totalProfiles !== 1 ? "s" : ""}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 pt-4">
-            <CardDescription className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" /> Last Analysis
-            </CardDescription>
-            <CardTitle className="text-sm font-bold leading-snug pt-1 text-slate-900">
-              {latestAnalysis ? formatRelativeTime(latestAnalysis.created_at) : "—"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pb-4">
-            {engagementSummary?.trend ? (
-              <p className={`text-xs flex items-center gap-1 font-medium ${trendColor}`}>
+        <MetricCard
+          accent="purple"
+          icon={BarChart2}
+          label="Avg Likes"
+          value={formatNumber(engagementSummary?.avg_likes ?? postStats.avgLikes)}
+          foot="per post"
+        />
+        <MetricCard
+          accent="emerald"
+          icon={FileText}
+          label="Posts Tracked"
+          value={postStats.postCount}
+          foot={`across ${totalProfiles} profile${totalProfiles !== 1 ? "s" : ""}`}
+        />
+        <MetricCard
+          accent="amber"
+          icon={Sparkles}
+          label="Last Analysis"
+          value={latestAnalysis ? formatRelativeTime(latestAnalysis.created_at) : "—"}
+          valueSize="sm"
+          foot={
+            engagementSummary?.trend ? (
+              <span className={`inline-flex items-center gap-1 font-medium ${trendColor}`}>
                 <TrendIcon className="h-3 w-3" />
                 {engagementSummary.trend}
-              </p>
+              </span>
             ) : (
-              <p className="text-xs text-slate-400">no analysis yet</p>
-            )}
-          </CardContent>
-        </Card>
+              <span className="text-slate-400">no analysis yet</span>
+            )
+          }
+        />
       </div>
 
       {/* Quick actions */}
       <div className="flex flex-wrap gap-2">
-        <Link
-          href="/profiles"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
-        >
-          <PlusCircle className="h-3.5 w-3.5" /> Add Profile
-        </Link>
-        <Link
-          href="/insights"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
-        >
-          <Sparkles className="h-3.5 w-3.5 text-amber-500" /> View Insights
-        </Link>
-        <Link
-          href="/competitors"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
-        >
-          <Users className="h-3.5 w-3.5" /> Manage Competitors
-        </Link>
+        <PillLink href="/profiles" icon={PlusCircle}>Add Profile</PillLink>
+        <PillLink href="/insights" icon={Sparkles} iconClassName="text-amber-500">View Insights</PillLink>
+        <PillLink href="/competitors" icon={Users}>Manage Competitors</PillLink>
       </div>
 
       {/* Chart + sidebar */}
@@ -380,61 +346,56 @@ export default async function OverviewPage() {
         </div>
       </div>
 
-      {/* Top mega-tip preview */}
-      {topInsight && (
-        <Link href="/insights" className="block">
-          <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 hover:border-orange-300 transition-colors cursor-pointer">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-orange-100 p-2 shrink-0 mt-0.5">
-                    <Zap className="h-4 w-4 text-orange-500" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold">{topInsight.trend_name}</p>
-                      <span className="text-[10px] font-bold bg-orange-500 text-white px-1.5 py-0.5 rounded-full">
-                        {topInsight.performance_multiplier.toFixed(1)}×
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                      {topInsight.recommendation}
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-orange-400 shrink-0 mt-1" />
+      {/* Top mega-tip preview — styled like the real InsightCard for continuity */}
+      {topInsight ? (
+        <Link href="/insights" className="block group">
+          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-amber-200 transition-all overflow-hidden border-l-4 border-l-amber-500">
+            <div className="p-5 flex items-start gap-4">
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
+                <Zap className="h-5 w-5 text-white" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold text-slate-900">{topInsight.trend_name}</p>
+                  <span className="inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white tabular-nums">
+                    {topInsight.performance_multiplier.toFixed(1)}
+                    <span className="text-[9px] text-slate-300">×</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-2 py-0.5 text-[10px] font-semibold border border-amber-100">
+                    Try this
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed mt-1">
+                  {topInsight.recommendation}
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 mt-2 transition-transform group-hover:translate-x-0.5" />
+            </div>
+          </div>
         </Link>
-      )}
-
-      {!topInsight && (
-        <Link href="/insights" className="block">
-          <Card className="border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 hover:border-orange-300 transition-colors cursor-pointer">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-full bg-orange-100 p-2">
-                    <Zap className="h-5 w-5 text-orange-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {trendCount > 0 ? `${trendCount} trends detected in your niche` : "Discover what content to create"}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {megaTipCount > 0
-                        ? `${megaTipCount} mega-tip${megaTipCount !== 1 ? "s" : ""} ready`
-                        : "Run the insights engine to detect trends across your competitors"}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs font-medium text-orange-600 shrink-0 flex items-center gap-1">
-                  {trendCount > 0 ? "View insights" : "Generate"} <ChevronRight className="h-3.5 w-3.5" />
-                </span>
+      ) : (
+        <Link href="/insights" className="block group">
+          <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-amber-200 transition-all overflow-hidden border-l-4 border-l-amber-500">
+            <div className="p-5 flex items-center gap-4">
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
+                <Sparkles className="h-5 w-5 text-white" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-900">
+                  {trendCount > 0 ? `${trendCount} trends detected in your niche` : "Discover what content to create"}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {megaTipCount > 0
+                    ? `${megaTipCount} mega-tip${megaTipCount !== 1 ? "s" : ""} ready`
+                    : "Run the insights engine to detect trends across your competitors"}
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-amber-600 shrink-0 flex items-center gap-1">
+                {trendCount > 0 ? "View" : "Generate"}
+                <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </div>
+          </div>
         </Link>
       )}
 
@@ -463,5 +424,77 @@ export default async function OverviewPage() {
         </Card>
       )}
     </div>
+  )
+}
+
+const metricAccent: Record<"purple" | "emerald" | "amber", string> = {
+  purple: "before:bg-purple-500",
+  emerald: "before:bg-emerald-500",
+  amber: "before:bg-amber-500",
+}
+const metricIconTint: Record<"purple" | "emerald" | "amber", string> = {
+  purple: "bg-purple-50 text-purple-600",
+  emerald: "bg-emerald-50 text-emerald-600",
+  amber: "bg-amber-50 text-amber-600",
+}
+
+function MetricCard({
+  accent,
+  icon: Icon,
+  label,
+  value,
+  foot,
+  valueSize = "lg",
+}: {
+  accent: "purple" | "emerald" | "amber"
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value: React.ReactNode
+  foot: React.ReactNode
+  valueSize?: "lg" | "sm"
+}) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-xl border border-slate-200/60 bg-white p-5 shadow-sm hover:shadow-md transition-all before:absolute before:top-0 before:left-0 before:right-0 before:h-1 ${metricAccent[accent]}`}
+    >
+      <div className="flex items-center gap-2.5">
+        <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${metricIconTint[accent]}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
+          {label}
+        </span>
+      </div>
+      <p
+        className={`mt-3 font-bold tabular-nums text-slate-900 ${
+          valueSize === "lg" ? "text-2xl" : "text-sm leading-snug"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="text-xs text-slate-500 mt-1.5">{foot}</p>
+    </div>
+  )
+}
+
+function PillLink({
+  href,
+  icon: Icon,
+  iconClassName,
+  children,
+}: {
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  iconClassName?: string
+  children: React.ReactNode
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm active:scale-95 transition-all"
+    >
+      <Icon className={`h-3.5 w-3.5 ${iconClassName ?? "text-slate-500"}`} />
+      {children}
+    </Link>
   )
 }

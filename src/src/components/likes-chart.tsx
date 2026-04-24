@@ -1,7 +1,8 @@
 "use client"
 
 import {
-  LineChart,
+  AreaChart,
+  Area,
   Line,
   XAxis,
   YAxis,
@@ -26,33 +27,29 @@ const tooltipStyle = {
   border: "1px solid #e2e8f0",
   borderRadius: "10px",
   fontSize: "12px",
-  boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.07)",
+  boxShadow: "0 4px 14px -4px rgb(0 0 0 / 0.08)",
 }
 
 export function LikesChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <LineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="likesGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.28} />
+            <stop offset="100%" stopColor="#7c3aed" stopOpacity={0} />
+          </linearGradient>
+        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis
-          dataKey="date"
-          tick={tickStyle}
-          tickLine={false}
-          axisLine={false}
-        />
-        <YAxis
-          tick={tickStyle}
-          tickLine={false}
-          axisLine={false}
-          width={40}
-        />
+        <XAxis dataKey="date" tick={tickStyle} tickLine={false} axisLine={false} />
+        <YAxis tick={tickStyle} tickLine={false} axisLine={false} width={40} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "#e2e8f0", strokeWidth: 1 }} />
-        <Line
+        <Area
           type="monotone"
           dataKey="likes"
           stroke="#7c3aed"
-          strokeWidth={2}
-          dot={false}
+          strokeWidth={2.25}
+          fill="url(#likesGradient)"
           activeDot={{ r: 4, fill: "#7c3aed", strokeWidth: 0 }}
           name="Likes"
         />
@@ -65,7 +62,7 @@ export function LikesChart({ data }: Props) {
           strokeDasharray="4 3"
           name="Views÷10"
         />
-      </LineChart>
+      </AreaChart>
     </ResponsiveContainer>
   )
 }
