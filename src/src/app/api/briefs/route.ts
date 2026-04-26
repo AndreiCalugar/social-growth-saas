@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
 
 const SAVED_BRIEF_COLUMNS =
-  "id, user_id, trend_insight_id, trend_name, performance_multiplier, original_content, original_hook, original_caption, original_posting_time, original_hashtags, hook_variations, content_angles, caption_variations, chosen_hook, chosen_content, chosen_caption, chosen_posting_time, chosen_hashtags, user_notes, scheduled_date, scheduled_time, status, created_at, updated_at" as const
+  "id, user_id, trend_insight_id, trend_name, trend_type, performance_multiplier, original_content, original_hook, original_caption, original_posting_time, original_hashtags, original_competitor_edge, hook_variations, content_angles, caption_variations, chosen_hook, chosen_content, chosen_caption, chosen_posting_time, chosen_hashtags, user_notes, scheduled_date, scheduled_time, status, created_at, updated_at" as const
 
 const ALLOWED_STATUSES = ["saved", "planning", "filming", "filmed", "posted"] as const
 
@@ -66,12 +66,14 @@ export async function POST(req: NextRequest) {
     user_id: string
     trend_insight_id: string | null
     trend_name: string
+    trend_type: string | null
     performance_multiplier: number | null
     original_content: string | null
     original_hook: string | null
     original_caption: string | null
     original_posting_time: string | null
     original_hashtags: string[]
+    original_competitor_edge: string | null
   }
 
   if (body.trend_insight_id) {
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
     const { data: insight, error: fetchErr } = await supabase
       .from("trend_insights")
       .select(
-        "id, profile_id, trend_name, performance_multiplier, content_format, hook, caption_structure, best_time, hashtags"
+        "id, profile_id, trend_name, performance_multiplier, content_format, hook, caption_structure, best_time, hashtags, competitor_edge, trend_type"
       )
       .eq("id", body.trend_insight_id)
       .maybeSingle()
@@ -114,12 +116,15 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       trend_insight_id: insight.id,
       trend_name: insight.trend_name,
+      trend_type: (insight as { trend_type?: string | null }).trend_type ?? null,
       performance_multiplier: insight.performance_multiplier ?? null,
       original_content: insight.content_format ?? null,
       original_hook: insight.hook ?? null,
       original_caption: insight.caption_structure ?? null,
       original_posting_time: insight.best_time ?? null,
       original_hashtags: Array.isArray(insight.hashtags) ? insight.hashtags : [],
+      original_competitor_edge:
+        (insight as { competitor_edge?: string | null }).competitor_edge ?? null,
     }
   } else {
     if (!body.trend_name) {
@@ -132,12 +137,14 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       trend_insight_id: null,
       trend_name: body.trend_name,
+      trend_type: null,
       performance_multiplier: body.performance_multiplier ?? null,
       original_content: body.original_content ?? null,
       original_hook: body.original_hook ?? null,
       original_caption: body.original_caption ?? null,
       original_posting_time: body.original_posting_time ?? null,
       original_hashtags: Array.isArray(body.original_hashtags) ? body.original_hashtags : [],
+      original_competitor_edge: null,
     }
   }
 

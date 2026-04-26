@@ -25,12 +25,14 @@ export interface SavedBrief {
   user_id: string
   trend_insight_id: string | null
   trend_name: string
+  trend_type: string | null
   performance_multiplier: number | null
   original_content: string | null
   original_hook: string | null
   original_caption: string | null
   original_posting_time: string | null
   original_hashtags: string[] | null
+  original_competitor_edge: string | null
   hook_variations: HookVariation[] | null
   content_angles: ContentAngle[] | null
   caption_variations: CaptionVariation[] | null
@@ -175,9 +177,16 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
       <div className="rounded-xl border border-slate-200/60 bg-white shadow-sm p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 leading-snug">
-              {brief.trend_name}
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 leading-snug">
+                {brief.trend_name}
+              </h1>
+              {brief.trend_type === "standout" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 text-rose-700 px-2 py-0.5 text-[10px] font-semibold border border-rose-200">
+                  Standout hit
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-1">
               Saved {new Date(brief.created_at).toLocaleDateString()} · Last updated{" "}
               {new Date(brief.updated_at).toLocaleString()}
@@ -187,6 +196,23 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
             <MultiplierBadge multiplier={brief.performance_multiplier} />
           ) : null}
         </div>
+
+        {/* Snapshotted competitor edge — what the original trend told the
+            user about how competitors execute this format. Snapshotted at
+            save time so it stays meaningful even if the source trend
+            disappears on the next analysis run. */}
+        {brief.original_competitor_edge && (
+          <div className="mt-4 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-sky-700 mb-1">
+              {brief.trend_type === "standout"
+                ? "What made the original video pop"
+                : "How competitors do it differently"}
+            </p>
+            <p className="text-sm text-sky-900 leading-snug">
+              {brief.original_competitor_edge}
+            </p>
+          </div>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2.5">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
