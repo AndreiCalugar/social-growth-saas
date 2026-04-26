@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
+import { CompetitorDiscovery, type DiscoverySuggestions } from "@/components/competitor-discovery"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { RetryScrapeButton } from "@/components/retry-scrape-button"
 import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
@@ -17,7 +18,7 @@ export default async function CompetitorsPage() {
 
   const profilesRes = await supabase
     .from("profiles")
-    .select("id, username, followers, last_scraped, is_own")
+    .select("id, username, followers, last_scraped, is_own, discovery_hashtags, discovery_hashtags_updated")
     .eq("user_id", userId)
     .order("is_own", { ascending: false })
     .order("username", { ascending: true })
@@ -52,6 +53,59 @@ export default async function CompetitorsPage() {
 
   const ownProfile = profiles.find((p) => p.is_own) ?? null
   const competitors = profiles.filter((p) => !p.is_own)
+  const ownUsername = ownProfile?.username ?? null
+
+  // Extract @mentions from competitor post captions and rank by frequency
+  // weighted by competitor coverage. We surface the top 10 unique mentions
+  // that are NOT already tracked by this user and are not the user's own
+  // handle. Lowercase normalizes "@Foo" and "@foo" to one entry.
+  const trackedHandles = new Set(
+    profiles.map((p) => p.username.toLowerCase().replace(/^@/, ""))
+  )
+  const competitorIds = new Set(competitors.map((c) => c.id))
+  const mentionStats: Record<string, { count: number; competitors: Set<string> }> = {}
+  const MENTION_RE = /@([A-Za-z0-9_.]{2,30})/g
+
+  for (const post of allPosts) {
+    if (!competitorIds.has(post.profile_id)) continue
+    const caption = post.caption ?? ""
+    if (!caption) continue
+    const found = new Set<string>()
+    let m: RegExpExecArray | null
+    while ((m = MENTION_RE.exec(caption)) !== null) {
+      const handle = m[1].toLowerCase()
+      if (handle.endsWith(".")) continue // Trailing-dot false positives.
+      if (trackedHandles.has(handle)) continue
+      if (handle === ownUsername?.toLowerCase()) continue
+      found.add(handle)
+    }
+    for (const handle of found) {
+      const slot = (mentionStats[handle] ??= { count: 0, competitors: new Set() })
+      slot.count++
+      slot.competitors.add(post.profile_id)
+    }
+  }
+
+  const mentionSuggestions = Object.entries(mentionStats)
+    // Require ≥2 mentions to filter one-off shoutouts; drops noise hard.
+    .filter(([, s]) => s.count >= 2)
+    .map(([handle, s]) => ({
+      username: handle,
+      mention_count: s.count,
+      competitor_count: s.competitors.size,
+    }))
+    .sort((a, b) => {
+      // Rank by competitor coverage first (cross-account validation),
+      // then by raw mention count.
+      if (b.competitor_count !== a.competitor_count) return b.competitor_count - a.competitor_count
+      return b.mention_count - a.mention_count
+    })
+    .slice(0, 10)
+
+  const showDiscovery = Boolean(ownProfile)
+  const hasOwnPosts = ownProfile
+    ? allPosts.some((p) => p.profile_id === ownProfile.id)
+    : false
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
@@ -65,6 +119,22 @@ export default async function CompetitorsPage() {
         </div>
         <AddCompetitorForm />
       </div>
+
+      {/* Discovery helper — only when the user has their own profile, since
+          hashtag suggestions need their captions and mentions need at least
+          one scraped competitor. Component handles its own collapsed state. */}
+      {showDiscovery && (
+        <CompetitorDiscovery
+          ownProfileId={ownProfile!.id}
+          ownUsername={ownProfile!.username}
+          hasOwnPosts={hasOwnPosts}
+          initialSuggestions={
+            (ownProfile!.discovery_hashtags as unknown as DiscoverySuggestions | null) ?? null
+          }
+          initialUpdatedAt={ownProfile!.discovery_hashtags_updated as string | null}
+          mentionSuggestions={mentionSuggestions}
+        />
+      )}
 
       {/* Empty state */}
       {competitors.length === 0 && (
