@@ -21,9 +21,6 @@ import {
   Loader2,
   BookmarkPlus,
   ClipboardList,
-  Lightbulb,
-  Flame,
-  Sprout,
 } from "lucide-react"
 import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
@@ -53,29 +50,15 @@ interface Insight {
   caption_structure?: string | null
   best_time?: string | null
   hashtags?: string[] | null
-  competitor_edge?: string | null
 }
 
 interface Props {
   ownProfileId: string | null
-  ownUsername: string | null
   userId: string
   initialInsights: Insight[]
   competitorCount: number
   initialSavedBriefMap?: Record<string, string>
   totalSavedBriefs?: number
-}
-
-// Maps the multiplier into a verbal "format strength" label that replaces
-// the old "Found in X of Y competitors" badge. Wording stays out of the
-// "you/them" framing on purpose — Already in Your Playbook trends still
-// get a label so the card is informative on its own.
-type FormatLabel = { label: string; tone: "amber" | "purple" | "slate"; icon: typeof Flame }
-function formatLabelFor(multiplier: number | null | undefined): FormatLabel {
-  const m = multiplier ?? 0
-  if (m >= 5) return { label: "High-impact format", tone: "amber", icon: Flame }
-  if (m >= 2.5) return { label: "Growing format", tone: "purple", icon: Lightbulb }
-  return { label: "Emerging pattern", tone: "slate", icon: Sprout }
 }
 
 function parseExamples(raw: unknown): ExamplePost[] {
@@ -86,17 +69,12 @@ function parseExamples(raw: unknown): ExamplePost[] {
   return []
 }
 
-function dedupeExamples(examples: ExamplePost[], ownUsername: string | null): ExamplePost[] {
+function dedupeExamples(examples: ExamplePost[]): ExamplePost[] {
   const seen = new Set<string>()
   const out: ExamplePost[] = []
-  const ownHandle = ownUsername?.replace(/^@/, "").toLowerCase() ?? null
   for (const ex of examples) {
     const comp = (ex.competitor || "").replace(/^@/, "").toLowerCase()
     if (!comp || seen.has(comp)) continue
-    // Defensive: skip the user's own handle even if Claude or the workflow
-    // missed it. The page is supposed to surface ideas FROM competitors —
-    // showing the user their own post is anti-product.
-    if (ownHandle && comp === ownHandle) continue
     seen.add(comp)
     out.push(ex)
     if (out.length === 3) break
@@ -127,11 +105,25 @@ function buildSummary(insight: Insight): string {
   return truncate(firstSentence(rec), 100)
 }
 
-function buildCopyText(insight: Insight): string {
+function competitorFractionLabel(insight: Insight, fallbackTotal: number): string | null {
+  if (insight.competitor_count != null && insight.total_competitors != null) {
+    return `Found in ${insight.competitor_count} of ${insight.total_competitors} competitors`
+  }
+  if (insight.confidence != null && fallbackTotal > 0) {
+    const matched = Math.max(1, Math.round(insight.confidence * fallbackTotal))
+    return `Found in ${matched} of ${fallbackTotal} competitors`
+  }
+  return null
+}
+
+function buildCopyText(insight: Insight, fraction: string | null): string {
   const mult = insight.performance_multiplier ?? 0
   const lines: string[] = []
   lines.push(`🎬 ${insight.trend_name}`)
-  if (mult > 0) lines.push(`📊 ${mult.toFixed(1)}× avg engagement`)
+  const meta: string[] = []
+  if (mult > 0) meta.push(`${mult.toFixed(1)}× avg engagement`)
+  if (fraction) meta.push(fraction)
+  if (meta.length) lines.push(`📊 ${meta.join(" | ")}`)
   lines.push("")
   if (insight.content_format) lines.push(`CONTENT: ${insight.content_format}`)
   if (insight.hook) lines.push(`HOOK: ${insight.hook}`)
@@ -139,10 +131,6 @@ function buildCopyText(insight: Insight): string {
   if (insight.best_time) lines.push(`POST: ${insight.best_time}`)
   if (insight.hashtags && insight.hashtags.length) {
     lines.push(`TAGS: ${insight.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ")}`)
-  }
-  if (insight.competitor_edge) {
-    lines.push("")
-    lines.push(`COMPETITOR EDGE: ${insight.competitor_edge}`)
   }
   if (
     !insight.content_format &&
@@ -157,12 +145,12 @@ function buildCopyText(insight: Insight): string {
 
 function InsightCard({
   insight,
-  ownUsername,
+  fallbackTotalCompetitors,
   savedBriefId,
   onSaved,
 }: {
   insight: Insight
-  ownUsername: string | null
+  fallbackTotalCompetitors: number
   savedBriefId: string | null
   onSaved: (insightId: string, briefId: string) => void
 }) {
@@ -199,11 +187,11 @@ function InsightCard({
 
   const multiplier = insight.performance_multiplier ?? 0
   const isMegaTip = insight.is_mega_tip === true
+  const userDoingIt = insight.is_mega_tip === false
   const summary = buildSummary(insight)
-  const examples = dedupeExamples(parseExamples(insight.example_posts), ownUsername)
+  const fraction = competitorFractionLabel(insight, fallbackTotalCompetitors)
+  const examples = dedupeExamples(parseExamples(insight.example_posts))
   const showExamples = examples.length >= 2
-  const formatLabel = formatLabelFor(multiplier)
-  const FormatIcon = formatLabel.icon
 
   const hasStructured = Boolean(
     insight.content_format ||
@@ -214,7 +202,7 @@ function InsightCard({
   )
 
   async function handleCopy() {
-    const text = buildCopyText(insight)
+    const text = buildCopyText(insight, fraction)
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -244,37 +232,24 @@ function InsightCard({
           <p className="mt-2 text-sm text-slate-600 leading-snug">{summary}</p>
         )}
 
-        {/* Meta row: format strength label */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
-              formatLabel.tone === "amber"
-                ? "bg-amber-50 text-amber-700 border-amber-200"
-                : formatLabel.tone === "purple"
-                ? "bg-purple-50 text-purple-700 border-purple-200"
-                : "bg-slate-50 text-slate-600 border-slate-200"
-            }`}
-          >
-            <FormatIcon className="h-3 w-3" />
-            {formatLabel.label}
-          </span>
+        {/* Meta row: competitor count + status */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {fraction && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+              <Users className="h-3 w-3" />
+              {fraction}
+            </span>
+          )}
+          {userDoingIt ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-semibold border border-emerald-100">
+              <Check className="h-3 w-3" /> You&apos;re doing this
+            </span>
+          ) : isMegaTip ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-2 py-0.5 text-[11px] font-semibold border border-amber-100">
+              <Zap className="h-3 w-3" /> Try this
+            </span>
+          ) : null}
         </div>
-
-        {/* Competitor edge — light blue highlight, ALWAYS shown when present.
-            This is the field that makes "Already in your playbook" cards
-            still useful: even if the user does the broader pattern, here's
-            the specific thing competitors do better. */}
-        {insight.competitor_edge && (
-          <div className="mt-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-sky-700 mb-1 inline-flex items-center gap-1">
-              <Lightbulb className="h-3 w-3" />
-              How competitors do it differently
-            </p>
-            <p className="text-sm text-sky-900 leading-snug">
-              {insight.competitor_edge}
-            </p>
-          </div>
-        )}
 
         {/* Expand toggle */}
         <button
@@ -493,14 +468,12 @@ function BriefSection({
 
 export function InsightsClient({
   ownProfileId,
-  ownUsername,
   userId,
   initialInsights,
   competitorCount,
   initialSavedBriefMap,
   totalSavedBriefs = 0,
 }: Props) {
-  const [showPlaybook, setShowPlaybook] = useState(false)
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
   const [savedBriefMap, setSavedBriefMap] = useState<Record<string, string>>(
     initialSavedBriefMap ?? {}
@@ -559,13 +532,7 @@ export function InsightsClient({
       const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          own_profile_id: ownProfileId,
-          user_id: userId,
-          // Workflow uses this to scrub Claude's example_posts of any
-          // reference to the user's own handle.
-          own_username: ownUsername ?? "",
-        }),
+        body: JSON.stringify({ own_profile_id: ownProfileId, user_id: userId }),
       })
 
       if (!res.ok) {
@@ -670,34 +637,41 @@ export function InsightsClient({
         </div>
       )}
 
-      {/* Summary bar — leads with "new ideas to try", demotes the rest. */}
+      {/* Summary bar */}
       {insights.length > 0 && status !== "generating" && (
-        <div className="rounded-xl border border-amber-200/60 bg-gradient-to-br from-amber-50/80 to-white px-5 py-4 shadow-sm">
-          <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold text-amber-600 tabular-nums">
-              {megaTips.length}
+        <div className="rounded-xl border border-slate-200/60 backdrop-blur-sm bg-white/80 px-5 py-3 grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-slate-900 tabular-nums">
+              {insights.length}
             </span>
-            <span className="text-sm font-semibold text-slate-900">
-              new idea{megaTips.length === 1 ? "" : "s"} to try
+            <span className="text-xs text-slate-500 leading-tight">
+              trends
+              <br />
+              detected
             </span>
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {megaTips.length > 0
-              ? `Inspired by patterns in your competitors' top posts.`
-              : `Run the analysis to surface fresh content ideas.`}
-            {otherInsights.length > 0 && (
-              <>
-                {" · "}
-                <button
-                  type="button"
-                  onClick={() => setShowPlaybook((v) => !v)}
-                  className="text-purple-700 font-medium hover:underline"
-                >
-                  {showPlaybook ? "Hide" : "Show"} {otherInsights.length} pattern{otherInsights.length === 1 ? "" : "s"} already in your playbook
-                </button>
-              </>
-            )}
-          </p>
+          <div className="hidden sm:block w-px h-8 bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-amber-600 tabular-nums">
+              {megaTips.length}
+            </span>
+            <span className="text-xs text-slate-500 leading-tight">
+              to try
+              <br />
+              next
+            </span>
+          </div>
+          <div className="hidden sm:block w-px h-8 bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-emerald-600 tabular-nums">
+              {insights.filter((i) => i.is_mega_tip === false).length}
+            </span>
+            <span className="text-xs text-slate-500 leading-tight">
+              already
+              <br />
+              doing
+            </span>
+          </div>
         </div>
       )}
 
@@ -728,13 +702,13 @@ export function InsightsClient({
         </Link>
       )}
 
-      {/* New opportunities (mega tips) — always at top, primary attention. */}
+      {/* Mega tips section */}
       {megaTips.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <Zap className="h-4 w-4 text-amber-500 shrink-0" />
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide shrink-0">
-              New opportunities
+              Try these next
             </h2>
             <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
           </div>
@@ -743,7 +717,7 @@ export function InsightsClient({
               <InsightCard
                 key={insight.id}
                 insight={insight}
-                ownUsername={ownUsername}
+                fallbackTotalCompetitors={competitorCount}
                 savedBriefId={savedBriefMap[insight.id] ?? null}
                 onSaved={handleBriefSaved}
               />
@@ -752,42 +726,26 @@ export function InsightsClient({
         </div>
       )}
 
-      {/* Already in your playbook — collapsed by default so it doesn't crowd
-          the new ideas. The toggle in the summary bar opens it; we also
-          render an inline header toggle when the section is open so the
-          user can collapse from either anchor. */}
+      {/* Other trends section */}
       {otherInsights.length > 0 && (
         <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => setShowPlaybook((v) => !v)}
-            aria-expanded={showPlaybook}
-            className="w-full flex items-center gap-3 group text-left"
-          >
-            <Check className="h-4 w-4 text-slate-400 shrink-0" />
-            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0 group-hover:text-slate-700 transition-colors">
-              Already in your playbook ({otherInsights.length})
+          <div className="flex items-center gap-3">
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider shrink-0">
+              You&apos;re already doing
             </h2>
             <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
-            <ChevronDown
-              className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${
-                showPlaybook ? "rotate-180" : ""
-              }`}
-            />
-          </button>
-          {showPlaybook && (
-            <div className="grid gap-3">
-              {otherInsights.map((insight) => (
-                <InsightCard
-                  key={insight.id}
-                  insight={insight}
-                  ownUsername={ownUsername}
-                  savedBriefId={savedBriefMap[insight.id] ?? null}
-                  onSaved={handleBriefSaved}
-                />
-              ))}
-            </div>
-          )}
+          </div>
+          <div className="grid gap-3">
+            {otherInsights.map((insight) => (
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                fallbackTotalCompetitors={competitorCount}
+                savedBriefId={savedBriefMap[insight.id] ?? null}
+                onSaved={handleBriefSaved}
+              />
+            ))}
+          </div>
         </div>
       )}
 

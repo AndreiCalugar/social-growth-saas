@@ -45,7 +45,6 @@ export default async function InsightsPage() {
     caption_structure: string | null
     best_time: string | null
     hashtags: string[] | null
-    competitor_edge: string | null
   }[] = []
 
   if (ownProfile) {
@@ -62,7 +61,7 @@ export default async function InsightsPage() {
       const { data } = await supabase
         .from("trend_insights")
         .select(
-          "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, is_mega_tip, created_at, one_line_summary, competitor_count, total_competitors, content_format, hook, caption_structure, best_time, hashtags, competitor_edge"
+          "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, is_mega_tip, created_at, one_line_summary, competitor_count, total_competitors, content_format, hook, caption_structure, best_time, hashtags"
         )
         .eq("profile_id", ownProfile.id)
         .gte("created_at", cutoff)
@@ -142,7 +141,6 @@ export default async function InsightsPage() {
   return (
     <InsightsClient
       ownProfileId={ownProfile?.id ?? null}
-      ownUsername={ownProfile?.username ?? null}
       userId={userId}
       initialInsights={insights}
       competitorCount={competitorCount}
