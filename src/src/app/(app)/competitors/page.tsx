@@ -18,7 +18,7 @@ export default async function CompetitorsPage() {
 
   const profilesRes = await supabase
     .from("profiles")
-    .select("id, username, followers, last_scraped, is_own, discovery_hashtags, discovery_hashtags_updated")
+    .select("id, username, followers, last_scraped, is_own")
     .eq("user_id", userId)
     .order("is_own", { ascending: false })
     .order("username", { ascending: true })
@@ -107,6 +107,32 @@ export default async function CompetitorsPage() {
     ? allPosts.some((p) => p.profile_id === ownProfile.id)
     : false
 
+  // Cached hashtag suggestions live on the own profile. Read them in a
+  // separate query so the page still renders when schema/008 hasn't been
+  // applied yet — the discovery section just falls back to the empty state
+  // and prompts the user to "Analyze my profile".
+  let cachedDiscovery: unknown = null
+  let cachedDiscoveryUpdated: string | null = null
+  if (ownProfile) {
+    const { data: ownExtra, error: ownExtraErr } = await supabase
+      .from("profiles")
+      .select("discovery_hashtags, discovery_hashtags_updated")
+      .eq("id", ownProfile.id)
+      .maybeSingle()
+    if (ownExtraErr) {
+      const tableMissing =
+        ownExtraErr.code === "42703" ||
+        ownExtraErr.message?.includes("does not exist") ||
+        ownExtraErr.message?.includes("schema cache")
+      if (!tableMissing) {
+        console.error("[competitors page] discovery_hashtags lookup:", ownExtraErr.message)
+      }
+    } else if (ownExtra) {
+      cachedDiscovery = ownExtra.discovery_hashtags
+      cachedDiscoveryUpdated = ownExtra.discovery_hashtags_updated as string | null
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-5xl">
       {/* Header */}
@@ -128,10 +154,8 @@ export default async function CompetitorsPage() {
           ownProfileId={ownProfile!.id}
           ownUsername={ownProfile!.username}
           hasOwnPosts={hasOwnPosts}
-          initialSuggestions={
-            (ownProfile!.discovery_hashtags as unknown as DiscoverySuggestions | null) ?? null
-          }
-          initialUpdatedAt={ownProfile!.discovery_hashtags_updated as string | null}
+          initialSuggestions={(cachedDiscovery as DiscoverySuggestions | null) ?? null}
+          initialUpdatedAt={cachedDiscoveryUpdated}
           mentionSuggestions={mentionSuggestions}
         />
       )}
