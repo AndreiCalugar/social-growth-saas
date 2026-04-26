@@ -21,6 +21,7 @@ import {
   Loader2,
   BookmarkPlus,
   ClipboardList,
+  Info,
 } from "lucide-react"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 
@@ -142,6 +143,55 @@ function buildCopyText(insight: Insight, fraction: string | null): string {
   return lines.join("\n")
 }
 
+// Multiplier badge with an Info popover. Hover (or focus) to see what the
+// number actually means — without this, "2.6×" reads as a brand-new metric
+// most users haven't seen before. The popover covers the math (top-quintile
+// posts vs that account's own median) and the validation rule (must repeat
+// across 2+ competitors).
+function MultiplierBadge({ multiplier }: { multiplier: number }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative shrink-0 inline-flex items-center gap-1">
+      <span className="inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-3 py-1.5 text-sm font-bold text-white tabular-nums shadow-sm">
+        {multiplier.toFixed(1)}
+        <span className="text-[11px] font-semibold text-slate-300">×</span>
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((v) => !v)
+        }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        aria-label="What does this multiplier mean?"
+        aria-expanded={open}
+        className="text-slate-300 hover:text-slate-500 transition-colors"
+      >
+        <Info className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute right-0 top-full mt-2 z-20 w-64 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-lg"
+        >
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-purple-700 mb-1">
+            What does {multiplier.toFixed(1)}× mean?
+          </span>
+          <span className="block text-xs text-slate-600 leading-relaxed">
+            Posts following this pattern get on average{" "}
+            <span className="font-semibold text-slate-900">{multiplier.toFixed(1)}×</span> the engagement
+            of an average post on the same competitor&apos;s account. The pattern was validated across at
+            least 2 of your tracked competitors before it shows up here.
+          </span>
+        </span>
+      )}
+    </span>
+  )
+}
+
 function InsightCard({
   insight,
   fallbackTotalCompetitors,
@@ -222,10 +272,7 @@ function InsightCard({
             {insight.trend_name}
           </h3>
           {multiplier > 0 && (
-            <span className="shrink-0 inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-3 py-1.5 text-sm font-bold text-white tabular-nums shadow-sm">
-              {multiplier.toFixed(1)}
-              <span className="text-[11px] font-semibold text-slate-300">×</span>
-            </span>
+            <MultiplierBadge multiplier={multiplier} />
           )}
         </div>
 

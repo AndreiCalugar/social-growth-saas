@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth"
 import { AddProfileModal } from "@/components/add-profile-modal"
 import { ProfileCardActions } from "@/components/profile-card-actions"
 import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
+import { InstagramLink } from "@/components/instagram-link"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
 import { Clock, FileText, TrendingUp, ArrowRight, Sparkles } from "lucide-react"
 
@@ -147,7 +148,10 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
                 />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900 truncate">@{profile.username}</p>
+                <p className="text-sm font-semibold text-slate-900 truncate inline-flex items-center gap-1">
+                  @{profile.username}
+                  <InstagramLink username={profile.username} size="xs" />
+                </p>
                 <p className="text-[11px] text-slate-500 mt-0.5">{status.label}</p>
               </div>
             </div>

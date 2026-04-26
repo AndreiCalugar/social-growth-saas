@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
 import { CompetitorDiscovery, type DiscoverySuggestions } from "@/components/competitor-discovery"
+import { InstagramLink } from "@/components/instagram-link"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { RetryScrapeButton } from "@/components/retry-scrape-button"
 import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
@@ -207,7 +208,10 @@ export default async function CompetitorsPage() {
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">@{c.username}</p>
+                          <p className="text-sm font-semibold text-slate-900 truncate inline-flex items-center gap-1">
+                            @{c.username}
+                            <InstagramLink username={c.username} size="xs" />
+                          </p>
                           <p className="text-[11px] text-slate-500 mt-0.5">{statusDot.label}</p>
                         </div>
                       </div>

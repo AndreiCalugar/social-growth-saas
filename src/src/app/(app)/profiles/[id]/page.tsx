@@ -9,6 +9,7 @@ import { ScrapeNowButton } from "@/components/scrape-now-button"
 import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { ProfileCharts } from "@/components/profile-charts"
 import { PostsTable } from "@/components/posts-table"
+import { InstagramLink } from "@/components/instagram-link"
 import {
   Clock, TrendingUp, TrendingDown, Minus,
   ThumbsUp, ThumbsDown, Sparkles, CalendarClock,
@@ -143,7 +144,10 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold">@{profile.username}</h1>
+            <h1 className="text-xl font-semibold inline-flex items-center gap-1.5">
+              @{profile.username}
+              <InstagramLink username={profile.username} size="md" />
+            </h1>
             {profile.is_own && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
                 Own account

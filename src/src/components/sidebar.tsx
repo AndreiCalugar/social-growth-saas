@@ -28,7 +28,7 @@ const navItems: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/profiles", label: "Profiles", icon: Users },
   { href: "/competitors", label: "Competitors", icon: Swords },
-  { href: "/insights", label: "Insights", icon: Sparkles, badge: "NEW" },
+  { href: "/insights", label: "Insights", icon: Sparkles },
   { href: "/briefs", label: "My Briefs", icon: ClipboardList, countKey: "activeBriefs" },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
