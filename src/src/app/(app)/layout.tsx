@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const userId = session.user.id
 
-  const [{ data: ownProfile }, { data: user }] = await Promise.all([
+  const [{ data: ownProfile }, { data: user }, activeBriefsResp] = await Promise.all([
     supabase
       .from("profiles")
       .select("username")
@@ -25,6 +25,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .select("email, name")
       .eq("id", userId)
       .maybeSingle(),
+    // Count briefs in active states (Planning + Filming) for the sidebar
+    // badge. `head: true` skips returning rows. Tolerates the saved_briefs
+    // table not existing yet (schema/007 not applied) so we don't break the
+    // shell for users that haven't run the migration.
+    supabase
+      .from("saved_briefs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .in("status", ["planning", "filming"]),
   ])
 
   const displayName =
@@ -33,8 +42,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     user?.email?.split("@")[0] ??
     "—"
 
+  const activeBriefsCount =
+    activeBriefsResp.error ? 0 : (activeBriefsResp.count ?? 0)
+
   return (
-    <AppShell username={displayName} userEmail={user?.email ?? null}>
+    <AppShell
+      username={displayName}
+      userEmail={user?.email ?? null}
+      activeBriefsCount={activeBriefsCount}
+    >
       {children}
     </AppShell>
   )

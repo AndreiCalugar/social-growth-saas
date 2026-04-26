@@ -12,29 +12,42 @@ import {
   TrendingUp,
   LogOut,
   X,
+  ClipboardList,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const navItems = [
+type NavItem = {
+  href: string
+  label: string
+  icon: typeof LayoutDashboard
+  badge?: string
+  countKey?: "activeBriefs"
+}
+
+const navItems: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/profiles", label: "Profiles", icon: Users },
   { href: "/competitors", label: "Competitors", icon: Swords },
   { href: "/insights", label: "Insights", icon: Sparkles, badge: "NEW" },
+  { href: "/briefs", label: "My Briefs", icon: ClipboardList, countKey: "activeBriefs" },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
 
 export function Sidebar({
   username,
   userEmail,
+  activeBriefsCount = 0,
   open = false,
   onClose,
 }: {
   username: string
   userEmail?: string | null
+  activeBriefsCount?: number
   open?: boolean
   onClose?: () => void
 }) {
   const pathname = usePathname()
+  const counts = { activeBriefs: activeBriefsCount }
 
   return (
     <aside
@@ -74,8 +87,9 @@ export function Sidebar({
       </div>
 
       <nav className="flex flex-col gap-0.5 p-3 flex-1 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon, badge }) => {
+        {navItems.map(({ href, label, icon: Icon, badge, countKey }) => {
           const isActive = href === "/" ? pathname === href : pathname.startsWith(href)
+          const count = countKey ? counts[countKey] : 0
           return (
             <Link
               key={href}
@@ -94,7 +108,15 @@ export function Sidebar({
                 )}
               />
               {label}
-              {badge && !isActive && (
+              {count > 0 && (
+                <span
+                  className="ml-auto rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none shadow-sm tabular-nums"
+                  title={`${count} brief${count === 1 ? "" : "s"} in progress`}
+                >
+                  {count}
+                </span>
+              )}
+              {badge && !isActive && !count && (
                 <span className="ml-auto relative rounded-full bg-gradient-to-br from-purple-500 to-purple-700 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none shadow-sm">
                   <span className="absolute inset-0 rounded-full bg-purple-400/40 animate-ping" aria-hidden />
                   <span className="relative">{badge}</span>

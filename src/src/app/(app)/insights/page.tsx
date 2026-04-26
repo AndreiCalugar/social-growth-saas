@@ -74,6 +74,7 @@ export default async function InsightsPage() {
   // Insights cards can swap "Save & Customize" for "Edit brief". Tolerate the
   // table not existing yet (schema/007 not run) by treating it as empty.
   let savedBriefMap: Record<string, string> = {}
+  let totalSavedBriefs = 0
   if (insights.length > 0) {
     const { data: savedRows, error: savedErr } = await supabase
       .from("saved_briefs")
@@ -92,6 +93,13 @@ export default async function InsightsPage() {
       }
     }
   }
+  // Total count for the "View your content plan" banner — always reflects every
+  // saved brief, not just ones whose trend_insight is in the current run.
+  const { count: totalCount, error: totalErr } = await supabase
+    .from("saved_briefs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+  if (!totalErr && typeof totalCount === "number") totalSavedBriefs = totalCount
 
   if (competitorCount < 3) {
     return (
@@ -137,6 +145,7 @@ export default async function InsightsPage() {
       initialInsights={insights}
       competitorCount={competitorCount}
       initialSavedBriefMap={savedBriefMap}
+      totalSavedBriefs={totalSavedBriefs}
     />
   )
 }

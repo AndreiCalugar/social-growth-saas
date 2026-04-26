@@ -10,10 +10,12 @@ import { JobNotification } from "./job-notification"
 export function AppShell({
   username,
   userEmail,
+  activeBriefsCount = 0,
   children,
 }: {
   username: string
   userEmail: string | null
+  activeBriefsCount?: number
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -46,6 +48,7 @@ export function AppShell({
         <Sidebar
           username={username}
           userEmail={userEmail}
+          activeBriefsCount={activeBriefsCount}
           open={open}
           onClose={() => setOpen(false)}
         />
