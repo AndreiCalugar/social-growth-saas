@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Sparkles,
   Users,
@@ -17,6 +18,8 @@ import {
   Hash,
   Copy,
   ArrowRight,
+  Loader2,
+  BookmarkPlus,
 } from "lucide-react"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 
@@ -52,6 +55,7 @@ interface Props {
   userId: string
   initialInsights: Insight[]
   competitorCount: number
+  initialSavedBriefMap?: Record<string, string>
 }
 
 function parseExamples(raw: unknown): ExamplePost[] {
@@ -139,12 +143,44 @@ function buildCopyText(insight: Insight, fraction: string | null): string {
 function InsightCard({
   insight,
   fallbackTotalCompetitors,
+  savedBriefId,
+  onSaved,
 }: {
   insight: Insight
   fallbackTotalCompetitors: number
+  savedBriefId: string | null
+  onSaved: (insightId: string, briefId: string) => void
 }) {
+  const router = useRouter()
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [savingBrief, setSavingBrief] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  async function handleSaveAndCustomize() {
+    if (savedBriefId) {
+      router.push(`/briefs/${savedBriefId}`)
+      return
+    }
+    setSavingBrief(true)
+    setSaveError(null)
+    try {
+      const res = await fetch("/api/briefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trend_insight_id: insight.id }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.brief) {
+        throw new Error(json.error ?? `Failed to save brief (${res.status})`)
+      }
+      onSaved(insight.id, json.brief.id)
+      router.push(`/briefs/${json.brief.id}`)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Save failed")
+      setSavingBrief(false)
+    }
+  }
 
   const multiplier = insight.performance_multiplier ?? 0
   const isMegaTip = insight.is_mega_tip === true
@@ -336,25 +372,57 @@ function InsightCard({
                 </div>
               )}
 
-              {/* Copy Brief button — full width, flashes emerald on success */}
-              <button
-                onClick={handleCopy}
-                className={`w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white active:scale-[0.98] transition-all ${
-                  copied
-                    ? "bg-emerald-600"
-                    : "bg-slate-900 hover:bg-slate-800"
-                }`}
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-4 w-4" /> Copied to clipboard
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" /> Copy Brief
-                  </>
-                )}
-              </button>
+              {/* Action row: Copy Brief + Save & Customize */}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  onClick={handleCopy}
+                  className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white active:scale-[0.98] transition-all ${
+                    copied ? "bg-emerald-600" : "bg-slate-900 hover:bg-slate-800"
+                  }`}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" /> Copy Brief
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleSaveAndCustomize}
+                  disabled={savingBrief}
+                  className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                    savedBriefId
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : "border-purple-300 bg-white text-purple-700 hover:bg-purple-50"
+                  }`}
+                >
+                  {savingBrief ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : savedBriefId ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Saved · Edit brief →
+                    </>
+                  ) : (
+                    <>
+                      <BookmarkPlus className="h-4 w-4" />
+                      Save & Customize →
+                    </>
+                  )}
+                </button>
+              </div>
+              {saveError && (
+                <p className="text-xs text-red-600 mt-2 inline-flex items-start gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>{saveError}</span>
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -403,10 +471,18 @@ export function InsightsClient({
   userId,
   initialInsights,
   competitorCount,
+  initialSavedBriefMap,
 }: Props) {
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
+  const [savedBriefMap, setSavedBriefMap] = useState<Record<string, string>>(
+    initialSavedBriefMap ?? {}
+  )
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const lastStatusRef = useRef<string | undefined>(undefined)
+
+  function handleBriefSaved(insightId: string, briefId: string) {
+    setSavedBriefMap((m) => ({ ...m, [insightId]: briefId }))
+  }
 
   const { jobs, startInsights, finishJob } = useJobTracker()
   const job = ownProfileId ? jobs.find((j) => j.id === `insights-${ownProfileId}`) : undefined
@@ -607,6 +683,8 @@ export function InsightsClient({
                 key={insight.id}
                 insight={insight}
                 fallbackTotalCompetitors={competitorCount}
+                savedBriefId={savedBriefMap[insight.id] ?? null}
+                onSaved={handleBriefSaved}
               />
             ))}
           </div>
@@ -628,6 +706,8 @@ export function InsightsClient({
                 key={insight.id}
                 insight={insight}
                 fallbackTotalCompetitors={competitorCount}
+                savedBriefId={savedBriefMap[insight.id] ?? null}
+                onSaved={handleBriefSaved}
               />
             ))}
           </div>

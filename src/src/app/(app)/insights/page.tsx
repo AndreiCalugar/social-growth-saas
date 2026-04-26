@@ -70,6 +70,29 @@ export default async function InsightsPage() {
     }
   }
 
+  // Map every trend_insight_id this user has saved → its saved_brief id, so the
+  // Insights cards can swap "Save & Customize" for "Edit brief". Tolerate the
+  // table not existing yet (schema/007 not run) by treating it as empty.
+  let savedBriefMap: Record<string, string> = {}
+  if (insights.length > 0) {
+    const { data: savedRows, error: savedErr } = await supabase
+      .from("saved_briefs")
+      .select("id, trend_insight_id")
+      .eq("user_id", userId)
+      .in("trend_insight_id", insights.map((i) => i.id))
+    if (savedErr) {
+      const tableMissing =
+        savedErr.code === "42P01" ||
+        savedErr.message?.includes("does not exist") ||
+        savedErr.message?.includes("schema cache")
+      if (!tableMissing) console.error("[insights page] saved_briefs lookup:", savedErr.message)
+    } else {
+      for (const row of savedRows ?? []) {
+        if (row.trend_insight_id) savedBriefMap[row.trend_insight_id] = row.id
+      }
+    }
+  }
+
   if (competitorCount < 3) {
     return (
       <div className="p-4 sm:p-6 max-w-2xl">
@@ -113,6 +136,7 @@ export default async function InsightsPage() {
       userId={userId}
       initialInsights={insights}
       competitorCount={competitorCount}
+      initialSavedBriefMap={savedBriefMap}
     />
   )
 }
