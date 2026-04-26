@@ -165,12 +165,26 @@ export async function POST(_req: NextRequest) {
     .eq("id", own.id)
     .eq("user_id", userId)
 
-  if (updErr) {
+  // If the schema/008 migration hasn't been applied yet, the UPDATE above
+  // 42703s on the missing column. Don't 500 the whole call — Claude already
+  // produced the suggestions, the user should still see them. We just can't
+  // persist between reloads until the migration runs.
+  const cacheMissing =
+    updErr &&
+    (updErr.code === "42703" ||
+      updErr.message?.includes("does not exist") ||
+      updErr.message?.includes("schema cache"))
+
+  if (updErr && !cacheMissing) {
     return NextResponse.json({ error: updErr.message }, { status: 500 })
   }
 
   return NextResponse.json({
     discovery_hashtags: parsed,
-    discovery_hashtags_updated: now,
+    discovery_hashtags_updated: cacheMissing ? null : now,
+    cached: !cacheMissing,
+    cache_warning: cacheMissing
+      ? "Suggestions generated but not saved — run schema/008-discovery-hashtags.sql in Supabase to enable caching."
+      : undefined,
   })
 }

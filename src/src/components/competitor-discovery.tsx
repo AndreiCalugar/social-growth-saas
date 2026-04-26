@@ -73,10 +73,12 @@ export function CompetitorDiscovery({
   const [updatedAt, setUpdatedAt] = useState<string | null>(initialUpdatedAt)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [cacheWarning, setCacheWarning] = useState<string | null>(null)
 
   async function generate() {
     setLoading(true)
     setErrorMsg(null)
+    setCacheWarning(null)
     try {
       const res = await fetch("/api/discover-hashtags", { method: "POST" })
       const json = await res.json()
@@ -84,7 +86,8 @@ export function CompetitorDiscovery({
         throw new Error(json.error ?? `Generation failed (${res.status})`)
       }
       setSuggestions(json.discovery_hashtags)
-      setUpdatedAt(json.discovery_hashtags_updated ?? new Date().toISOString())
+      setUpdatedAt(json.discovery_hashtags_updated ?? null)
+      if (json.cache_warning) setCacheWarning(json.cache_warning)
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Generation failed")
     } finally {
@@ -138,6 +141,11 @@ export function CompetitorDiscovery({
                 updatedAt={updatedAt}
                 onGenerate={generate}
               />
+              {cacheWarning && (
+                <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                  {cacheWarning}
+                </p>
+              )}
             </div>
 
             {/* @-mention suggestions — only when at least one competitor has
