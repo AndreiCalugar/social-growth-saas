@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Loader2,
   BookmarkPlus,
+  ClipboardList,
 } from "lucide-react"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 
@@ -56,6 +57,7 @@ interface Props {
   initialInsights: Insight[]
   competitorCount: number
   initialSavedBriefMap?: Record<string, string>
+  totalSavedBriefs?: number
 }
 
 function parseExamples(raw: unknown): ExamplePost[] {
@@ -472,10 +474,18 @@ export function InsightsClient({
   initialInsights,
   competitorCount,
   initialSavedBriefMap,
+  totalSavedBriefs = 0,
 }: Props) {
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
   const [savedBriefMap, setSavedBriefMap] = useState<Record<string, string>>(
     initialSavedBriefMap ?? {}
+  )
+  // Server gives us the persisted total at page load. Once the user saves a
+  // new brief in this session, bump the local count so the banner stays
+  // accurate without a page refresh.
+  const briefsSavedCount = Math.max(
+    totalSavedBriefs,
+    Object.keys(savedBriefMap).length
   )
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const lastStatusRef = useRef<string | undefined>(undefined)
@@ -665,6 +675,33 @@ export function InsightsClient({
             </span>
           </div>
         </div>
+      )}
+
+      {/* Briefs link banner — only when the user already has saved content
+          plan items. Subtle by design: doesn't compete with mega-tip cards
+          for attention, just gives a one-click jump to the work-in-progress
+          list. */}
+      {briefsSavedCount > 0 && status !== "generating" && (
+        <Link
+          href="/briefs"
+          className="group flex items-center justify-between gap-3 rounded-xl border border-purple-200/60 bg-gradient-to-r from-purple-50/80 to-white px-4 py-3 hover:border-purple-300 hover:shadow-sm transition-all"
+        >
+          <span className="inline-flex items-center gap-2.5 min-w-0">
+            <span className="h-7 w-7 shrink-0 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm">
+              <ClipboardList className="h-3.5 w-3.5 text-white" />
+            </span>
+            <span className="text-sm text-slate-700 truncate">
+              <span className="font-semibold text-slate-900 tabular-nums">
+                {briefsSavedCount}
+              </span>{" "}
+              brief{briefsSavedCount === 1 ? "" : "s"} saved
+              <span className="hidden sm:inline text-slate-500">
+                {" · "}View your content plan
+              </span>
+            </span>
+          </span>
+          <ArrowRight className="h-4 w-4 text-purple-500 shrink-0 transition-transform group-hover:translate-x-0.5" />
+        </Link>
       )}
 
       {/* Mega tips section */}
