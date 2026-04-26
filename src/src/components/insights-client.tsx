@@ -22,6 +22,7 @@ import {
   BookmarkPlus,
   ClipboardList,
 } from "lucide-react"
+import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 
 interface ExamplePost {
@@ -222,10 +223,7 @@ function InsightCard({
             {insight.trend_name}
           </h3>
           {multiplier > 0 && (
-            <span className="shrink-0 inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-3 py-1.5 text-sm font-bold text-white tabular-nums shadow-sm">
-              {multiplier.toFixed(1)}
-              <span className="text-[11px] font-semibold text-slate-300">×</span>
-            </span>
+            <MultiplierBadge multiplier={multiplier} />
           )}
         </div>
 

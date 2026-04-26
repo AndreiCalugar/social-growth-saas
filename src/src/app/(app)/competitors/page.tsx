@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth"
 import { AddCompetitorForm } from "@/components/add-competitor-form"
 import { CompetitorsClient } from "@/components/competitors-client"
 import { CompetitorDiscovery, type DiscoverySuggestions } from "@/components/competitor-discovery"
+import { InstagramLink } from "@/components/instagram-link"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { RetryScrapeButton } from "@/components/retry-scrape-button"
 import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
@@ -195,7 +196,7 @@ export default async function CompetitorsPage() {
                 <Link href={`/profiles/${c.id}`}>
                   <div className="h-full rounded-xl border border-slate-200/60 bg-white hover:bg-gradient-to-br hover:from-white hover:to-purple-50/30 p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div className="relative shrink-0">
                           <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm ring-2 ring-white">
                             <span className="text-sm font-bold text-white">{c.username.charAt(0).toUpperCase()}</span>
@@ -206,12 +207,22 @@ export default async function CompetitorsPage() {
                             title={statusDot.label}
                           />
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">@{c.username}</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">{statusDot.label}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <p
+                              className="text-sm font-semibold text-slate-900 truncate"
+                              title={`@${c.username}`}
+                            >
+                              @{c.username}
+                            </p>
+                            <InstagramLink username={c.username} size="xs" className="shrink-0" />
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 truncate">{statusDot.label}</p>
                         </div>
                       </div>
-                      <DeleteCompetitorButton profileId={c.id} username={c.username} />
+                      <div className="shrink-0">
+                        <DeleteCompetitorButton profileId={c.id} username={c.username} />
+                      </div>
                     </div>
 
                     <div className="mt-4 space-y-1.5 flex-1">

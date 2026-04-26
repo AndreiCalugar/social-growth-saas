@@ -6,7 +6,8 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { PostsTable } from "@/components/posts-table"
-import { Clock, TrendingUp } from "lucide-react"
+import { InstagramLink } from "@/components/instagram-link"
+import { Clock, TrendingUp, ArrowLeftRight } from "lucide-react"
 
 interface Profile {
   id: string
@@ -327,27 +328,46 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
       </div>
 
       {/* ── Deep comparison (one-on-one) ── */}
-      <div className="space-y-4 pt-2">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h2 className="text-sm font-medium">Deep Comparison</h2>
-          {competitors.length > 1 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground">vs:</span>
-              {competitors.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedId(c.id)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                    c.id === selectedId
-                      ? "bg-purple-50 text-purple-700 border-purple-300"
-                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  @{c.username}
-                </button>
-              ))}
+      <div className="space-y-4 pt-4 border-t border-slate-200/60">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <ArrowLeftRight className="h-4 w-4 text-purple-600" />
+            <h2 className="text-base font-bold text-slate-900">Deep Comparison</h2>
+          </div>
+          <p className="text-xs text-slate-500">
+            Side-by-side breakdown of you vs one competitor
+            {competitors.length > 1 ? " — pick which one below" : ""}.
+          </p>
+        </div>
+
+        {/* Competitor switcher — visible even with one competitor so the
+            interaction model is clear; with one option the single pill just
+            reads as the active selection. */}
+        <div className="rounded-xl border border-purple-200/60 bg-purple-50/40 px-3.5 py-2.5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-700">
+              Comparing @{ownProfile?.username ?? "you"} vs
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {competitors.map((c) => {
+                const active = c.id === selectedId
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelectedId(c.id)}
+                    aria-pressed={active}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all ${
+                      active
+                        ? "bg-purple-600 text-white border-purple-600 shadow-sm scale-[1.04]"
+                        : "bg-white text-purple-700 border-purple-200 hover:bg-purple-50 hover:border-purple-300 cursor-pointer"
+                    }`}
+                  >
+                    @{c.username}
+                  </button>
+                )
+              })}
             </div>
-          )}
+          </div>
         </div>
 
         {/* Side-by-side header */}
@@ -356,7 +376,10 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-purple-600" />
-                <CardTitle className="text-sm font-semibold">You — @{ownProfile?.username ?? "—"}</CardTitle>
+                <CardTitle className="text-sm font-semibold inline-flex items-center gap-1">
+                  You — @{ownProfile?.username ?? "—"}
+                  {ownProfile?.username && <InstagramLink username={ownProfile.username} size="xs" />}
+                </CardTitle>
               </div>
               <CardDescription className="flex items-center gap-3 text-xs">
                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatDate(ownProfile?.last_scraped)}</span>
@@ -371,7 +394,10 @@ export function CompetitorsClient({ ownProfile, competitors, allPosts }: Props) 
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-orange-400" />
-                <CardTitle className="text-sm font-semibold">@{competitor?.username ?? "—"}</CardTitle>
+                <CardTitle className="text-sm font-semibold inline-flex items-center gap-1">
+                  @{competitor?.username ?? "—"}
+                  {competitor?.username && <InstagramLink username={competitor.username} size="xs" />}
+                </CardTitle>
               </div>
               <CardDescription className="flex items-center gap-3 text-xs">
                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatDate(competitor?.last_scraped)}</span>
