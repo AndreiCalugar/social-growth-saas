@@ -71,7 +71,6 @@ export default async function ProfilesPage() {
                   key={profile.id}
                   profile={profile}
                   stats={stats}
-                  badge={<span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-sm">Own</span>}
                 />
               )
             })}
@@ -116,7 +115,6 @@ export default async function ProfilesPage() {
 interface ProfileCardProps {
   profile: { id: string; username: string; followers: number | null; last_scraped: string | null; is_own: boolean }
   stats: { count: number; avgEngagement: number | null; avgLikes: number | null }
-  badge?: React.ReactNode
 }
 
 function scrapeStatus(last_scraped: string | null): { dot: string; label: string; pulse: boolean } {
@@ -127,7 +125,7 @@ function scrapeStatus(last_scraped: string | null): { dot: string; label: string
   return { dot: "bg-red-500", label: "Needs rescrape", pulse: true }
 }
 
-function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
+function ProfileCard({ profile, stats }: ProfileCardProps) {
   const initials = profile.username.charAt(0).toUpperCase()
   const status = scrapeStatus(profile.last_scraped)
   return (
@@ -136,7 +134,7 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
       <Link href={`/profiles/${profile.id}`}>
         <div className="h-full rounded-xl border border-slate-200/60 bg-white hover:bg-gradient-to-br hover:from-white hover:to-purple-50/30 p-6 shadow-sm hover:shadow-md hover:border-purple-200 hover:scale-[1.01] transition-all cursor-pointer flex flex-col">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="relative shrink-0">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm ring-2 ring-white">
                   <span className="text-sm font-bold text-white">{initials}</span>
@@ -147,16 +145,20 @@ function ProfileCard({ profile, stats, badge }: ProfileCardProps) {
                   title={status.label}
                 />
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900 truncate inline-flex items-center gap-1">
-                  @{profile.username}
-                  <InstagramLink username={profile.username} size="xs" />
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">{status.label}</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1 min-w-0">
+                  <p
+                    className="text-sm font-semibold text-slate-900 truncate"
+                    title={`@${profile.username}`}
+                  >
+                    @{profile.username}
+                  </p>
+                  <InstagramLink username={profile.username} size="xs" className="shrink-0" />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5 truncate">{status.label}</p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {badge}
               <ProfileCardActions profileId={profile.id} username={profile.username} />
             </div>
           </div>
