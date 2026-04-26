@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { UserPlus, Loader2 } from "lucide-react"
 import { useJobTracker } from "@/components/job-tracker"
+import { PREFILL_EVENT } from "@/components/competitor-discovery"
 
 export function AddCompetitorForm() {
   const [state, setState] = useState<"idle" | "loading" | "polling" | "error">("idle")
@@ -11,6 +12,24 @@ export function AddCompetitorForm() {
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const { startScrape } = useJobTracker()
+
+  // The discovery section's "Add" buttons fire a window event with the
+  // suggested handle. We pick it up, write to the input, and focus so the
+  // user just has to hit Enter to scrape.
+  useEffect(() => {
+    function handlePrefill(event: Event) {
+      const detail = (event as CustomEvent<{ username?: string }>).detail
+      const username = detail?.username?.replace(/^@/, "").trim()
+      if (!username || !inputRef.current) return
+      inputRef.current.value = username
+      inputRef.current.focus()
+      // Clear any stale error/cooldown message from a previous submit.
+      setState("idle")
+      setMessage("")
+    }
+    window.addEventListener(PREFILL_EVENT, handlePrefill)
+    return () => window.removeEventListener(PREFILL_EVENT, handlePrefill)
+  }, [])
 
   function startPolling(profileId: string) {
     setState("polling")
@@ -91,7 +110,11 @@ export function AddCompetitorForm() {
 
   const isBusy = state === "loading" || state === "polling"
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+    <form
+      onSubmit={handleSubmit}
+      data-add-competitor-form
+      className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap"
+    >
       <div className="relative w-full sm:w-60">
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none font-medium">@</span>
         <input
