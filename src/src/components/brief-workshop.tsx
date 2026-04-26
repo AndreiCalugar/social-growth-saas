@@ -17,6 +17,7 @@ import {
   X,
   AlertCircle,
 } from "lucide-react"
+import { StatusPillRow, type BriefStatus } from "@/components/status-pill"
 
 export interface SavedBrief {
   id: string
@@ -45,18 +46,10 @@ export interface SavedBrief {
   updated_at: string
 }
 
-export type BriefStatus = "saved" | "planning" | "filming" | "filmed" | "posted"
+export type { BriefStatus }
 export interface HookVariation { style?: string; hook?: string; why?: string }
 export interface ContentAngle { angle?: string; description?: string }
 export interface CaptionVariation { style?: string; caption?: string }
-
-const STATUS_OPTIONS: { value: BriefStatus; label: string; cls: string }[] = [
-  { value: "saved",    label: "Saved",    cls: "bg-slate-100   text-slate-700   border-slate-200" },
-  { value: "planning", label: "Planning", cls: "bg-blue-50     text-blue-700    border-blue-200" },
-  { value: "filming",  label: "Filming",  cls: "bg-amber-50    text-amber-700   border-amber-200" },
-  { value: "filmed",   label: "Filmed",   cls: "bg-purple-50   text-purple-700  border-purple-200" },
-  { value: "posted",   label: "Posted",   cls: "bg-emerald-50  text-emerald-700 border-emerald-200" },
-]
 
 export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
   const router = useRouter()
@@ -197,27 +190,15 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
           ) : null}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
             Status
           </span>
-          {STATUS_OPTIONS.map((opt) => {
-            const active = brief.status === opt.value
-            return (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  if (active) return
-                  saveField({ status: opt.value })
-                }}
-                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${
-                  active ? `${opt.cls} ring-1 ring-offset-1 ring-slate-300` : `${opt.cls} opacity-60 hover:opacity-100`
-                }`}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
+          <StatusPillRow
+            current={brief.status}
+            onChange={(next) => saveField({ status: next })}
+            disabled={savingFields.has("status")}
+          />
           {savingFields.has("status") && (
             <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
           )}
