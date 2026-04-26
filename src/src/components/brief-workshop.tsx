@@ -18,6 +18,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { StatusPillRow, type BriefStatus } from "@/components/status-pill"
+import { MultiplierBadge } from "@/components/multiplier-badge"
 
 export interface SavedBrief {
   id: string
@@ -183,10 +184,7 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
             </p>
           </div>
           {brief.performance_multiplier ? (
-            <span className="shrink-0 inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-3 py-1.5 text-sm font-bold text-white tabular-nums shadow-sm">
-              {brief.performance_multiplier.toFixed(1)}
-              <span className="text-[11px] font-semibold text-slate-300">×</span>
-            </span>
+            <MultiplierBadge multiplier={brief.performance_multiplier} />
           ) : null}
         </div>
 

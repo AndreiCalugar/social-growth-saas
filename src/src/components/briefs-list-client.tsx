@@ -23,6 +23,7 @@ import {
   statusSortKey,
   type BriefStatus,
 } from "@/components/status-pill"
+import { MultiplierBadge } from "@/components/multiplier-badge"
 import type { SavedBrief } from "@/components/brief-workshop"
 
 type FilterValue = "all" | BriefStatus
@@ -320,10 +321,7 @@ function BriefRow({
               {brief.trend_name}
             </Link>
             {brief.performance_multiplier ? (
-              <span className="shrink-0 inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white tabular-nums">
-                {brief.performance_multiplier.toFixed(1)}
-                <span className="text-[9px] font-semibold text-slate-300">×</span>
-              </span>
+              <MultiplierBadge multiplier={brief.performance_multiplier} size="sm" />
             ) : null}
           </div>
           {preview && (
