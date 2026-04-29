@@ -1,10 +1,12 @@
 # Social Growth SaaS
 
-> AI-powered Instagram & TikTok analytics platform that turns raw social data into actionable growth insights.
+> AI-powered Instagram analytics that turns competitor posts into a slate of actionable content themes.
 
 ## What it does
 
-Users connect their Instagram and TikTok profiles, add competitor accounts, and the platform automatically scrapes post data via Apify, analyzes it with Claude AI, and surfaces growth recommendations through a visual dashboard. The system re-scrapes weekly and updates insights automatically. Everything from content mix breakdowns to 30-day AI-generated content calendars is driven by real data from your niche.
+You add 3–7 competitors. The platform scrapes ~100 recent posts from each via Apify, scores them by per-creator outlier ratio, then asks Claude to group the top 50 winners into 5–8 filmable content themes — each one tied to specific format, hook, caption, posting-time, and hashtag guidance. Claude auto-detects your niche from your own posts, drops off-niche viral content, and flags themes you're already executing with a "refine your version" tip. Save any theme as a brief, AI-expand it into hook/content/caption variations, and schedule it.
+
+The **Insights page** (`/insights`) is the core product — cross-competitor theme detection. Everything else (profile management, scrape pipeline, briefs workshop) is supporting context.
 
 ## Tech Stack
 
@@ -12,10 +14,10 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 |-------|-----------|
 | Frontend | Next.js 16 (App Router, Turbopack), Tailwind CSS v4, shadcn/ui, Recharts |
 | Backend API | Next.js API routes |
-| Automation engine | n8n (self-hosted via Docker) |
+| Automation | n8n (self-hosted via Docker) |
 | Scraping | Apify (Instagram Post Scraper) |
-| AI analysis | Claude API (claude-sonnet-4-5) |
-| Database | Supabase (PostgreSQL, REST) |
+| AI | Claude API (claude-sonnet-4-5, 12K max_tokens for the insights run) |
+| Database | Supabase (PostgreSQL via REST) |
 | Auth | NextAuth.js (credentials, bcrypt) |
 | Hosting | Vercel (production: api.narativ.space) |
 | Billing | Stripe (planned) |
@@ -25,28 +27,29 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   Frontend (Next.js)                 │
-│         Dashboard · Profile mgmt · Calendar          │
+│   Insights · Briefs workshop · Profiles · Overview   │
 └──────────────────────┬──────────────────────────────┘
                        │ REST / webhooks
 ┌──────────────────────▼──────────────────────────────┐
 │                 Backend API (Next.js)                │
-│          Auth · User data · Trigger workflows        │
+│       Auth · CRUD · Trigger n8n · Brief expand       │
 └──────────────────────┬──────────────────────────────┘
                        │ webhook triggers
 ┌──────────────────────▼──────────────────────────────┐
 │              n8n Automation Engine                   │
-│   Workflow 1: Scrape  ·  WF2: Analyse  ·  WF3: Trend│
+│   WF1: Scrape  ·  WF2: Per-profile  ·  WF3: Themes  │
 └───────────┬───────────────────────┬─────────────────┘
             │                       │
 ┌───────────▼──────┐   ┌────────────▼────────────────┐
-│   Apify API      │   │       Claude API             │
-│ Instagram/TikTok │   │  Insights · Recommendations  │
-│    scraping      │   │    Content calendar          │
+│    Apify API     │   │       Claude API             │
+│   Instagram      │   │  Theme grouping + briefs     │
+│    scraping      │   │  Niche detection + filtering │
 └──────────────────┘   └─────────────────────────────┘
             │                       │
 ┌───────────▼───────────────────────▼─────────────────┐
 │              Supabase (PostgreSQL)                   │
-│    profiles · posts · scrape_runs · analyses        │
+│   profiles · posts · scrape_runs · trend_insights   │
+│   saved_briefs · users                              │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -54,34 +57,44 @@ Users connect their Instagram and TikTok profiles, add competitor accounts, and 
 
 ### Shipped
 
-- [x] Infrastructure (Docker, n8n, Supabase schema)
-- [x] Database schema (`profiles`, `posts`, `scrape_runs`, `analyses`, `recommendations`, `trend_insights`, `users`)
-- [x] Workflow 1: Instagram scrape pipeline (poll-loop fixed to wait for full Apify run; returns 100 posts per account)
-- [x] Workflow 2: AI analysis pipeline (single-profile Claude analysis → engagement summary + top/worst posts + recommendations)
-- [x] Workflow 3: Insights Engine — cross-competitor trend detection (Claude Sonnet 4.5, validated-only trends with competitor_count ≥ 2, multiplier range 1.5–25, safe empty-result handling)
-- [x] Auth (NextAuth + Supabase `users` table, signup / login / session)
-- [x] Split-screen login / signup pages with animated gradient showcase panel
-- [x] Onboarding landing page for zero-profile users (hero + how-it-works + example brief + final CTA)
-- [x] Stage-based Overview dashboard (snapshot → account health → content brief as the user progresses)
-- [x] Real-time job tracker with bottom-right toast pills + on-card overlays + persistent state across navigation (scrape / analysis / insights)
-- [x] Two-tier scrape cooldown (15-min hard block, 24-h soft block with force override)
-- [x] Click-guard + freshness check on all action buttons (prevents double-firing Apify runs)
-- [x] Insights page: sparse-data CTA, empty-run banner, safety filter that drops fabricated rows
+- [x] Auth (NextAuth + Supabase `users`, signup / login / session)
+- [x] Split-screen login / signup with animated showcase panel
+- [x] Onboarding landing for zero-profile users
+- [x] Stage-based Overview dashboard (snapshot → account health → content brief)
+- [x] Profiles + Competitors pages with AI-suggested handles via discovery hashtags
+- [x] Workflow 1: Instagram scrape pipeline (poll-loop fixed, 100 posts/account, 15-min hard cooldown + 24-h soft block, click-guard)
+- [x] Workflow 2: Per-profile Claude analysis (single-account engagement summary + recommendations)
+- [x] **Workflow 3: Insights Engine — the core product**
+  - Top-50 winners algorithm (deterministic scoring `outlier_ratio × log10(likes)`, then Claude grouping)
+  - Per-creator median (not mean) so a single viral hit doesn't pull its own baseline up
+  - Niche auto-detected from user's own top 10 posts; off-niche viral content filtered with auditable diag
+  - Multiplier cap at 50× (with `50+` indicator) to prevent absurd values from skewed historical medians
+  - Two-section UI: New opportunities (themes you don't yet do) + Refinements (themes you already do, with a specific competitor-edge tweak)
+- [x] Briefs workshop: save themes, AI-expand into hook/content/caption variations, customize, schedule, status pills (saved → planning → filming → filmed → posted)
+- [x] Real-time job tracker (bottom-right toast pills + on-card overlays + persistent state across navigation, separate timeouts per kind)
+- [x] Empty-run banner + diag payload exposing exactly which stage dropped trends
+- [x] Multiplier badge with portal-based explainer tooltip
 - [x] Deployed to Vercel (production: api.narativ.space)
 
-### Next
+### Documented, not built
 
-- [ ] Data-freshness cooldown for analysis + insights (skip re-runs when inputs haven't changed)
-- [ ] Stripe billing
-- [ ] Public marketing landing (/ when signed out)
-- [ ] TikTok support
+- [ ] **Phase 2: Whisper transcripts** — opt-in deep-analyze on individual themes that fetches the top reel videos, transcribes via OpenAI Whisper, and enriches briefs with exact spoken hooks + pacing notes. Full architecture spec at [`docs/TRANSCRIPT-FEATURE-SPEC.md`](docs/TRANSCRIPT-FEATURE-SPEC.md).
+
+### Next (rough priority)
+
+- [ ] First-run onboarding wizard (signup → add competitors → scrape all → first insight)
+- [ ] Auto re-scrape + data-freshness indicator ("Last scraped 12 days ago — refresh?")
+- [ ] Phase 2 transcripts (per spec above)
+- [ ] Brief → publish integration (Buffer / Later / Meta API)
+- [ ] Stripe billing + tier gating
+- [ ] Public marketing landing page (`/` when signed out)
 
 ## Local Development Setup
 
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- Node.js 18+ (for the Next.js frontend, coming later)
+- Node.js 18+ for the Next.js frontend
 - Accounts at [Apify](https://console.apify.com), [Supabase](https://supabase.com), and [Anthropic](https://console.anthropic.com)
 
 ### 1. Clone the repo
@@ -109,13 +122,25 @@ SUPABASE_DB_URL=postgresql://postgres:...@db.your-project.supabase.co:5432/postg
 N8N_API_KEY=...        # generate after first n8n login
 ```
 
-### 3. Run the database schema
+### 3. Run the database migrations
 
-In your Supabase project, go to **SQL Editor** and run:
+In your Supabase project, **SQL Editor** → run each file in `schema/` in order:
 
-```bash
-schema/001-initial-schema.sql
 ```
+schema/001-initial-schema.sql
+schema/002-analyses-schema.sql
+schema/003-trend-insights.sql
+schema/004-users-auth.sql
+schema/005-restore-profiles-unique.sql
+schema/006-trend-insights-structured-brief.sql
+schema/007-saved-briefs.sql
+schema/008-discovery-hashtags.sql
+schema/009-trend-insights-competitor-edge.sql
+schema/010-trend-type.sql
+schema/011-detected-niche.sql
+```
+
+All migrations are `IF NOT EXISTS` / idempotent — safe to re-run.
 
 ### 4. Start n8n
 
@@ -123,7 +148,7 @@ schema/001-initial-schema.sql
 docker compose up -d
 ```
 
-n8n will be available at **http://localhost:5678**
+n8n will be available at **http://localhost:5678**.
 
 First time only:
 1. Create your owner account at http://localhost:5678
@@ -131,9 +156,14 @@ First time only:
 
 ### 5. Import the workflows
 
-In n8n → **Workflows → Import from file** → pick any file from `n8n-workflows/`.
+In n8n → **Workflows → Import from file** → import each file from `n8n-workflows/`:
+- `scrape-pipeline.json`
+- `analysis-pipeline.json`
+- `cross-analysis-pipeline.json`
 
 Activate each workflow with the toggle in the top-right.
+
+> **Heads up:** every time `n8n-workflows/cross-analysis-pipeline.json` is updated in this repo, you have to re-import it into your n8n instance — the imported workflow doesn't auto-sync from the file.
 
 ### 6. Verify everything is working
 
@@ -149,29 +179,49 @@ curl -X POST http://localhost:5678/webhook/scrape-instagram \
   -d '{"username": "yourusername"}'
 ```
 
+### 8. Start the frontend
+
+```bash
+cd src
+npm install
+npm run dev
+```
+
+Open http://localhost:3000.
+
 ## Folder Structure
 
 ```
 social-growth-saas/
-├── docker-compose.yml        # n8n service definition
-├── .env                      # API keys (never committed)
-├── .env.example              # Template for .env
-├── schema/
-│   ├── 001-initial-schema.sql       # profiles, posts, scrape_runs
-│   └── 002-analyses-schema.sql      # analyses, recommendations
+├── docker-compose.yml              # n8n service definition
+├── .env                            # API keys (never committed)
+├── .env.example                    # Template for .env
+├── schema/                         # Supabase migrations, run in order
+│   ├── 001-initial-schema.sql
+│   ├── 002-analyses-schema.sql
+│   ├── 003-trend-insights.sql
+│   ├── 004-users-auth.sql
+│   ├── 005-restore-profiles-unique.sql
+│   ├── 006-trend-insights-structured-brief.sql
+│   ├── 007-saved-briefs.sql
+│   ├── 008-discovery-hashtags.sql
+│   ├── 009-trend-insights-competitor-edge.sql
+│   ├── 010-trend-type.sql
+│   └── 011-detected-niche.sql
 ├── n8n-workflows/
-│   ├── scrape-pipeline.json         # Workflow 1: Instagram scrape
-│   ├── analysis-pipeline.json       # Workflow 2: Claude AI analysis
-│   └── cross-analysis-pipeline.json # Workflow 3: Insights Engine (cross-competitor)
-├── schema/
-│   ├── 001-initial-schema.sql       # profiles, posts, scrape_runs
-│   ├── 002-analyses-schema.sql      # analyses, recommendations
-│   └── 003-trend-insights.sql       # trend_insights table
+│   ├── scrape-pipeline.json        # WF1: Instagram scrape
+│   ├── analysis-pipeline.json      # WF2: Per-profile Claude analysis
+│   └── cross-analysis-pipeline.json # WF3: Insights Engine (top-50 → themes)
 ├── scripts/
-│   └── verify-setup.sh              # Infrastructure health checker
+│   ├── seed-users.js               # Test user seeder
+│   └── verify-setup.sh             # Infrastructure health checker
 ├── docs/
-│   ├── MVP-BLUEPRINT.md             # Full product blueprint
-│   └── INSIGHTS-ENGINE.md           # Technical overview of Insights Engine
-├── src/                             # Next.js app (in progress)
+│   ├── MVP-BLUEPRINT.md            # Full product blueprint
+│   ├── INSIGHTS-ENGINE.md          # Insights Engine technical overview
+│   └── TRANSCRIPT-FEATURE-SPEC.md  # Phase 2 (transcripts) architecture spec
+├── src/                            # Next.js app
+│   └── src/
+│       ├── app/                    # App Router pages + API routes
+│       └── components/             # React components
 └── CHANGELOG.md
 ```
