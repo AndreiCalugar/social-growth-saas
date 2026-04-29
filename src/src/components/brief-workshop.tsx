@@ -19,6 +19,8 @@ import {
 } from "lucide-react"
 import { StatusPillRow, type BriefStatus } from "@/components/status-pill"
 import { MultiplierBadge } from "@/components/multiplier-badge"
+import { useCooldownTimer } from "@/lib/use-cooldown-timer"
+import { Clock } from "lucide-react"
 
 export interface SavedBrief {
   id: string
@@ -65,6 +67,8 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
   const [deleting, setDeleting] = useState(false)
   const [captionTab, setCaptionTab] = useState<"original" | number>("original")
   const [newHashtag, setNewHashtag] = useState("")
+  const [cooldownUntil, setCooldownUntil] = useState<string | null>(null)
+  const cooldownTimer = useCooldownTimer(cooldownUntil)
 
   async function saveField(patch: Partial<SavedBrief>) {
     const fields = Object.keys(patch)
@@ -95,13 +99,20 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
   }
 
   async function handleExpand() {
+    if (cooldownTimer) return
     setExpanding(true)
     setErrorMsg(null)
     try {
       const res = await fetch(`/api/briefs/${brief.id}/expand`, { method: "POST" })
       const json = await res.json()
+      if (res.status === 429) {
+        // Surface as a friendly cooldown banner instead of an error.
+        if (json.nextAvailableAt) setCooldownUntil(json.nextAvailableAt)
+        return
+      }
       if (!res.ok) throw new Error(json.error ?? `Generation failed (${res.status})`)
       setBrief(json.brief)
+      setCooldownUntil(null)
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Generation failed")
     } finally {
@@ -254,23 +265,35 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
         )}
 
         {!hasExpansion && (
-          <button
-            onClick={handleExpand}
-            disabled={expanding}
-            className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-white px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {expanding ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Generating variations…
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-3.5 w-3.5" />
-                Generate variations with AI
-              </>
+          <div className="space-y-2">
+            <button
+              onClick={handleExpand}
+              disabled={expanding || !!cooldownTimer}
+              className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-white px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {expanding ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Generating variations…
+                </>
+              ) : cooldownTimer ? (
+                <>
+                  <Clock className="h-3.5 w-3.5" />
+                  Available in {cooldownTimer.label}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Generate variations with AI
+                </>
+              )}
+            </button>
+            {cooldownTimer && (
+              <p className="text-[11px] text-slate-500 leading-snug">
+                You&apos;ve used 5 AI expansions this hour. Next slot opens in {cooldownTimer.label}.
+              </p>
             )}
-          </button>
+          </div>
         )}
 
         {hasExpansion && brief.hook_variations && brief.hook_variations.length > 0 && (

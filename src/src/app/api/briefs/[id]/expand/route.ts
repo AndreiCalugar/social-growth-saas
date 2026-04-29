@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { auth } from "@/lib/auth"
+import { checkHourlyQuota, rateLimitedResponse } from "@/lib/cooldown"
+
+const MAX_EXPANSIONS_PER_HOUR = 5
 
 const SAVED_BRIEF_COLUMNS =
   "id, user_id, trend_insight_id, trend_name, trend_type, performance_multiplier, original_content, original_hook, original_caption, original_posting_time, original_hashtags, original_competitor_edge, hook_variations, content_angles, caption_variations, chosen_hook, chosen_content, chosen_caption, chosen_posting_time, chosen_hashtags, user_notes, scheduled_date, scheduled_time, status, created_at, updated_at" as const
@@ -66,6 +69,31 @@ export async function POST(
   }
 
   const { id } = await params
+
+  // Rate limit BEFORE the brief load so we don't waste a query when the
+  // user is at the cap. The check counts saved_briefs the user has
+  // expanded in the trailing hour (hook_variations IS NOT NULL filter)
+  // — re-expanding the same brief still touches updated_at but doesn't
+  // double-count toward the cap, since it's row-based.
+  const quota = await checkHourlyQuota({
+    table: "saved_briefs",
+    column: "updated_at",
+    filterField: "user_id",
+    filterValue: session.user.id,
+    windowMinutes: 60,
+    maxCount: MAX_EXPANSIONS_PER_HOUR,
+    notNullColumn: "hook_variations",
+  })
+
+  if (!quota.allowed) {
+    return NextResponse.json(
+      rateLimitedResponse(
+        quota,
+        `You've used ${MAX_EXPANSIONS_PER_HOUR} AI expansions this hour. Next available in ${quota.minutesRemaining} min.`
+      ),
+      { status: 429 }
+    )
+  }
 
   const { data: brief, error: loadErr } = await supabase
     .from("saved_briefs")

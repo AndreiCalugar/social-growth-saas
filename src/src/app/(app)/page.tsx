@@ -432,6 +432,7 @@ export default async function OverviewPage() {
         username={ownProfile.username}
         profileId={ownProfile.id}
         lastScraped={ownProfile.last_scraped}
+        lastAnalysisAt={data.latestAnalysisAt}
       />
 
       {data.postCount === 0 ? (
@@ -455,10 +456,12 @@ function OverviewHeader({
   username,
   profileId,
   lastScraped,
+  lastAnalysisAt,
 }: {
   username: string
   profileId: string
   lastScraped: string | null
+  lastAnalysisAt: string | null
 }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -470,7 +473,11 @@ function OverviewHeader({
         </p>
       </div>
       <div className="shrink-0">
-        <RunAnalysisButton profileId={profileId} username={username} />
+        <RunAnalysisButton
+          profileId={profileId}
+          username={username}
+          lastAnalysisAt={lastAnalysisAt}
+        />
       </div>
     </div>
   )
