@@ -21,6 +21,7 @@ import {
   Loader2,
   BookmarkPlus,
   ClipboardList,
+  Lightbulb,
 } from "lucide-react"
 import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
@@ -50,10 +51,13 @@ interface Insight {
   caption_structure?: string | null
   best_time?: string | null
   hashtags?: string[] | null
+  competitor_edge?: string | null
+  trend_type?: string | null
 }
 
 interface Props {
   ownProfileId: string | null
+  ownUsername: string | null
   userId: string
   initialInsights: Insight[]
   competitorCount: number
@@ -69,13 +73,23 @@ function parseExamples(raw: unknown): ExamplePost[] {
   return []
 }
 
-function dedupeExamples(examples: ExamplePost[]): ExamplePost[] {
+function dedupeExamples(
+  examples: ExamplePost[],
+  ownUsername: string | null
+): ExamplePost[] {
   const seen = new Set<string>()
   const out: ExamplePost[] = []
+  const ownHandle = ownUsername?.replace(/^@/, "").toLowerCase() ?? null
+  // The redesign lets a single theme be sourced from one creator's wins
+  // (no more validated/standout split), so we allow multiple examples
+  // from the same competitor. Cap at 3 to keep the card scannable.
   for (const ex of examples) {
     const comp = (ex.competitor || "").replace(/^@/, "").toLowerCase()
-    if (!comp || seen.has(comp)) continue
-    seen.add(comp)
+    if (!comp) continue
+    if (ownHandle && comp === ownHandle) continue // defensive: filter own handle
+    const key = comp + "::" + (ex.caption_preview || "").slice(0, 40).toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
     out.push(ex)
     if (out.length === 3) break
   }
@@ -105,25 +119,13 @@ function buildSummary(insight: Insight): string {
   return truncate(firstSentence(rec), 100)
 }
 
-function competitorFractionLabel(insight: Insight, fallbackTotal: number): string | null {
-  if (insight.competitor_count != null && insight.total_competitors != null) {
-    return `Found in ${insight.competitor_count} of ${insight.total_competitors} competitors`
-  }
-  if (insight.confidence != null && fallbackTotal > 0) {
-    const matched = Math.max(1, Math.round(insight.confidence * fallbackTotal))
-    return `Found in ${matched} of ${fallbackTotal} competitors`
-  }
-  return null
-}
-
-function buildCopyText(insight: Insight, fraction: string | null): string {
+function buildCopyText(insight: Insight): string {
   const mult = insight.performance_multiplier ?? 0
   const lines: string[] = []
   lines.push(`🎬 ${insight.trend_name}`)
-  const meta: string[] = []
-  if (mult > 0) meta.push(`${mult.toFixed(1)}× avg engagement`)
-  if (fraction) meta.push(fraction)
-  if (meta.length) lines.push(`📊 ${meta.join(" | ")}`)
+  if (mult > 0) {
+    lines.push(`📊 ${mult.toFixed(1)}× baseline`)
+  }
   lines.push("")
   if (insight.content_format) lines.push(`CONTENT: ${insight.content_format}`)
   if (insight.hook) lines.push(`HOOK: ${insight.hook}`)
@@ -131,6 +133,12 @@ function buildCopyText(insight: Insight, fraction: string | null): string {
   if (insight.best_time) lines.push(`POST: ${insight.best_time}`)
   if (insight.hashtags && insight.hashtags.length) {
     lines.push(`TAGS: ${insight.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ")}`)
+  }
+  if (insight.competitor_edge) {
+    lines.push("")
+    // is_mega_tip=false signals a "level up" theme (user already does this).
+    const edgeLabel = insight.is_mega_tip === false ? "LEVEL UP" : "COMPETITOR EDGE"
+    lines.push(`${edgeLabel}: ${insight.competitor_edge}`)
   }
   if (
     !insight.content_format &&
@@ -145,12 +153,12 @@ function buildCopyText(insight: Insight, fraction: string | null): string {
 
 function InsightCard({
   insight,
-  fallbackTotalCompetitors,
+  ownUsername,
   savedBriefId,
   onSaved,
 }: {
   insight: Insight
-  fallbackTotalCompetitors: number
+  ownUsername: string | null
   savedBriefId: string | null
   onSaved: (insightId: string, briefId: string) => void
 }) {
@@ -187,11 +195,9 @@ function InsightCard({
 
   const multiplier = insight.performance_multiplier ?? 0
   const isMegaTip = insight.is_mega_tip === true
-  const userDoingIt = insight.is_mega_tip === false
   const summary = buildSummary(insight)
-  const fraction = competitorFractionLabel(insight, fallbackTotalCompetitors)
-  const examples = dedupeExamples(parseExamples(insight.example_posts))
-  const showExamples = examples.length >= 2
+  const examples = dedupeExamples(parseExamples(insight.example_posts), ownUsername)
+  const showExamples = examples.length >= 1
 
   const hasStructured = Boolean(
     insight.content_format ||
@@ -202,7 +208,7 @@ function InsightCard({
   )
 
   async function handleCopy() {
-    const text = buildCopyText(insight, fraction)
+    const text = buildCopyText(insight)
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -213,7 +219,7 @@ function InsightCard({
   return (
     <div
       className={`bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md transition-all overflow-hidden border-l-4 ${
-        isMegaTip ? "border-l-amber-500" : "border-l-emerald-500"
+        isMegaTip ? "border-l-amber-500" : "border-l-slate-300"
       }`}
     >
       <div className="p-4 sm:p-5">
@@ -232,24 +238,21 @@ function InsightCard({
           <p className="mt-2 text-sm text-slate-600 leading-snug">{summary}</p>
         )}
 
-        {/* Meta row: competitor count + status */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {fraction && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
-              <Users className="h-3 w-3" />
-              {fraction}
-            </span>
-          )}
-          {userDoingIt ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-semibold border border-emerald-100">
-              <Check className="h-3 w-3" /> You&apos;re doing this
-            </span>
-          ) : isMegaTip ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-2 py-0.5 text-[11px] font-semibold border border-amber-100">
-              <Zap className="h-3 w-3" /> Try this
-            </span>
-          ) : null}
-        </div>
+        {/* Competitor edge / level-up tip — light blue highlight when
+            present. For "Level up" cards (is_mega_tip=false) this is the
+            specific thing competitors do differently; for new
+            opportunities it doubles as a craft note. */}
+        {insight.competitor_edge && (
+          <div className="mt-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-sky-700 mb-1 inline-flex items-center gap-1">
+              <Lightbulb className="h-3 w-3" />
+              {isMegaTip ? "How competitors execute it" : "How to level up"}
+            </p>
+            <p className="text-sm text-sky-900 leading-snug">
+              {insight.competitor_edge}
+            </p>
+          </div>
+        )}
 
         {/* Expand toggle */}
         <button
@@ -468,12 +471,14 @@ function BriefSection({
 
 export function InsightsClient({
   ownProfileId,
+  ownUsername,
   userId,
   initialInsights,
   competitorCount,
   initialSavedBriefMap,
   totalSavedBriefs = 0,
 }: Props) {
+  const [showPlaybook, setShowPlaybook] = useState(false)
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
   const [savedBriefMap, setSavedBriefMap] = useState<Record<string, string>>(
     initialSavedBriefMap ?? {}
@@ -528,32 +533,49 @@ export function InsightsClient({
     startInsights({ ownProfileId, cursor })
     const jobId = `insights-${ownProfileId}`
 
+    let res: Response
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
+      res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ own_profile_id: ownProfileId, user_id: userId }),
+        body: JSON.stringify({
+          own_profile_id: ownProfileId,
+          user_id: userId,
+          // Workflow uses this to scrub Claude's example_posts of any
+          // reference to the user's own handle.
+          own_username: ownUsername ?? "",
+        }),
       })
-
-      if (!res.ok) {
-        const rawText = await res.text()
-        throw new Error(`n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`)
-      }
-      // The webhook returns a definitive result. Use it to end the tracker job
-      // immediately rather than waiting for polling — important for the
-      // empty-result case, where no fresh DB row exists for polling to see.
-      const body = (await res.json().catch(() => ({}))) as {
-        trends_detected?: number
-      }
-      if (typeof body.trends_detected === "number" && body.trends_detected === 0) {
-        setLastRunEmpty(true)
-      }
-      finishJob(jobId, { success: true })
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error"
+      // The fetch itself failed (network error, tab throttle, etc.) — we
+      // don't know whether n8n succeeded. Don't kill the job; the
+      // polling tracker will detect inserted rows or surface its own
+      // timeout. Keep a console.warn so silent network failures aren't
+      // invisible during incident triage.
+      const message = e instanceof Error ? e.message : "Network error"
+      console.warn("Insights webhook fetch failed; relying on polling:", message)
+      return
+    }
+
+    if (!res.ok) {
+      const rawText = await res.text().catch(() => "")
+      const message = `n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`
       setErrorMsg(message)
       finishJob(jobId, { success: false, errorMessage: message })
+      return
     }
+
+    // The webhook returns a definitive result. Use it to end the tracker job
+    // immediately rather than waiting for polling — important for the
+    // empty-result case, where no fresh DB row exists for polling to see.
+    const body = (await res.json().catch(() => ({}))) as {
+      trends_detected?: number
+      diag?: unknown
+    }
+    if (typeof body.trends_detected === "number" && body.trends_detected === 0) {
+      setLastRunEmpty(true)
+    }
+    finishJob(jobId, { success: true })
   }
 
   const status: "idle" | "generating" | "done" | "error" = running
@@ -579,7 +601,7 @@ export function InsightsClient({
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Insights Engine</h1>
           </div>
           <p className="text-sm text-slate-500">
-            Cross-competitor trend detection across {competitorCount} accounts
+            Based on top-performing posts from {competitorCount} competitor{competitorCount === 1 ? "" : "s"}
           </p>
         </div>
 
@@ -621,57 +643,49 @@ export function InsightsClient({
       )}
 
       {/* Empty-run banner — fires when the last Generate Insights call finished
-          successfully but Claude found zero validated cross-competitor
-          patterns. Distinct from "no insights ever generated" — it tells the
-          user the engine ran and the niche/competitor set is the bottleneck,
-          not the engine. */}
+          successfully but Claude found zero usable themes. With the redesign
+          this is rare: themes are extracted from already-high-performing
+          posts, so the only way to hit zero is missing competitor data. */}
       {lastRunEmpty && status !== "generating" && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-900 leading-relaxed">
-            <p className="font-semibold">We analyzed {competitorCount} competitor{competitorCount === 1 ? "" : "s"} and found no patterns in 2+ of them this run.</p>
+            <p className="font-semibold">We analyzed {competitorCount} competitor{competitorCount === 1 ? "" : "s"} but couldn&apos;t extract a usable slate of themes.</p>
             <p className="text-amber-800 mt-1">
-              Your niche may need {competitorCount < 5 ? "more competitors (5–7 is the sweet spot)" : "broader competitor coverage — try adding creators in adjacent sub-niches"}. Trends need to repeat across multiple accounts to count as validated.
+              Most often this means several competitors have no scraped posts yet — go to /profiles and run a fresh scrape on each. {competitorCount < 5 ? "Adding 1–2 more competitors (5–7 is the sweet spot) also helps." : "If all competitors have data, try a re-run — Claude is non-deterministic."}
             </p>
           </div>
         </div>
       )}
 
-      {/* Summary bar */}
+      {/* Summary bar — leads with the count of new opportunities. The
+          level-up section is collapsible and surfaced via the secondary
+          link below the count. */}
       {insights.length > 0 && status !== "generating" && (
-        <div className="rounded-xl border border-slate-200/60 backdrop-blur-sm bg-white/80 px-5 py-3 grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-6 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-slate-900 tabular-nums">
-              {insights.length}
-            </span>
-            <span className="text-xs text-slate-500 leading-tight">
-              trends
-              <br />
-              detected
-            </span>
-          </div>
-          <div className="hidden sm:block w-px h-8 bg-slate-200" />
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-amber-600 tabular-nums">
+        <div className="rounded-xl border border-amber-200/60 bg-gradient-to-br from-amber-50/80 to-white px-5 py-4 shadow-sm">
+          <div className="flex items-baseline gap-3">
+            <span className="text-3xl font-bold text-amber-600 tabular-nums">
               {megaTips.length}
             </span>
-            <span className="text-xs text-slate-500 leading-tight">
-              to try
-              <br />
-              next
+            <span className="text-sm font-semibold text-slate-900">
+              new idea{megaTips.length === 1 ? "" : "s"} to try
             </span>
           </div>
-          <div className="hidden sm:block w-px h-8 bg-slate-200" />
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-emerald-600 tabular-nums">
-              {insights.filter((i) => i.is_mega_tip === false).length}
-            </span>
-            <span className="text-xs text-slate-500 leading-tight">
-              already
-              <br />
-              doing
-            </span>
-          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Drawn from the top 50 competitor posts in this run.
+            {otherInsights.length > 0 && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => setShowPlaybook((v) => !v)}
+                  className="text-purple-700 font-medium hover:underline"
+                >
+                  {showPlaybook ? "Hide" : "Show"} {otherInsights.length} level-up tip{otherInsights.length === 1 ? "" : "s"}
+                </button>
+              </>
+            )}
+          </p>
         </div>
       )}
 
@@ -702,13 +716,14 @@ export function InsightsClient({
         </Link>
       )}
 
-      {/* Mega tips section */}
+      {/* New opportunities — primary focus. Themes the user isn't already
+          executing, drawn from competitor top posts. */}
       {megaTips.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <Zap className="h-4 w-4 text-amber-500 shrink-0" />
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide shrink-0">
-              Try these next
+              New opportunities
             </h2>
             <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
           </div>
@@ -717,7 +732,7 @@ export function InsightsClient({
               <InsightCard
                 key={insight.id}
                 insight={insight}
-                fallbackTotalCompetitors={competitorCount}
+                ownUsername={ownUsername}
                 savedBriefId={savedBriefMap[insight.id] ?? null}
                 onSaved={handleBriefSaved}
               />
@@ -726,26 +741,41 @@ export function InsightsClient({
         </div>
       )}
 
-      {/* Other trends section */}
+      {/* Level up — collapsed by default. Themes the user already executes
+          in some form; the competitor_edge field doubles as the level-up
+          tip telling them what to refine. */}
       {otherInsights.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider shrink-0">
-              You&apos;re already doing
+          <button
+            type="button"
+            onClick={() => setShowPlaybook((v) => !v)}
+            aria-expanded={showPlaybook}
+            className="w-full flex items-center gap-3 group text-left"
+          >
+            <Check className="h-4 w-4 text-slate-400 shrink-0" />
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0 group-hover:text-slate-700 transition-colors">
+              Level up ({otherInsights.length})
             </h2>
             <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
-          </div>
-          <div className="grid gap-3">
-            {otherInsights.map((insight) => (
-              <InsightCard
-                key={insight.id}
-                insight={insight}
-                fallbackTotalCompetitors={competitorCount}
-                savedBriefId={savedBriefMap[insight.id] ?? null}
-                onSaved={handleBriefSaved}
-              />
-            ))}
-          </div>
+            <ChevronDown
+              className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${
+                showPlaybook ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+          {showPlaybook && (
+            <div className="grid gap-3">
+              {otherInsights.map((insight) => (
+                <InsightCard
+                  key={insight.id}
+                  insight={insight}
+                  ownUsername={ownUsername}
+                  savedBriefId={savedBriefMap[insight.id] ?? null}
+                  onSaved={handleBriefSaved}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

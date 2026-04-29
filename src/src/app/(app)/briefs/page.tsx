@@ -6,7 +6,7 @@ import { BriefsListClient } from "@/components/briefs-list-client"
 import type { SavedBrief } from "@/components/brief-workshop"
 
 const SAVED_BRIEF_COLUMNS =
-  "id, user_id, trend_insight_id, trend_name, performance_multiplier, original_content, original_hook, original_caption, original_posting_time, original_hashtags, hook_variations, content_angles, caption_variations, chosen_hook, chosen_content, chosen_caption, chosen_posting_time, chosen_hashtags, user_notes, scheduled_date, scheduled_time, status, created_at, updated_at" as const
+  "id, user_id, trend_insight_id, trend_name, trend_type, performance_multiplier, original_content, original_hook, original_caption, original_posting_time, original_hashtags, original_competitor_edge, hook_variations, content_angles, caption_variations, chosen_hook, chosen_content, chosen_caption, chosen_posting_time, chosen_hashtags, user_notes, scheduled_date, scheduled_time, status, created_at, updated_at" as const
 
 export default async function BriefsPage() {
   const session = await auth()
