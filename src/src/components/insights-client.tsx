@@ -540,7 +540,17 @@ export function InsightsClient({
 
     setErrorMsg(null)
     setLastRunEmpty(false)
-    const cursor = insights[0]?.created_at ?? ""
+    // Use the MAX created_at as the cursor, not insights[0]. The
+    // /api/insights response is ordered by performance_multiplier DESC,
+    // so insights[0] is the highest-multiplier row — which is rarely
+    // the newest. The polling loop computes `latest` as max(created_at);
+    // mismatched comparisons here let polling fire markDone on the very
+    // first tick of the next run because latest > cursor was true
+    // against rows already in the DB. Match the polling math exactly.
+    const cursor = insights.reduce<string>(
+      (acc, i) => (!acc || i.created_at > acc ? i.created_at : acc),
+      "",
+    )
     startInsights({ ownProfileId, cursor })
     const jobId = `insights-${ownProfileId}`
 
