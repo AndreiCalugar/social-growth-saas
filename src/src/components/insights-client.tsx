@@ -532,8 +532,6 @@ export function InsightsClient({
     const cursor = insights[0]?.created_at ?? ""
     startInsights({ ownProfileId, cursor })
     const jobId = `insights-${ownProfileId}`
-    const t0 = Date.now()
-    console.log("[insights] generate started", { jobId, cursor: cursor || "(empty)", existingInsights: insights.length })
 
     let res: Response
     try {
@@ -552,13 +550,12 @@ export function InsightsClient({
       // The fetch itself failed (network error, tab throttle, etc.) — we
       // don't know whether n8n succeeded. Don't kill the job; the
       // polling tracker will detect inserted rows or surface its own
-      // timeout. Surface a soft warning so the user knows what happened.
+      // timeout. Keep a console.warn so silent network failures aren't
+      // invisible during incident triage.
       const message = e instanceof Error ? e.message : "Network error"
-      console.warn("[insights] webhook fetch failed; relying on polling:", message, "elapsed:", Date.now() - t0, "ms")
+      console.warn("Insights webhook fetch failed; relying on polling:", message)
       return
     }
-
-    console.log("[insights] webhook returned", { status: res.status, elapsedMs: Date.now() - t0 })
 
     if (!res.ok) {
       const rawText = await res.text().catch(() => "")
@@ -575,7 +572,6 @@ export function InsightsClient({
       trends_detected?: number
       diag?: unknown
     }
-    console.log("[insights] webhook body", body)
     if (typeof body.trends_detected === "number" && body.trends_detected === 0) {
       setLastRunEmpty(true)
     }
@@ -605,7 +601,7 @@ export function InsightsClient({
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Insights Engine</h1>
           </div>
           <p className="text-sm text-slate-500">
-            Based on the top 50 highest-performing posts across {competitorCount} competitor{competitorCount === 1 ? "" : "s"}
+            Based on top-performing posts from {competitorCount} competitor{competitorCount === 1 ? "" : "s"}
           </p>
         </div>
 

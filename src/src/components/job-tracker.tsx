@@ -217,10 +217,8 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
           const newRowSinceStart = !!latest && latest > watchSinceIso
           const newRowVsCursor = !!latest && !!job.cursor && latest > job.cursor
           if (newRowVsCursor || (newRowSinceStart && !job.cursor)) {
-            console.log("[insights poll] markDone", { latest, cursor: job.cursor || "(empty)", elapsedMs: Date.now() - job.startedAt })
             markDone(job.id)
           } else if (Date.now() - job.startedAt > INSIGHTS_TIMEOUT_MS) {
-            console.log("[insights poll] timeout markError", { elapsedMs: Date.now() - job.startedAt })
             markError(job.id, "Insights is taking longer than expected — check the n8n execution log, and refresh in a minute (the workflow may still finish).")
           }
         }
