@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { AppShell } from "@/components/app-shell"
+import { FeedbackWidget } from "@/components/feedback-widget"
 
 export const dynamic = "force-dynamic"
 
@@ -52,6 +53,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       activeBriefsCount={activeBriefsCount}
     >
       {children}
+      {/* Persistent feedback pill — only mounted inside the (app) layout
+          so it never appears on /login or /signup. */}
+      <FeedbackWidget />
     </AppShell>
   )
 }
