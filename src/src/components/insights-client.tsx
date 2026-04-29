@@ -53,6 +53,7 @@ interface Insight {
   hashtags?: string[] | null
   competitor_edge?: string | null
   trend_type?: string | null
+  detected_niche?: string | null
 }
 
 interface Props {
@@ -63,6 +64,7 @@ interface Props {
   competitorCount: number
   initialSavedBriefMap?: Record<string, string>
   totalSavedBriefs?: number
+  detectedNiche?: string | null
 }
 
 function parseExamples(raw: unknown): ExamplePost[] {
@@ -477,9 +479,15 @@ export function InsightsClient({
   competitorCount,
   initialSavedBriefMap,
   totalSavedBriefs = 0,
+  detectedNiche: initialDetectedNiche = null,
 }: Props) {
   const [showPlaybook, setShowPlaybook] = useState(false)
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
+  // Refetched from /api/insights on every successful run; falls back to
+  // the SSR value on first paint. Same niche string applies to every row
+  // in a run, so we just take the first non-null value.
+  const detectedNiche =
+    insights.find((i) => i.detected_niche)?.detected_niche ?? initialDetectedNiche
   const [savedBriefMap, setSavedBriefMap] = useState<Record<string, string>>(
     initialSavedBriefMap ?? {}
   )
@@ -602,6 +610,12 @@ export function InsightsClient({
           </div>
           <p className="text-sm text-slate-500">
             Based on top-performing posts from {competitorCount} competitor{competitorCount === 1 ? "" : "s"}
+            {detectedNiche ? (
+              <>
+                {" · "}
+                <span className="text-slate-600">Niche: {detectedNiche}</span>
+              </>
+            ) : null}
           </p>
         </div>
 

@@ -15,6 +15,11 @@ import { Info } from "lucide-react"
 // multiplier shows up.
 
 const POPOVER_WIDTH = 256 // matches w-64
+// Pipeline caps the displayed multiplier at this value. Anything at or
+// above renders as "50+" rather than the literal number, since values
+// at the cap are typically driven by tiny historical creator medians
+// (data quality artifacts) rather than genuine 50x performance.
+const MULTIPLIER_CAP = 50
 
 export function MultiplierBadge({
   multiplier,
@@ -27,6 +32,8 @@ export function MultiplierBadge({
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const [mounted, setMounted] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const isCapped = multiplier >= MULTIPLIER_CAP
+  const displayValue = isCapped ? `${MULTIPLIER_CAP}+` : multiplier.toFixed(1)
 
   // createPortal needs document.body, which doesn't exist during SSR.
   useEffect(() => {
@@ -66,7 +73,7 @@ export function MultiplierBadge({
       <span
         className={`inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 font-bold text-white tabular-nums shadow-sm ${badgeSize}`}
       >
-        {multiplier.toFixed(1)}
+        {displayValue}
         <span className={`${xSize} font-semibold text-slate-300`}>×</span>
       </span>
       <button
@@ -100,13 +107,19 @@ export function MultiplierBadge({
             className="z-50 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-lg pointer-events-none"
           >
             <span className="block text-[10px] font-bold uppercase tracking-wider text-purple-700 mb-1">
-              What does {multiplier.toFixed(1)}× mean?
+              What does {displayValue}× mean?
             </span>
             <span className="block text-xs text-slate-600 leading-relaxed">
-              Posts following this pattern get on average{" "}
-              <span className="font-semibold text-slate-900">{multiplier.toFixed(1)}×</span> the
-              engagement of an average post on the same competitor&apos;s account. The pattern was
-              validated across at least 2 of your tracked competitors before it shows up here.
+              Posts following this theme get on average{" "}
+              <span className="font-semibold text-slate-900">{displayValue}×</span> the
+              engagement of an average post on the same competitor&apos;s account.
+              {isCapped ? (
+                <>
+                  {" "}Capped at {MULTIPLIER_CAP}× — the actual ratio was higher but values that
+                  large usually mean a creator with a small historical median, not a genuine
+                  {" "}{MULTIPLIER_CAP}+× format.
+                </>
+              ) : null}
             </span>
           </span>,
           document.body
