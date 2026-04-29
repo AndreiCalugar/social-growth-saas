@@ -22,9 +22,6 @@ import {
   BookmarkPlus,
   ClipboardList,
   Lightbulb,
-  Flame,
-  Sprout,
-  Star,
 } from "lucide-react"
 import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
@@ -68,23 +65,6 @@ interface Props {
   totalSavedBriefs?: number
 }
 
-// Strength label rendered next to the multiplier on each card. Standout
-// hits use their own visual treatment (a Star icon + "Standout hit") so a
-// user can see at a glance "this is one creator's viral moment, not a
-// validated cross-account pattern".
-type FormatLabel = { label: string; tone: "amber" | "purple" | "slate" | "rose"; icon: typeof Flame }
-function formatLabelFor(insight: Insight): FormatLabel {
-  if (insight.trend_type === "standout") {
-    const m = insight.performance_multiplier ?? 0
-    const ratio = m > 0 ? `${m.toFixed(1)}× baseline` : "Single-creator hit"
-    return { label: `Standout hit · ${ratio}`, tone: "rose", icon: Star }
-  }
-  const m = insight.performance_multiplier ?? 0
-  if (m >= 5) return { label: "High-impact format", tone: "amber", icon: Flame }
-  if (m >= 2.5) return { label: "Growing format", tone: "purple", icon: Lightbulb }
-  return { label: "Emerging pattern", tone: "slate", icon: Sprout }
-}
-
 function parseExamples(raw: unknown): ExamplePost[] {
   try {
     const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
@@ -95,23 +75,21 @@ function parseExamples(raw: unknown): ExamplePost[] {
 
 function dedupeExamples(
   examples: ExamplePost[],
-  ownUsername: string | null,
-  trendType?: string | null
+  ownUsername: string | null
 ): ExamplePost[] {
   const seen = new Set<string>()
   const out: ExamplePost[] = []
   const ownHandle = ownUsername?.replace(/^@/, "").toLowerCase() ?? null
-  // Standout trends are single-creator by design — show all unique posts up
-  // to the cap, even if multiple come from the same competitor (the workflow
-  // only sends one). Validated trends still cap at one example per competitor
-  // to surface cross-account variety.
-  const allowMultiPerCompetitor = trendType === "standout"
+  // The redesign lets a single theme be sourced from one creator's wins
+  // (no more validated/standout split), so we allow multiple examples
+  // from the same competitor. Cap at 3 to keep the card scannable.
   for (const ex of examples) {
     const comp = (ex.competitor || "").replace(/^@/, "").toLowerCase()
     if (!comp) continue
     if (ownHandle && comp === ownHandle) continue // defensive: filter own handle
-    if (!allowMultiPerCompetitor && seen.has(comp)) continue
-    seen.add(comp)
+    const key = comp + "::" + (ex.caption_preview || "").slice(0, 40).toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
     out.push(ex)
     if (out.length === 3) break
   }
@@ -146,8 +124,7 @@ function buildCopyText(insight: Insight): string {
   const lines: string[] = []
   lines.push(`🎬 ${insight.trend_name}`)
   if (mult > 0) {
-    const tag = insight.trend_type === "standout" ? "× baseline (standout hit)" : "× avg engagement"
-    lines.push(`📊 ${mult.toFixed(1)}${tag}`)
+    lines.push(`📊 ${mult.toFixed(1)}× baseline`)
   }
   lines.push("")
   if (insight.content_format) lines.push(`CONTENT: ${insight.content_format}`)
@@ -159,7 +136,9 @@ function buildCopyText(insight: Insight): string {
   }
   if (insight.competitor_edge) {
     lines.push("")
-    lines.push(`COMPETITOR EDGE: ${insight.competitor_edge}`)
+    // is_mega_tip=false signals a "level up" theme (user already does this).
+    const edgeLabel = insight.is_mega_tip === false ? "LEVEL UP" : "COMPETITOR EDGE"
+    lines.push(`${edgeLabel}: ${insight.competitor_edge}`)
   }
   if (
     !insight.content_format &&
@@ -215,17 +194,10 @@ function InsightCard({
   }
 
   const multiplier = insight.performance_multiplier ?? 0
-  const isStandout = insight.trend_type === "standout"
   const isMegaTip = insight.is_mega_tip === true
   const summary = buildSummary(insight)
-  const examples = dedupeExamples(
-    parseExamples(insight.example_posts),
-    ownUsername,
-    insight.trend_type
-  )
-  const showExamples = isStandout ? examples.length >= 1 : examples.length >= 2
-  const formatLabel = formatLabelFor(insight)
-  const FormatIcon = formatLabel.icon
+  const examples = dedupeExamples(parseExamples(insight.example_posts), ownUsername)
+  const showExamples = examples.length >= 1
 
   const hasStructured = Boolean(
     insight.content_format ||
@@ -247,11 +219,7 @@ function InsightCard({
   return (
     <div
       className={`bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md transition-all overflow-hidden border-l-4 ${
-        isStandout
-          ? "border-l-rose-500"
-          : isMegaTip
-          ? "border-l-amber-500"
-          : "border-l-emerald-500"
+        isMegaTip ? "border-l-amber-500" : "border-l-slate-300"
       }`}
     >
       <div className="p-4 sm:p-5">
@@ -270,32 +238,15 @@ function InsightCard({
           <p className="mt-2 text-sm text-slate-600 leading-snug">{summary}</p>
         )}
 
-        {/* Meta row: format strength label */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
-              formatLabel.tone === "amber"
-                ? "bg-amber-50 text-amber-700 border-amber-200"
-                : formatLabel.tone === "purple"
-                ? "bg-purple-50 text-purple-700 border-purple-200"
-                : formatLabel.tone === "rose"
-                ? "bg-rose-50 text-rose-700 border-rose-200"
-                : "bg-slate-50 text-slate-600 border-slate-200"
-            }`}
-          >
-            <FormatIcon className="h-3 w-3" />
-            {formatLabel.label}
-          </span>
-        </div>
-
-        {/* Competitor edge — light blue highlight, ALWAYS shown when present.
-            For "Already in your playbook" cards this is the actionable
-            takeaway; for standouts it explains why the single video popped. */}
+        {/* Competitor edge / level-up tip — light blue highlight when
+            present. For "Level up" cards (is_mega_tip=false) this is the
+            specific thing competitors do differently; for new
+            opportunities it doubles as a craft note. */}
         {insight.competitor_edge && (
           <div className="mt-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
             <p className="text-[10px] font-bold uppercase tracking-wider text-sky-700 mb-1 inline-flex items-center gap-1">
               <Lightbulb className="h-3 w-3" />
-              {isStandout ? "What made this video pop" : "How competitors do it differently"}
+              {isMegaTip ? "How competitors execute it" : "How to level up"}
             </p>
             <p className="text-sm text-sky-900 leading-snug">
               {insight.competitor_edge}
@@ -581,9 +532,12 @@ export function InsightsClient({
     const cursor = insights[0]?.created_at ?? ""
     startInsights({ ownProfileId, cursor })
     const jobId = `insights-${ownProfileId}`
+    const t0 = Date.now()
+    console.log("[insights] generate started", { jobId, cursor: cursor || "(empty)", existingInsights: insights.length })
 
+    let res: Response
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
+      res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -594,26 +548,38 @@ export function InsightsClient({
           own_username: ownUsername ?? "",
         }),
       })
-
-      if (!res.ok) {
-        const rawText = await res.text()
-        throw new Error(`n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`)
-      }
-      // The webhook returns a definitive result. Use it to end the tracker job
-      // immediately rather than waiting for polling — important for the
-      // empty-result case, where no fresh DB row exists for polling to see.
-      const body = (await res.json().catch(() => ({}))) as {
-        trends_detected?: number
-      }
-      if (typeof body.trends_detected === "number" && body.trends_detected === 0) {
-        setLastRunEmpty(true)
-      }
-      finishJob(jobId, { success: true })
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error"
+      // The fetch itself failed (network error, tab throttle, etc.) — we
+      // don't know whether n8n succeeded. Don't kill the job; the
+      // polling tracker will detect inserted rows or surface its own
+      // timeout. Surface a soft warning so the user knows what happened.
+      const message = e instanceof Error ? e.message : "Network error"
+      console.warn("[insights] webhook fetch failed; relying on polling:", message, "elapsed:", Date.now() - t0, "ms")
+      return
+    }
+
+    console.log("[insights] webhook returned", { status: res.status, elapsedMs: Date.now() - t0 })
+
+    if (!res.ok) {
+      const rawText = await res.text().catch(() => "")
+      const message = `n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`
       setErrorMsg(message)
       finishJob(jobId, { success: false, errorMessage: message })
+      return
     }
+
+    // The webhook returns a definitive result. Use it to end the tracker job
+    // immediately rather than waiting for polling — important for the
+    // empty-result case, where no fresh DB row exists for polling to see.
+    const body = (await res.json().catch(() => ({}))) as {
+      trends_detected?: number
+      diag?: unknown
+    }
+    console.log("[insights] webhook body", body)
+    if (typeof body.trends_detected === "number" && body.trends_detected === 0) {
+      setLastRunEmpty(true)
+    }
+    finishJob(jobId, { success: true })
   }
 
   const status: "idle" | "generating" | "done" | "error" = running
@@ -639,7 +605,7 @@ export function InsightsClient({
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Insights Engine</h1>
           </div>
           <p className="text-sm text-slate-500">
-            Cross-competitor trend detection across {competitorCount} accounts
+            Based on the top 50 highest-performing posts across {competitorCount} competitor{competitorCount === 1 ? "" : "s"}
           </p>
         </div>
 
@@ -681,25 +647,24 @@ export function InsightsClient({
       )}
 
       {/* Empty-run banner — fires when the last Generate Insights call finished
-          successfully but Claude found zero validated cross-competitor
-          patterns. Distinct from "no insights ever generated" — it tells the
-          user the engine ran and the niche/competitor set is the bottleneck,
-          not the engine. */}
+          successfully but Claude found zero usable themes. With the redesign
+          this is rare: themes are extracted from already-high-performing
+          posts, so the only way to hit zero is missing competitor data. */}
       {lastRunEmpty && status !== "generating" && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-900 leading-relaxed">
-            <p className="font-semibold">We analyzed {competitorCount} competitor{competitorCount === 1 ? "" : "s"} and found no patterns in 2+ of them this run.</p>
+            <p className="font-semibold">We analyzed {competitorCount} competitor{competitorCount === 1 ? "" : "s"} but couldn&apos;t extract a usable slate of themes.</p>
             <p className="text-amber-800 mt-1">
-              Your niche may need {competitorCount < 5 ? "more competitors (5–7 is the sweet spot)" : "broader competitor coverage — try adding creators in adjacent sub-niches"}. Trends need to repeat across multiple accounts to count as validated.
+              Most often this means several competitors have no scraped posts yet — go to /profiles and run a fresh scrape on each. {competitorCount < 5 ? "Adding 1–2 more competitors (5–7 is the sweet spot) also helps." : "If all competitors have data, try a re-run — Claude is non-deterministic."}
             </p>
           </div>
         </div>
       )}
 
-      {/* Summary bar — leads with new ideas to try, breaks them down by
-          trend_type so the user can tell at a glance how much of the page
-          is cross-account validated vs single-creator standout hits. */}
+      {/* Summary bar — leads with the count of new opportunities. The
+          level-up section is collapsible and surfaced via the secondary
+          link below the count. */}
       {insights.length > 0 && status !== "generating" && (
         <div className="rounded-xl border border-amber-200/60 bg-gradient-to-br from-amber-50/80 to-white px-5 py-4 shadow-sm">
           <div className="flex items-baseline gap-3">
@@ -711,14 +676,7 @@ export function InsightsClient({
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            {(() => {
-              const validated = megaTips.filter((i) => i.trend_type !== "standout").length
-              const standouts = megaTips.filter((i) => i.trend_type === "standout").length
-              const parts: string[] = []
-              if (validated > 0) parts.push(`${validated} cross-account pattern${validated === 1 ? "" : "s"}`)
-              if (standouts > 0) parts.push(`${standouts} standout hit${standouts === 1 ? "" : "s"}`)
-              return parts.length > 0 ? parts.join(" · ") : "Run the analysis to surface fresh content ideas."
-            })()}
+            Drawn from the top 50 competitor posts in this run.
             {otherInsights.length > 0 && (
               <>
                 {" · "}
@@ -727,7 +685,7 @@ export function InsightsClient({
                   onClick={() => setShowPlaybook((v) => !v)}
                   className="text-purple-700 font-medium hover:underline"
                 >
-                  {showPlaybook ? "Hide" : "Show"} {otherInsights.length} pattern{otherInsights.length === 1 ? "" : "s"} already in your playbook
+                  {showPlaybook ? "Hide" : "Show"} {otherInsights.length} level-up tip{otherInsights.length === 1 ? "" : "s"}
                 </button>
               </>
             )}
@@ -762,10 +720,8 @@ export function InsightsClient({
         </Link>
       )}
 
-      {/* New opportunities — primary focus. Mixes validated cross-account
-          patterns and standout single-creator hits; the per-card label
-          (rose Star icon for standouts, amber Flame for high-impact, etc.)
-          tells the user which kind they're looking at. */}
+      {/* New opportunities — primary focus. Themes the user isn't already
+          executing, drawn from competitor top posts. */}
       {megaTips.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
@@ -789,10 +745,9 @@ export function InsightsClient({
         </div>
       )}
 
-      {/* Already in your playbook — collapsed by default. Cards still carry
-          competitor_edge so the user can see how competitors execute the
-          same broad pattern differently — useful even when they're "doing
-          this" already. */}
+      {/* Level up — collapsed by default. Themes the user already executes
+          in some form; the competitor_edge field doubles as the level-up
+          tip telling them what to refine. */}
       {otherInsights.length > 0 && (
         <div className="space-y-3">
           <button
@@ -803,7 +758,7 @@ export function InsightsClient({
           >
             <Check className="h-4 w-4 text-slate-400 shrink-0" />
             <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0 group-hover:text-slate-700 transition-colors">
-              Already in your playbook ({otherInsights.length})
+              Level up ({otherInsights.length})
             </h2>
             <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
             <ChevronDown

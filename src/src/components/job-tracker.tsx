@@ -52,11 +52,14 @@ const AUTO_DISMISS_MS = 5000
 //   scrape    — Apify Instagram scraper: 85–120s. 180s gives 50% buffer.
 //   analysis  — single-profile Claude Sonnet call: 15–60s. 180s is plenty.
 //   insights  — cross-competitor analysis = large prompt + Claude Sonnet
-//               + multiple DB inserts. Routinely 120–180s with 5+
-//               competitors; 240s prevents the common false-positive.
+//               + multiple DB inserts. With Phase 1 (outlier detection +
+//               dual trend types + 12K max_tokens), full-slate runs on
+//               7+ competitors can take 4-5 minutes end-to-end; 600s is
+//               a generous ceiling that still surfaces a timeout if n8n
+//               truly died silently.
 const SCRAPE_TIMEOUT_MS = 180_000
 const ANALYSIS_TIMEOUT_MS = 180_000
-const INSIGHTS_TIMEOUT_MS = 240_000
+const INSIGHTS_TIMEOUT_MS = 600_000
 
 function loadJobs(): Record<string, Job> {
   if (typeof window === "undefined") return {}
@@ -123,7 +126,11 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
   const markJobError = useCallback((id: string, message: string) => {
     setJobs((prev) => {
       const existing = prev[id]
-      if (!existing || existing.status === "error") return prev
+      // Don't downgrade an already-completed job to error. The synchronous
+      // webhook fetch can fail (network blip, tab throttle) AFTER polling
+      // already detected the inserted rows and marked the job done — in
+      // that case the work succeeded, the post-hoc fetch failure is noise.
+      if (!existing || existing.status === "error" || existing.status === "done") return prev
       return { ...prev, [id]: { ...existing, status: "error", finishedAt: Date.now(), errorMessage: message } }
     })
     routerRef.current.refresh()
@@ -189,10 +196,31 @@ export function JobTrackerProvider({ children }: { children: React.ReactNode }) 
           const res = await fetch(`/api/insights?profile_id=${job.ownProfileId}`)
           if (!res.ok) return
           const data: { insights?: Array<{ created_at: string }> } = await res.json()
-          const latest = data.insights?.[0]?.created_at
-          if (latest && (!job.cursor || latest > job.cursor)) {
+          // The /api/insights endpoint sorts by performance_multiplier, but
+          // it filters to the latest run's 10-minute window — so any new
+          // row from this run will dominate the cutoff and the response
+          // will only contain fresh rows. Comparing the max created_at
+          // against the cursor is sufficient.
+          const latest = data.insights?.reduce<string | null>(
+            (acc, i) => (!acc || i.created_at > acc ? i.created_at : acc),
+            null,
+          )
+          // Cursor is empty when the user had no prior insights at click
+          // time. With cursor="", any row in the API response would
+          // wrongly trigger markDone on the first poll tick — that's
+          // the "loader doesn't persist" bug: an old insight in the DB
+          // satisfied `latest > ""` and finished the job before n8n
+          // even returned. Require a strict "new row arrived after we
+          // started watching" signal. 5s tolerance covers Supabase
+          // clock-vs-client-clock skew on the inserted row's created_at.
+          const watchSinceIso = new Date(job.startedAt - 5000).toISOString()
+          const newRowSinceStart = !!latest && latest > watchSinceIso
+          const newRowVsCursor = !!latest && !!job.cursor && latest > job.cursor
+          if (newRowVsCursor || (newRowSinceStart && !job.cursor)) {
+            console.log("[insights poll] markDone", { latest, cursor: job.cursor || "(empty)", elapsedMs: Date.now() - job.startedAt })
             markDone(job.id)
           } else if (Date.now() - job.startedAt > INSIGHTS_TIMEOUT_MS) {
+            console.log("[insights poll] timeout markError", { elapsedMs: Date.now() - job.startedAt })
             markError(job.id, "Insights is taking longer than expected — check the n8n execution log, and refresh in a minute (the workflow may still finish).")
           }
         }
