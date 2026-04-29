@@ -22,6 +22,7 @@ import {
   BookmarkPlus,
   ClipboardList,
   Lightbulb,
+  Info,
 } from "lucide-react"
 import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
@@ -138,8 +139,9 @@ function buildCopyText(insight: Insight): string {
   }
   if (insight.competitor_edge) {
     lines.push("")
-    // is_mega_tip=false signals a "level up" theme (user already does this).
-    const edgeLabel = insight.is_mega_tip === false ? "LEVEL UP" : "COMPETITOR EDGE"
+    // is_mega_tip=false signals a "refine what you already post" theme
+    // (user already does this; the edge text is the specific tweak).
+    const edgeLabel = insight.is_mega_tip === false ? "REFINEMENT" : "COMPETITOR EDGE"
     lines.push(`${edgeLabel}: ${insight.competitor_edge}`)
   }
   if (
@@ -240,15 +242,16 @@ function InsightCard({
           <p className="mt-2 text-sm text-slate-600 leading-snug">{summary}</p>
         )}
 
-        {/* Competitor edge / level-up tip — light blue highlight when
-            present. For "Level up" cards (is_mega_tip=false) this is the
-            specific thing competitors do differently; for new
-            opportunities it doubles as a craft note. */}
+        {/* Competitor edge / refinement tip — light blue highlight when
+            present. For "Refine what you already post" cards
+            (is_mega_tip=false) this is the specific thing competitors
+            do differently; for new opportunities it doubles as a
+            craft note. */}
         {insight.competitor_edge && (
           <div className="mt-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2.5">
             <p className="text-[10px] font-bold uppercase tracking-wider text-sky-700 mb-1 inline-flex items-center gap-1">
               <Lightbulb className="h-3 w-3" />
-              {isMegaTip ? "How competitors execute it" : "How to level up"}
+              {isMegaTip ? "How competitors execute it" : "Refine your version"}
             </p>
             <p className="text-sm text-sky-900 leading-snug">
               {insight.competitor_edge}
@@ -481,7 +484,7 @@ export function InsightsClient({
   totalSavedBriefs = 0,
   detectedNiche: initialDetectedNiche = null,
 }: Props) {
-  const [showPlaybook, setShowPlaybook] = useState(false)
+  const [showRefineHelp, setShowRefineHelp] = useState(false)
   const [insights, setInsights] = useState<Insight[]>(initialInsights)
   // Refetched from /api/insights on every successful run; falls back to
   // the SSR value on first paint. Same niche string applies to every row
@@ -673,8 +676,9 @@ export function InsightsClient({
       )}
 
       {/* Summary bar — leads with the count of new opportunities. The
-          level-up section is collapsible and surfaced via the secondary
-          link below the count. */}
+          refinements section sits below and is now always visible, so we
+          mention its count here as a navigation hint rather than a
+          show/hide link. */}
       {insights.length > 0 && status !== "generating" && (
         <div className="rounded-xl border border-amber-200/60 bg-gradient-to-br from-amber-50/80 to-white px-5 py-4 shadow-sm">
           <div className="flex items-baseline gap-3">
@@ -686,17 +690,13 @@ export function InsightsClient({
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Drawn from the top 50 competitor posts in this run.
+            Drawn from the top competitor posts in this run.
             {otherInsights.length > 0 && (
               <>
                 {" · "}
-                <button
-                  type="button"
-                  onClick={() => setShowPlaybook((v) => !v)}
-                  className="text-purple-700 font-medium hover:underline"
-                >
-                  {showPlaybook ? "Hide" : "Show"} {otherInsights.length} level-up tip{otherInsights.length === 1 ? "" : "s"}
-                </button>
+                <span className="text-slate-600">
+                  Plus {otherInsights.length} refinement{otherInsights.length === 1 ? "" : "s"} to what you already post
+                </span>
               </>
             )}
           </p>
@@ -755,41 +755,49 @@ export function InsightsClient({
         </div>
       )}
 
-      {/* Level up — collapsed by default. Themes the user already executes
-          in some form; the competitor_edge field doubles as the level-up
-          tip telling them what to refine. */}
+      {/* Refinements — themes the user already executes in some form.
+          competitor_edge carries the specific tweak competitors do
+          differently. Always visible (was previously collapsed by
+          default, which hid genuinely high-value content behind a click
+          — including 40x+ multipliers in some runs). The (i) toggle
+          surfaces an inline explainer for first-time users. */}
       {otherInsights.length > 0 && (
         <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => setShowPlaybook((v) => !v)}
-            aria-expanded={showPlaybook}
-            className="w-full flex items-center gap-3 group text-left"
-          >
+          <div className="flex items-center gap-3">
             <Check className="h-4 w-4 text-slate-400 shrink-0" />
-            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0 group-hover:text-slate-700 transition-colors">
-              Level up ({otherInsights.length})
+            <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0">
+              Refine what you already post ({otherInsights.length})
             </h2>
+            <button
+              type="button"
+              onClick={() => setShowRefineHelp((v) => !v)}
+              aria-expanded={showRefineHelp}
+              aria-label="What does this section show?"
+              className="text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+            >
+              <Info className="h-3.5 w-3.5" />
+            </button>
             <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" aria-hidden />
-            <ChevronDown
-              className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${
-                showPlaybook ? "rotate-180" : ""
-              }`}
-            />
-          </button>
-          {showPlaybook && (
-            <div className="grid gap-3">
-              {otherInsights.map((insight) => (
-                <InsightCard
-                  key={insight.id}
-                  insight={insight}
-                  ownUsername={ownUsername}
-                  savedBriefId={savedBriefMap[insight.id] ?? null}
-                  onSaved={handleBriefSaved}
-                />
-              ))}
-            </div>
+          </div>
+          {showRefineHelp && (
+            <p className="text-xs text-slate-500 leading-relaxed pl-7 max-w-prose">
+              These themes already appear in your top 10 posts. Each card highlights one
+              specific thing competitors do differently — apply it to your existing version
+              to push performance harder. They sit below new opportunities because they
+              build on what you&apos;re already filming, not because they&apos;re lower priority.
+            </p>
           )}
+          <div className="grid gap-3">
+            {otherInsights.map((insight) => (
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                ownUsername={ownUsername}
+                savedBriefId={savedBriefMap[insight.id] ?? null}
+                onSaved={handleBriefSaved}
+              />
+            ))}
+          </div>
         </div>
       )}
 
