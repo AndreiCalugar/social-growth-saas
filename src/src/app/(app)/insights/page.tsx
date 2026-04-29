@@ -47,7 +47,9 @@ export default async function InsightsPage() {
     hashtags: string[] | null
     competitor_edge: string | null
     trend_type: string | null
+    detected_niche: string | null
   }[] = []
+  let detectedNiche: string | null = null
 
   if (ownProfile) {
     const { data: latest } = await supabase
@@ -63,12 +65,15 @@ export default async function InsightsPage() {
       const { data } = await supabase
         .from("trend_insights")
         .select(
-          "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, is_mega_tip, created_at, one_line_summary, competitor_count, total_competitors, content_format, hook, caption_structure, best_time, hashtags, competitor_edge, trend_type"
+          "id, trend_name, confidence, performance_multiplier, example_posts, recommendation, is_mega_tip, created_at, one_line_summary, competitor_count, total_competitors, content_format, hook, caption_structure, best_time, hashtags, competitor_edge, trend_type, detected_niche"
         )
         .eq("profile_id", ownProfile.id)
         .gte("created_at", cutoff)
         .order("performance_multiplier", { ascending: false })
       insights = data ?? []
+      // Every row in the same run carries the same niche; pick the
+      // first non-null value for the subtitle.
+      detectedNiche = insights.find((i) => i.detected_niche)?.detected_niche ?? null
     }
   }
 
@@ -149,6 +154,7 @@ export default async function InsightsPage() {
       competitorCount={competitorCount}
       initialSavedBriefMap={savedBriefMap}
       totalSavedBriefs={totalSavedBriefs}
+      detectedNiche={detectedNiche}
     />
   )
 }
