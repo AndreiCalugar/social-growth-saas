@@ -1,46 +1,21 @@
 import { supabase } from "@/lib/supabase"
+import {
+  ALLOWED,
+  computeCooldownStatus,
+  computeQuotaStatus,
+  type CooldownStatus,
+} from "@/lib/cooldown-math"
 
 /**
- * Generic rate-limit primitives used by every API route that triggers
+ * DB-backed rate-limit primitives used by every API route that triggers
  * an expensive operation (n8n webhook, Claude API, Apify scrape).
  *
- * Two flavors:
- * - `checkCooldown`  — block if the last event for this filter is within
- *                      cooldownMinutes (single-event cooldown).
- * - `checkHourlyQuota` — block if N+ events for this filter have already
- *                      happened in the last `windowMinutes` (bucket quota).
- *
- * Both return `{ allowed, minutesRemaining, secondsRemaining,
- * nextAvailableAt }` so the API and UI can render a live countdown.
+ * The pure date math lives in `cooldown-math.ts` so it can be unit-tested
+ * without booting Supabase. This file is the thin Supabase wrapper.
  */
 
-export type CooldownStatus = {
-  allowed: boolean
-  /** Whole minutes until next attempt. Always >= 1 when blocked, 0 when allowed. */
-  minutesRemaining: number
-  /** Seconds until next attempt — drives the per-second UI countdown. */
-  secondsRemaining: number
-  /** ISO timestamp when the gate opens. null when already allowed. */
-  nextAvailableAt: string | null
-}
-
-const ALLOWED: CooldownStatus = {
-  allowed: true,
-  minutesRemaining: 0,
-  secondsRemaining: 0,
-  nextAvailableAt: null,
-}
-
-function buildBlocked(nextMs: number): CooldownStatus {
-  const now = Date.now()
-  const deltaMs = Math.max(0, nextMs - now)
-  return {
-    allowed: false,
-    secondsRemaining: Math.ceil(deltaMs / 1000),
-    minutesRemaining: Math.max(1, Math.ceil(deltaMs / 60_000)),
-    nextAvailableAt: new Date(nextMs).toISOString(),
-  }
-}
+export type { CooldownStatus } from "@/lib/cooldown-math"
+export { computeCooldownStatus, computeQuotaStatus } from "@/lib/cooldown-math"
 
 /**
  * Block if the most recent row for `filterField=filterValue` happened
@@ -79,16 +54,7 @@ export async function checkCooldown(opts: {
   }
 
   const row = data as Record<string, string | null> | null
-  const lastIso = row?.[column]
-  if (!lastIso) return ALLOWED
-
-  const lastMs = new Date(lastIso).getTime()
-  if (Number.isNaN(lastMs)) return ALLOWED
-
-  const nextMs = lastMs + cooldownMinutes * 60_000
-  if (nextMs <= Date.now()) return ALLOWED
-
-  return buildBlocked(nextMs)
+  return computeCooldownStatus(row?.[column], cooldownMinutes)
 }
 
 /**
@@ -135,21 +101,11 @@ export async function checkHourlyQuota(opts: {
     return ALLOWED
   }
 
-  if ((count ?? 0) < maxCount) return ALLOWED
-
-  // At the cap. The countdown is until the oldest in-window row exits
+  // At the cap, the countdown is until the oldest in-window row exits
   // the window — that's when one quota slot reopens.
   const rows = (data ?? []) as unknown as Array<Record<string, string | null>>
   const oldestIso = rows[0]?.[column]
-  if (!oldestIso) return ALLOWED
-
-  const oldestMs = new Date(oldestIso).getTime()
-  if (Number.isNaN(oldestMs)) return ALLOWED
-
-  const nextMs = oldestMs + windowMinutes * 60_000
-  if (nextMs <= Date.now()) return ALLOWED
-
-  return buildBlocked(nextMs)
+  return computeQuotaStatus(oldestIso, count ?? 0, windowMinutes, maxCount)
 }
 
 /** Build the JSON body returned to the client when a route is blocked. */

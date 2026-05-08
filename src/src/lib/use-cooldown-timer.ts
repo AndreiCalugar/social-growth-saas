@@ -36,15 +36,31 @@ export function useCooldownTimer(nextAvailableAt: string | null | undefined): Co
   return timer
 }
 
-function compute(nextAvailableAt: string | null | undefined): CooldownTimer | null {
+/**
+ * Pure helper extracted for unit tests — given the target ISO and a
+ * "now" timestamp, return the timer state (or null when elapsed).
+ */
+export function computeCooldownTimer(
+  nextAvailableAt: string | null | undefined,
+  nowMs: number = Date.now(),
+): CooldownTimer | null {
   if (!nextAvailableAt) return null
   const target = new Date(nextAvailableAt).getTime()
   if (Number.isNaN(target)) return null
-  const seconds = Math.max(0, Math.ceil((target - Date.now()) / 1000))
+  const seconds = Math.max(0, Math.ceil((target - nowMs) / 1000))
   if (seconds <= 0) return null
 
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  const label = `${m}:${s.toString().padStart(2, "0")}`
-  return { secondsRemaining: seconds, label }
+  return { secondsRemaining: seconds, label: formatTimerLabel(seconds) }
+}
+
+/** Compact mm:ss / m:ss label, e.g. "12:34" or "0:42". */
+export function formatTimerLabel(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds))
+  const m = Math.floor(safe / 60)
+  const s = safe % 60
+  return `${m}:${s.toString().padStart(2, "0")}`
+}
+
+function compute(nextAvailableAt: string | null | undefined): CooldownTimer | null {
+  return computeCooldownTimer(nextAvailableAt)
 }
