@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
+import { useCooldownTimer } from "@/lib/use-cooldown-timer"
 
 interface ExamplePost {
   caption_preview: string
@@ -513,6 +514,22 @@ export function InsightsClient({
   const running = job?.status === "running"
   const rotatingMessage = useRotatingMessage("insights", running)
   const [lastRunEmpty, setLastRunEmpty] = useState(false)
+  const [cooldownUntil, setCooldownUntil] = useState<string | null>(null)
+  const cooldownTimer = useCooldownTimer(cooldownUntil)
+
+  // Hydrate the cooldown from existing insights so a mid-cooldown reload
+  // shows the timer instead of a deceptively-active Re-run button.
+  // INSIGHTS_COOLDOWN_MS must match the API route's COOLDOWN_MINUTES.
+  useEffect(() => {
+    const INSIGHTS_COOLDOWN_MS = 60 * 60 * 1000
+    if (insights.length === 0) return
+    const newestMs = insights.reduce(
+      (max, i) => Math.max(max, new Date(i.created_at).getTime()),
+      0,
+    )
+    const next = newestMs + INSIGHTS_COOLDOWN_MS
+    if (next > Date.now()) setCooldownUntil(new Date(next).toISOString())
+  }, [insights])
 
   useEffect(() => {
     if (!ownProfileId) return
@@ -540,6 +557,7 @@ export function InsightsClient({
 
     setErrorMsg(null)
     setLastRunEmpty(false)
+
     // Use the MAX created_at as the cursor, not insights[0]. The
     // /api/insights response is ordered by performance_multiplier DESC,
     // so insights[0] is the highest-multiplier row — which is rarely
@@ -551,44 +569,52 @@ export function InsightsClient({
       (acc, i) => (!acc || i.created_at > acc ? i.created_at : acc),
       "",
     )
-    startInsights({ ownProfileId, cursor })
     const jobId = `insights-${ownProfileId}`
 
+    // Pre-flight gate: /api/insights/trigger enforces the 1h cooldown
+    // server-side (not just in the UI), then forwards to n8n and returns
+    // the workflow result. Going through our route also keeps the n8n
+    // base URL behind the API surface.
     let res: Response
     try {
-      res = await fetch(`${process.env.NEXT_PUBLIC_N8N_URL}/webhook/cross-analysis`, {
+      res = await fetch("/api/insights/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          own_profile_id: ownProfileId,
-          user_id: userId,
-          // Workflow uses this to scrub Claude's example_posts of any
-          // reference to the user's own handle.
-          own_username: ownUsername ?? "",
-        }),
+        body: JSON.stringify({ own_profile_id: ownProfileId }),
       })
     } catch (e) {
-      // The fetch itself failed (network error, tab throttle, etc.) — we
-      // don't know whether n8n succeeded. Don't kill the job; the
-      // polling tracker will detect inserted rows or surface its own
-      // timeout. Keep a console.warn so silent network failures aren't
-      // invisible during incident triage.
+      // Network failure: don't kill the job — n8n may still have run if
+      // the request reached the server. Polling will catch a fresh row;
+      // if not, the tracker timeout surfaces the error.
       const message = e instanceof Error ? e.message : "Network error"
-      console.warn("Insights webhook fetch failed; relying on polling:", message)
+      console.warn("Insights trigger fetch failed; relying on polling:", message)
+      startInsights({ ownProfileId, cursor })
       return
     }
 
+    if (res.status === 429) {
+      const body = (await res.json().catch(() => ({}))) as {
+        nextAvailableAt?: string
+        message?: string
+      }
+      if (body.nextAvailableAt) setCooldownUntil(body.nextAvailableAt)
+      return
+    }
+
+    setCooldownUntil(null)
+    startInsights({ ownProfileId, cursor })
+
     if (!res.ok) {
-      const rawText = await res.text().catch(() => "")
-      const message = `n8n webhook failed (${res.status}): ${rawText.slice(0, 300)}`
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      const message = body.error || `Request failed (${res.status})`
       setErrorMsg(message)
       finishJob(jobId, { success: false, errorMessage: message })
       return
     }
 
-    // The webhook returns a definitive result. Use it to end the tracker job
-    // immediately rather than waiting for polling — important for the
-    // empty-result case, where no fresh DB row exists for polling to see.
+    // n8n returns a definitive result. End the tracker job immediately
+    // rather than waiting for polling — important for the empty-result
+    // case, where no fresh DB row exists for polling to see.
     const body = (await res.json().catch(() => ({}))) as {
       trends_detected?: number
       diag?: unknown
@@ -634,21 +660,41 @@ export function InsightsClient({
 
         <button
           onClick={handleGenerate}
-          disabled={status === "generating" || !ownProfileId}
+          disabled={status === "generating" || !ownProfileId || !!cooldownTimer}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm w-full sm:w-auto shrink-0"
         >
           {status === "generating" ? (
             <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : cooldownTimer ? (
+            <Clock className="h-4 w-4" />
           ) : (
             <Sparkles className="h-4 w-4" />
           )}
           {status === "generating"
             ? "Analyzing…"
+            : cooldownTimer
+            ? `Available in ${cooldownTimer.label}`
             : insights.length > 0
             ? "Re-run Analysis"
             : "Generate Insights"}
         </button>
       </div>
+
+      {/* Cooldown banner — explains why the Re-run button is disabled and
+          ticks down per second so the user knows when the next run unlocks. */}
+      {cooldownTimer && status !== "generating" && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 flex items-start gap-3">
+          <Clock className="h-5 w-5 text-slate-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-slate-700 leading-relaxed">
+            <p className="font-semibold text-slate-900">
+              Next run available in {cooldownTimer.label}
+            </p>
+            <p className="text-slate-600 mt-0.5 text-xs">
+              Insights are limited to one run per hour per profile to keep the AI cost in check.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Generating state */}
       {status === "generating" && (

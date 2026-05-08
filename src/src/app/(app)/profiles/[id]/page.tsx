@@ -166,7 +166,11 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <ScrapeNowButton username={profile.username} profileId={profile.id} />
-          <RunAnalysisButton profileId={profile.id} username={profile.username} />
+          <RunAnalysisButton
+            profileId={profile.id}
+            username={profile.username}
+            lastAnalysisAt={latestAnalysis?.created_at ?? null}
+          />
         </div>
       </div>
 
@@ -260,7 +264,11 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
                 recommendations to grow faster.
               </p>
             </div>
-            <RunAnalysisButton profileId={profile.id} username={profile.username} />
+            <RunAnalysisButton
+              profileId={profile.id}
+              username={profile.username}
+              lastAnalysisAt={null}
+            />
           </CardContent>
         </Card>
       ) : (

@@ -6,14 +6,24 @@ import { Button } from "@/components/ui/button"
 import { RefreshCw, Loader2, Clock, AlertCircle } from "lucide-react"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 import { triggerScrape } from "@/lib/trigger-scrape"
-import { formatMinutesUntil } from "@/lib/scrape-cooldown"
+import {
+  formatMinutesUntil,
+  HARD_COOLDOWN_MS,
+  SOFT_COOLDOWN_MS,
+} from "@/lib/scrape-cooldown"
+import { useCooldownTimer } from "@/lib/use-cooldown-timer"
 
 interface Props {
   username: string
   profileId: string
 }
 
-type Cooldown = { reason: "hard" | "soft"; minutesUntilNext: number }
+type Cooldown = {
+  reason: "hard" | "soft"
+  minutesUntilNext: number
+  /** ISO timestamp when the cooldown expires — drives the live per-second tick. */
+  nextAvailableAt: string
+}
 
 export function ScrapeNowButton({ username, profileId }: Props) {
   const router = useRouter()
@@ -26,6 +36,13 @@ export function ScrapeNowButton({ username, profileId }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [cooldown, setCooldown] = useState<Cooldown | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const cooldownTimer = useCooldownTimer(cooldown?.nextAvailableAt)
+
+  // Auto-clear the cooldown UI once the countdown elapses so the button
+  // re-enables without needing a page refresh.
+  useEffect(() => {
+    if (cooldown && !cooldownTimer) setCooldown(null)
+  }, [cooldown, cooldownTimer])
 
   useEffect(() => {
     if (lastStatusRef.current === "running" && job?.status === "done") {
@@ -51,7 +68,13 @@ export function ScrapeNowButton({ username, profileId }: Props) {
         return
       }
       if (result.status === "cooldown") {
-        setCooldown({ reason: result.reason, minutesUntilNext: result.minutesUntilNext })
+        const lastMs = new Date(result.lastScrapedAt).getTime()
+        const cooldownMs = result.reason === "hard" ? HARD_COOLDOWN_MS : SOFT_COOLDOWN_MS
+        setCooldown({
+          reason: result.reason,
+          minutesUntilNext: result.minutesUntilNext,
+          nextAvailableAt: new Date(lastMs + cooldownMs).toISOString(),
+        })
         return
       }
       setError(result.message || "Something went wrong")
@@ -92,8 +115,8 @@ export function ScrapeNowButton({ username, profileId }: Props) {
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold text-slate-900">
               {cooldown.reason === "hard"
-                ? `Just scraped — try again in ${formatMinutesUntil(cooldown.minutesUntilNext)}`
-                : `Already fresh — next refresh available in ${formatMinutesUntil(cooldown.minutesUntilNext)}`}
+                ? `Just scraped — try again in ${cooldownTimer?.label ?? formatMinutesUntil(cooldown.minutesUntilNext)}`
+                : `Already fresh — next refresh available in ${cooldownTimer?.label ?? formatMinutesUntil(cooldown.minutesUntilNext)}`}
             </p>
             {cooldown.reason === "soft" && (
               <button
