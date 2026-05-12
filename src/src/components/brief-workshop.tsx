@@ -20,6 +20,7 @@ import {
 import { StatusPillRow, type BriefStatus } from "@/components/status-pill"
 import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useCooldownTimer } from "@/lib/use-cooldown-timer"
+import { trackEvent } from "@/lib/analytics"
 import { Clock } from "lucide-react"
 
 export interface SavedBrief {
@@ -113,6 +114,7 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
       if (!res.ok) throw new Error(json.error ?? `Generation failed (${res.status})`)
       setBrief(json.brief)
       setCooldownUntil(null)
+      trackEvent("brief_ai_expanded", { brief_id: brief.id })
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Generation failed")
     } finally {
@@ -167,6 +169,7 @@ export function BriefWorkshop({ initialBrief }: { initialBrief: SavedBrief }) {
     try {
       await navigator.clipboard.writeText(buildFinalBrief())
       setCopied(true)
+      trackEvent("brief_copied", { brief_id: brief.id })
       setTimeout(() => setCopied(false), 2000)
     } catch {}
   }

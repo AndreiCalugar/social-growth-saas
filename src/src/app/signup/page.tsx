@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { User, Mail, Lock, Eye, EyeOff, Loader2, TrendingUp } from "lucide-react"
 import { AuthShowcasePanel, AuthMobileBanner } from "@/components/auth-showcase-panel"
+import { captureUtmSource, trackEvent } from "@/lib/analytics"
 
 type Strength = { score: 0 | 1 | 2 | 3; label: string; color: string; bars: number }
 
@@ -37,6 +38,12 @@ export default function SignupPage() {
 
   const strength = useMemo(() => scorePassword(password), [password])
 
+  // Stash utm_source as soon as the page mounts. captureUtmSource also
+  // returns the value we'll forward in the signup POST body.
+  useEffect(() => {
+    captureUtmSource()
+  }, [])
+
   async function onSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
@@ -48,10 +55,11 @@ export default function SignupPage() {
     }
 
     setSubmitting(true)
+    const signupSource = captureUtmSource()
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name, password }),
+      body: JSON.stringify({ email, name, password, signup_source: signupSource }),
     })
 
     if (!res.ok) {
@@ -61,6 +69,10 @@ export default function SignupPage() {
       setSubmitting(false)
       return
     }
+
+    // Fire after the signup row exists, before the auto sign-in below,
+    // so a failed signin doesn't suppress the conversion event.
+    trackEvent("signup_completed", { method: "email" })
 
     const signInRes = await signIn("credentials", {
       email,
@@ -75,6 +87,7 @@ export default function SignupPage() {
       setShakeKey((k) => k + 1)
       return
     }
+    trackEvent("login_completed", { method: "email" })
     router.push("/")
     router.refresh()
   }

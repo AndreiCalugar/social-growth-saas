@@ -27,6 +27,7 @@ import {
 import { MultiplierBadge } from "@/components/multiplier-badge"
 import { useJobTracker, useRotatingMessage, ESTIMATED_DURATION } from "@/components/job-tracker"
 import { useCooldownTimer } from "@/lib/use-cooldown-timer"
+import { trackEvent } from "@/lib/analytics"
 
 interface ExamplePost {
   caption_preview: string
@@ -190,6 +191,10 @@ function InsightCard({
       if (!res.ok || !json.brief) {
         throw new Error(json.error ?? `Failed to save brief (${res.status})`)
       }
+      trackEvent("brief_saved", {
+        trend_name: insight.trend_name,
+        performance_multiplier: insight.performance_multiplier ?? null,
+      })
       onSaved(insight.id, json.brief.id)
       router.push(`/briefs/${json.brief.id}`)
     } catch (e) {
@@ -540,7 +545,16 @@ export function InsightsClient({
       fetch(`/api/insights?profile_id=${ownProfileId}`)
         .then((r) => r.json())
         .then((json: { insights?: Insight[] }) => {
-          if (json.insights) setInsights(json.insights)
+          if (json.insights) {
+            setInsights(json.insights)
+            // Fire only when the job transitioned from running → done
+            // AND the fresh fetch returned rows. An empty result hits
+            // the lastRunEmpty banner instead and shouldn't count as a
+            // generated insight.
+            if (json.insights.length > 0) {
+              trackEvent("insights_generated", { count: json.insights.length })
+            }
+          }
         })
         .catch(() => {})
     }

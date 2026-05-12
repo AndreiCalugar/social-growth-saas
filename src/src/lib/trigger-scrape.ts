@@ -4,6 +4,8 @@
  * card action) so the cooldown response is parsed consistently.
  */
 
+import { trackEvent } from "@/lib/analytics"
+
 export type TriggerResult =
   | { status: "fired"; username: string }
   | {
@@ -37,7 +39,11 @@ export async function triggerScrape(
       }
     }
     if (res.ok && body?.success) {
-      return { status: "fired", username: String(body.username ?? "") }
+      const username = String(body.username ?? "")
+      // Centralised so every UI surface (rescrape button, profile-card
+      // refresh, profile-detail rescrape) reports the same event shape.
+      trackEvent("scrape_triggered", { username })
+      return { status: "fired", username }
     }
     return { status: "error", message: body?.error ?? `HTTP ${res.status}` }
   } catch (e) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { MessageCircle, X } from "lucide-react"
+import { trackEvent } from "@/lib/analytics"
 
 type Rating = "love" | "okay" | "needs_work"
 type Status = "idle" | "sending" | "sent" | "error"
@@ -70,6 +71,7 @@ export function FeedbackWidget() {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `Request failed (${res.status})`)
       }
+      trackEvent("feedback_submitted", { rating })
       setStatus("sent")
     } catch (e) {
       setStatus("error")
