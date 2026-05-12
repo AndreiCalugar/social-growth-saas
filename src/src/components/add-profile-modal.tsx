@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { UserPlus, Loader2, X } from "lucide-react"
 import { useJobTracker } from "@/components/job-tracker"
+import { trackEvent } from "@/lib/analytics"
 
 interface AddProfileModalProps {
   defaultIsOwn?: boolean
@@ -77,6 +78,9 @@ export function AddProfileModal({
 
       if (data.success) {
         if (inputRef.current) inputRef.current.value = ""
+        // Fire once per add. The "scrape complete" event is separate
+        // (see scrape_triggered below) — this counts the row creation.
+        trackEvent("profile_added", { is_own: isOwn })
         router.refresh()
         if (data.scrape_fired === false && data.cooldown) {
           const mins = data.cooldown.minutesUntilNext as number
@@ -89,6 +93,7 @@ export function AddProfileModal({
           // Let the user close the modal manually so they can read the message
           return
         }
+        trackEvent("scrape_triggered", { username })
         startScrape({ username, profileId: data.profile.id })
         startPolling(data.profile.id)
       } else {

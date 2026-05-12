@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { Mail, Lock, Eye, EyeOff, Loader2, TrendingUp } from "lucide-react"
 import { AuthShowcasePanel, AuthMobileBanner } from "@/components/auth-showcase-panel"
+import { trackEvent } from "@/lib/analytics"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -35,6 +36,7 @@ export default function LoginPage() {
       setShakeKey((k) => k + 1)
       return
     }
+    trackEvent("login_completed", { method: "email" })
     router.push(res.url || callbackUrl)
     router.refresh()
   }

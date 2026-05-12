@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { UserPlus, Loader2 } from "lucide-react"
 import { useJobTracker } from "@/components/job-tracker"
 import { PREFILL_EVENT } from "@/components/competitor-discovery"
+import { trackEvent } from "@/lib/analytics"
 
 export function AddCompetitorForm() {
   const [state, setState] = useState<"idle" | "loading" | "polling" | "error">("idle")
@@ -31,7 +32,7 @@ export function AddCompetitorForm() {
     return () => window.removeEventListener(PREFILL_EVENT, handlePrefill)
   }, [])
 
-  function startPolling(profileId: string) {
+  function startPolling(profileId: string, username: string) {
     setState("polling")
     setMessage("Scraping in the background — keep working, ready in ~2 min")
 
@@ -43,6 +44,9 @@ export function AddCompetitorForm() {
           clearInterval(interval)
           setState("idle")
           setMessage("")
+          // The competitor only counts as "added" once it has scraped
+          // data — an empty profile-row isn't usable for insights.
+          trackEvent("competitor_added", { username })
           router.refresh()
         } else if (data.status === "failed") {
           clearInterval(interval)
@@ -97,8 +101,9 @@ export function AddCompetitorForm() {
           )
           return
         }
+        trackEvent("scrape_triggered", { username })
         startScrape({ username, profileId: data.profile.id })
-        startPolling(data.profile.id)
+        startPolling(data.profile.id, username)
       } else {
         throw new Error(data.error ?? "Unknown error")
       }
