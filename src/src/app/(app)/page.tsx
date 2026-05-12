@@ -171,12 +171,16 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     supabase
       .from("trend_insights")
       .select(
-        "trend_name, one_line_summary, performance_multiplier, competitor_count, total_competitors, is_mega_tip, recommendation, content_format, hook, caption_structure, best_time, hashtags"
+        "trend_name, one_line_summary, performance_multiplier, competitor_count, total_competitors, is_mega_tip, recommendation, content_format, hook, caption_structure, best_time, hashtags, created_at, detected_niche"
       )
       .eq("profile_id", ownProfileId)
-      .order("is_mega_tip", { ascending: false })
-      .order("performance_multiplier", { ascending: false })
-      .limit(20),
+      // Belt-and-suspenders against stale rows from the pre-redesign
+      // algorithm (no niche detection). schema/014 deletes them, but
+      // we still gate at the query layer so a missed cleanup can't
+      // resurface a 3146× "trend" on the Overview.
+      .not("detected_niche", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(50),
     competitorIds.length > 0
       ? supabase
           .from("posts")
@@ -227,14 +231,41 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       }
     : null
 
-  const insights = insightsRes.data ?? []
+  // Restrict to the most recent batch only — matches the Insights page
+  // cutoff so the Overview doesn't pick a 50× theme from last month over
+  // a 3.2× theme from this morning.
+  const allInsights = insightsRes.data ?? []
+  const BATCH_WINDOW_MS = 10 * 60 * 1000
+  let insights: typeof allInsights = []
+  if (allInsights.length > 0) {
+    const newestMs = Math.max(
+      ...allInsights.map((i) => new Date(i.created_at).getTime()),
+    )
+    const cutoff = newestMs - BATCH_WINDOW_MS
+    insights = allInsights.filter(
+      (i) => new Date(i.created_at).getTime() >= cutoff,
+    )
+  }
+  // Sort the batch the same way the original query did so the top-pick
+  // logic below is unchanged: mega tips first, then highest multiplier.
+  insights.sort((a, b) => {
+    const megaDiff = Number(b.is_mega_tip === true) - Number(a.is_mega_tip === true)
+    if (megaDiff !== 0) return megaDiff
+    return (b.performance_multiplier ?? 0) - (a.performance_multiplier ?? 0)
+  })
   const megaTips = insights.filter((i) => i.is_mega_tip === true)
   const topBriefRow = megaTips[0] ?? insights[0] ?? null
   const topBrief: TopBrief | null = topBriefRow
     ? {
         trend_name: topBriefRow.trend_name ?? "Trend",
         one_line_summary: topBriefRow.one_line_summary ?? null,
-        performance_multiplier: topBriefRow.performance_multiplier ?? null,
+        // Cap at 50 so a leftover stale row that slipped past the
+        // detected_niche filter (corrupt write, manual SQL, etc.) can't
+        // render a "3146×" badge.
+        performance_multiplier:
+          topBriefRow.performance_multiplier == null
+            ? null
+            : Math.min(topBriefRow.performance_multiplier, 50),
         competitor_count: topBriefRow.competitor_count ?? null,
         total_competitors: topBriefRow.total_competitors ?? null,
         is_mega_tip: topBriefRow.is_mega_tip === true,
@@ -821,6 +852,9 @@ function TopContentBriefCard({ data }: { data: DashboardData }) {
   if (!brief) return null
 
   const multiplier = brief.performance_multiplier ?? 0
+  // The data layer clamps at 50; treat >= 50 as "at the cap" and render
+  // "50+" to match how the Insights page renders the same badge.
+  const multiplierIsCapped = multiplier >= 50
   const fraction =
     brief.competitor_count != null && brief.total_competitors != null
       ? `Found in ${brief.competitor_count} of ${brief.total_competitors} competitors`
@@ -838,7 +872,7 @@ function TopContentBriefCard({ data }: { data: DashboardData }) {
         </h2>
         {multiplier > 0 && (
           <span className="inline-flex items-baseline gap-0.5 rounded-full bg-slate-900 px-3 py-1.5 text-sm font-bold text-white tabular-nums shadow-sm">
-            {multiplier.toFixed(1)}
+            {multiplierIsCapped ? "50+" : multiplier.toFixed(1)}
             <span className="text-[11px] font-semibold text-slate-300">×</span>
           </span>
         )}
