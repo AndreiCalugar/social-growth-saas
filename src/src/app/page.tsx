@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { LandingPage } from "@/components/landing/landing-page"
+import { CookieConsentBanner } from "@/components/cookie-consent-banner"
 
 export const dynamic = "force-dynamic"
 
@@ -16,5 +17,10 @@ export default async function HomePage() {
     redirect("/overview")
   }
 
-  return <LandingPage />
+  return (
+    <>
+      <LandingPage />
+      <CookieConsentBanner />
+    </>
+  )
 }

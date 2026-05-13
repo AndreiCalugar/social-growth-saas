@@ -1,6 +1,7 @@
 import { LandingHeader } from "@/components/landing/landing-header"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LegalToc, type TocEntry } from "@/components/legal/legal-toc"
+import { CookieConsentBanner } from "@/components/cookie-consent-banner"
 
 export function LegalShell({
   title,
@@ -42,6 +43,7 @@ export function LegalShell({
       </main>
 
       <LandingFooter />
+      <CookieConsentBanner />
     </div>
   )
 }

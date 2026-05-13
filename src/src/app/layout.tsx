@@ -2,7 +2,6 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Providers } from "@/components/providers"
-import { GA4Script } from "@/components/ga4-script"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -13,11 +12,14 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic"
 
+// GA4 is loaded per-segment, not globally:
+//   - (app)/layout.tsx        → always loads for authenticated users
+//   - login + signup layouts  → always loads (conversion events fire here)
+//   - landing + legal pages   → loaded only after the cookie banner accepts
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={`${inter.className} bg-slate-50 antialiased`}>
-        <GA4Script />
         <Providers>{children}</Providers>
       </body>
     </html>

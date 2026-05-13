@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { AppShell } from "@/components/app-shell"
 import { FeedbackWidget } from "@/components/feedback-widget"
+import { GA4Script } from "@/components/ga4-script"
 
 export const dynamic = "force-dynamic"
 
@@ -52,6 +53,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       userEmail={user?.email ?? null}
       activeBriefsCount={activeBriefsCount}
     >
+      {/* Logged-in users implicitly accepted analytics when they signed up
+          (Privacy Policy disclosed it). Public pages gate GA4 behind a
+          consent banner instead. */}
+      <GA4Script />
       {children}
       {/* Persistent feedback pill — only mounted inside the (app) layout
           so it never appears on /login or /signup. */}
