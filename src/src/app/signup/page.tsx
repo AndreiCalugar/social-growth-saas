@@ -78,7 +78,7 @@ export default function SignupPage() {
       email,
       password,
       redirect: false,
-      callbackUrl: "/",
+      callbackUrl: "/overview",
     })
     setSubmitting(false)
 
@@ -88,7 +88,7 @@ export default function SignupPage() {
       return
     }
     trackEvent("login_completed", { method: "email" })
-    router.push("/")
+    router.push("/overview")
     router.refresh()
   }
 
