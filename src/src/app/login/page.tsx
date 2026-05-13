@@ -11,7 +11,7 @@ import { trackEvent } from "@/lib/analytics"
 export default function LoginPage() {
   const router = useRouter()
   const search = useSearchParams()
-  const callbackUrl = search.get("callbackUrl") || "/"
+  const callbackUrl = search.get("callbackUrl") || "/overview"
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")

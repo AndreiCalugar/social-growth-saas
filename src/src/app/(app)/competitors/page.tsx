@@ -270,7 +270,7 @@ export default async function CompetitorsPage() {
         <div className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">
             Own profile not found. Run a scrape from the{" "}
-            <Link href="/" className="text-purple-600 underline underline-offset-2">Overview page</Link>{" "}
+            <Link href="/overview" className="text-purple-600 underline underline-offset-2">Overview page</Link>{" "}
             first.
           </p>
         </div>
