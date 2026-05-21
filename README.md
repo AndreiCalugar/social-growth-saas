@@ -18,7 +18,7 @@ The **Insights page** (`/insights`) is the core product — cross-competitor the
 | Scraping | Apify (Instagram Post Scraper) |
 | AI | Claude API (claude-sonnet-4-5, 12K max_tokens for the insights run) |
 | Database | Supabase (PostgreSQL via REST) |
-| Auth | NextAuth.js (credentials, bcrypt) |
+| Auth | NextAuth.js (credentials + Google OAuth, bcrypt) |
 | Hosting | Vercel (production: api.narativ.space) |
 | Billing | Stripe (planned) |
 
@@ -57,7 +57,7 @@ The **Insights page** (`/insights`) is the core product — cross-competitor the
 
 ### Shipped
 
-- [x] Auth (NextAuth + Supabase `users`, signup / login / session)
+- [x] Auth (NextAuth + Supabase `users`, signup / login / session, Google OAuth with email-based account linking)
 - [x] Split-screen login / signup with animated showcase panel
 - [x] Onboarding landing for zero-profile users
 - [x] Stage-based Overview dashboard (snapshot → account health → content brief)
