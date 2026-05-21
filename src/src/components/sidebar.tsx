@@ -52,7 +52,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-screen w-64 flex-col text-slate-200",
+        "flex h-dvh w-64 flex-col text-slate-200",
         "fixed inset-y-0 left-0 z-50 shadow-xl transition-transform duration-300 ease-out",
         open ? "translate-x-0" : "-translate-x-full",
         "md:static md:z-auto md:w-56 md:translate-x-0 md:shadow-none md:transition-none"
@@ -133,7 +133,12 @@ export function Sidebar({
         aria-hidden
       />
 
-      <div className="p-3 flex flex-col gap-1">
+      {/* pb adds iOS home-indicator safe area on iPhones, so the Log out
+          row isn't sitting under the indicator on devices like Pro Max. */}
+      <div
+        className="p-3 flex flex-col gap-1"
+        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      >
         <div className="flex items-center gap-2.5 rounded-lg px-3 py-2">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-xs font-semibold text-white shrink-0 shadow-sm ring-1 ring-white/20">
             {username.charAt(0).toUpperCase()}

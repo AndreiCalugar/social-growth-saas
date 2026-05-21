@@ -36,7 +36,11 @@ export function AppShell({
 
   return (
     <JobTrackerProvider>
-      <div className="flex h-screen overflow-hidden">
+      {/* h-dvh > h-screen on iOS Safari: 100vh ignores the dynamic browser
+          toolbar, so the bottom of the page (and the Log out row in the
+          sidebar) ends up hidden behind the URL bar. h-dvh tracks the
+          actual visible area as the toolbar shrinks/expands. */}
+      <div className="flex h-dvh overflow-hidden">
         {open && (
           <div
             className="fixed inset-0 z-40 bg-slate-900/50 md:hidden"
