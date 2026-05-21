@@ -28,6 +28,54 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "=https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_API_TOKEN }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ usernames: [$json.username] }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "run-profile-scraper",
+      "name": "Run Profile Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 480],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse profile-scraper response → extract pic URL, name, verified, bio, followers.\n// sync-get-dataset-items returns the array of items directly; we asked for 1 username so we expect 1 item.\n// If the actor failed or returned nothing, emit a row with nulls — downstream will skip the pic upload.\nconst resp = $input.first().json;\nconst arr = Array.isArray(resp) ? resp : (Array.isArray(resp?.items) ? resp.items : []);\nconst profile = arr[0] || {};\nconst username = $('Validate Input').first().json.username;\nconst supabaseUrl = $env.SUPABASE_URL;\nconst storagePath = `profile-pics/${username}.jpg`;\nconst publicUrl = profile.profilePicUrlHD || profile.profilePicUrl\n  ? `${supabaseUrl}/storage/v1/object/public/${storagePath}`\n  : null;\n\nreturn [{\n  json: {\n    username,\n    profile_pic_url_remote: profile.profilePicUrlHD || profile.profilePicUrl || null,\n    profile_pic_url: publicUrl,\n    storage_path: storagePath,\n    full_name: profile.fullName || null,\n    is_verified: profile.verified === true,\n    followers: profile.followersCount ?? null,\n    following: profile.followsCount ?? null,\n    bio: profile.biography ?? null\n  }\n}];"
+      },
+      "id": "extract-profile-meta",
+      "name": "Extract Profile Meta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Download the IG CDN profile pic and upload it to Supabase Storage.\n// Best-effort: failure here must NOT abort the scrape (letter avatar will remain).\nconst meta = $input.first().json;\nconst { username, profile_pic_url_remote: picUrl, storage_path } = meta;\n\nif (!picUrl) {\n  return [{ json: { ...meta, pic_uploaded: false, pic_skip_reason: 'no_url' } }];\n}\n\ntry {\n  const picResp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: picUrl,\n    encoding: 'arraybuffer',\n    returnFullResponse: true,\n    timeout: 15000,\n  });\n  const buf = Buffer.from(picResp.body);\n  const contentType = (picResp.headers && (picResp.headers['content-type'] || picResp.headers['Content-Type'])) || 'image/jpeg';\n\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${$env.SUPABASE_URL}/storage/v1/object/${storage_path}`,\n    headers: {\n      apikey: $env.SUPABASE_SECRET_KEY,\n      Authorization: `Bearer ${$env.SUPABASE_SECRET_KEY}`,\n      'Content-Type': contentType,\n      'x-upsert': 'true',\n      'Cache-Control': 'public, max-age=86400'\n    },\n    body: buf,\n    timeout: 20000,\n  });\n\n  return [{ json: { ...meta, pic_uploaded: true } }];\n} catch (e) {\n  console.error(`Profile pic upload failed for @${username}:`, e.message);\n  // Clear the public URL so we don't write a broken link to the profile row.\n  return [{ json: { ...meta, profile_pic_url: null, pic_uploaded: false, pic_skip_reason: e.message } }];\n}"
+      },
+      "id": "upload-profile-pic",
+      "name": "Upload Profile Pic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 480],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "https://api.apify.com/v2/acts/nH2AHrwxeTRJoN5hX/runs",
         "sendHeaders": true,
         "headerParameters": {
@@ -44,7 +92,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ username: [$json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }, loginCookies: [{ name: 'sessionid', value: $env.INSTAGRAM_SESSION_ID, domain: '.instagram.com' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ username: [$('Validate Input').first().json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }, loginCookies: [{ name: 'sessionid', value: $env.INSTAGRAM_SESSION_ID, domain: '.instagram.com' }] }) }}",
         "options": {}
       },
       "id": "start-apify-run",
@@ -211,7 +259,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ platform: 'instagram', username: $json.username, profile_url: 'https://www.instagram.com/' + $json.username + '/', followers: $json.owner_followers, following: $json.owner_following, bio: $json.owner_bio }) }}",
+        "jsonBody": "={{ JSON.stringify({ platform: 'instagram', username: $json.username, profile_url: 'https://www.instagram.com/' + $json.username + '/', followers: ($('Extract Profile Meta').first()?.json?.followers ?? $json.owner_followers), following: ($('Extract Profile Meta').first()?.json?.following ?? $json.owner_following), bio: ($('Extract Profile Meta').first()?.json?.bio ?? $json.owner_bio), profile_pic_url: $('Extract Profile Meta').first()?.json?.profile_pic_url ?? null, full_name: $('Extract Profile Meta').first()?.json?.full_name ?? null, is_verified: $('Extract Profile Meta').first()?.json?.is_verified === true }) }}",
         "options": {}
       },
       "id": "upsert-profile",
@@ -370,6 +418,21 @@
       ]
     },
     "Validate Input": {
+      "main": [
+        [{ "node": "Run Profile Scraper", "type": "main", "index": 0 }]
+      ]
+    },
+    "Run Profile Scraper": {
+      "main": [
+        [{ "node": "Extract Profile Meta", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Profile Meta": {
+      "main": [
+        [{ "node": "Upload Profile Pic", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upload Profile Pic": {
       "main": [
         [{ "node": "Start Apify Run", "type": "main", "index": 0 }]
       ]
