@@ -145,6 +145,20 @@
   }
 }
 
+/* iOS Safari auto-zooms when a form control with computed font-size < 16px
+   receives focus, and the surrounding overflow:hidden shell traps the user
+   at that zoom level. Pin form controls to >= 16px on phone-sized viewports
+   so a tap on a (sometimes accidental, sometimes readonly) input doesn't
+   jump the page and hide the Log out button. !important is required to win
+   over Tailwind utility `text-sm`. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Long-form typography for legal pages. Kept minimal — we want
    readable paragraphs and clear section breaks, not a fancy article style. */
 .legal-prose {
