@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { User, Mail, Lock, Eye, EyeOff, Loader2, TrendingUp } from "lucide-react"
 import { AuthShowcasePanel, AuthMobileBanner } from "@/components/auth-showcase-panel"
@@ -27,13 +27,24 @@ function scorePassword(pw: string): Strength {
 
 export default function SignupPage() {
   const router = useRouter()
+  const search = useSearchParams()
+  const errorCode = search.get("error")
+  const oauthErrored =
+    errorCode === "OAuthSignin" ||
+    errorCode === "OAuthCallback" ||
+    errorCode === "OAuthCreateAccount" ||
+    errorCode === "Callback" ||
+    errorCode === "AccessDenied"
 
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    oauthErrored ? "Google sign-in didn’t finish. Please try again." : null,
+  )
   const [submitting, setSubmitting] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [shakeKey, setShakeKey] = useState(0)
 
   const strength = useMemo(() => scorePassword(password), [password])
@@ -92,6 +103,25 @@ export default function SignupPage() {
     router.refresh()
   }
 
+  async function onGoogleClick() {
+    setError(null)
+    setGoogleLoading(true)
+    // Stash utm_source in a short-lived cookie so the server-side signIn
+    // callback can write it onto the new user row. The OAuth handshake
+    // takes us off-domain and back, so sessionStorage alone won't reach
+    // the server.
+    const source = captureUtmSource()
+    if (source && typeof document !== "undefined") {
+      document.cookie = `sg.utm_source=${encodeURIComponent(source)}; path=/; max-age=300; SameSite=Lax`
+    }
+    trackEvent("signup_started", { method: "google" })
+    // The user could already have an account — that's fine, the signIn
+    // callback will link to the existing row and this becomes a login.
+    // /overview renders the onboarding landing when the user has no
+    // profiles, so a single callbackUrl covers both new and returning users.
+    await signIn("google", { callbackUrl: "/overview" })
+  }
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white">
       <AuthShowcasePanel />
@@ -120,6 +150,29 @@ export default function SignupPage() {
             className={`flex flex-col gap-4 ${error ? "auth-shake" : ""}`}
             noValidate
           >
+            <button
+              type="button"
+              onClick={onGoogleClick}
+              disabled={googleLoading || submitting}
+              className="h-11 w-full inline-flex items-center justify-center gap-2.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-sm transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {googleLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+              ) : (
+                <GoogleIcon className="h-[18px] w-[18px]" />
+              )}
+              Continue with Google
+            </button>
+            <p className="-mt-2 text-[11px] text-slate-400 leading-snug text-center">
+              We only receive your name and email. No access to Gmail or other data.
+            </p>
+
+            <div className="relative flex items-center my-1">
+              <div className="flex-1 border-t border-slate-200" />
+              <span className="px-3 text-[11px] uppercase tracking-wider text-slate-400 font-medium">or</span>
+              <div className="flex-1 border-t border-slate-200" />
+            </div>
+
             <FieldWithIcon
               id="name"
               label="Name"
@@ -208,29 +261,10 @@ export default function SignupPage() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || googleLoading}
               className="h-11 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium text-sm shadow-sm shadow-purple-500/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
-            </button>
-
-            <div className="relative flex items-center my-1">
-              <div className="flex-1 border-t border-slate-200" />
-              <span className="px-3 text-[11px] uppercase tracking-wider text-slate-400 font-medium">or</span>
-              <div className="flex-1 border-t border-slate-200" />
-            </div>
-
-            <button
-              type="button"
-              disabled
-              title="Coming soon"
-              className="h-11 w-full inline-flex items-center justify-center gap-2.5 rounded-lg border border-slate-200 bg-white text-slate-400 font-medium text-sm cursor-not-allowed"
-            >
-              <GoogleIcon className="h-[18px] w-[18px] opacity-50" />
-              Continue with Google
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider ml-1">
-                soon
-              </span>
             </button>
           </form>
 
