@@ -28,10 +28,14 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_API_TOKEN }}",
+        "url": "https://api.apify.com/v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -53,7 +57,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse profile-scraper response → extract pic URL, name, verified, bio, followers.\n// sync-get-dataset-items returns the array of items directly; we asked for 1 username so we expect 1 item.\n// If the actor failed or returned nothing, emit a row with nulls — downstream will skip the pic upload.\nconst resp = $input.first().json;\nconst arr = Array.isArray(resp) ? resp : (Array.isArray(resp?.items) ? resp.items : []);\nconst profile = arr[0] || {};\nconst username = $('Validate Input').first().json.username;\nconst supabaseUrl = $env.SUPABASE_URL;\nconst storagePath = `profile-pics/${username}.jpg`;\nconst publicUrl = profile.profilePicUrlHD || profile.profilePicUrl\n  ? `${supabaseUrl}/storage/v1/object/public/${storagePath}`\n  : null;\n\nreturn [{\n  json: {\n    username,\n    profile_pic_url_remote: profile.profilePicUrlHD || profile.profilePicUrl || null,\n    profile_pic_url: publicUrl,\n    storage_path: storagePath,\n    full_name: profile.fullName || null,\n    is_verified: profile.verified === true,\n    followers: profile.followersCount ?? null,\n    following: profile.followsCount ?? null,\n    bio: profile.biography ?? null\n  }\n}];"
+        "jsCode": "// Parse profile-scraper response → extract pic URL, name, verified, bio, followers.\n// Apify sync-get-dataset-items returns a raw JSON array of items. But n8n's HTTP\n// Request node frequently unwraps a top-level array into multiple output items —\n// so $input.first().json is most often the profile OBJECT directly, not the array.\n// Handle every shape we might realistically see.\nconst allInputs = $input.all();\nconst first = allInputs[0]?.json;\nconst username = $('Validate Input').first().json.username;\nconst supabaseUrl = $env.SUPABASE_URL;\nconst storagePath = `profile-pics/${username}.jpg`;\n\nlet profile = {};\nlet shape = 'unknown';\n\nif (Array.isArray(first)) {\n  profile = first[0] || {};\n  shape = 'array-in-json';\n} else if (first && Array.isArray(first.items)) {\n  profile = first.items[0] || {};\n  shape = 'wrapped-items';\n} else if (first && (first.username || first.fullName || first.profilePicUrl)) {\n  // n8n unwrapped the top-level array → single item already IS the profile.\n  profile = first;\n  shape = 'unwrapped-single';\n} else if (allInputs.length > 1) {\n  // n8n split the array into one item per profile.\n  profile = allInputs[0].json || {};\n  shape = 'split-items';\n} else if (first && (first.error || first.statusCode)) {\n  shape = 'error';\n  console.error(`[profile-scraper] error response for @${username}:`, JSON.stringify(first).slice(0, 500));\n}\n\nconst picUrl = profile.profilePicUrlHD || profile.profilePicUrl || null;\nconst publicUrl = picUrl ? `${supabaseUrl}/storage/v1/object/public/${storagePath}` : null;\n\nconsole.log(`[profile-scraper] @${username} shape=${shape} has_pic=${!!picUrl} followers=${profile.followersCount} verified=${profile.verified}`);\n\nreturn [{\n  json: {\n    username,\n    profile_pic_url_remote: picUrl,\n    profile_pic_url: publicUrl,\n    storage_path: storagePath,\n    full_name: profile.fullName || null,\n    is_verified: profile.verified === true,\n    followers: profile.followersCount ?? null,\n    following: profile.followsCount ?? null,\n    bio: profile.biography ?? null,\n    _debug_shape: shape,\n    _debug_raw_keys: first && typeof first === 'object' ? Object.keys(first).slice(0, 30) : null,\n    _debug_input_count: allInputs.length\n  }\n}];"
       },
       "id": "extract-profile-meta",
       "name": "Extract Profile Meta",
