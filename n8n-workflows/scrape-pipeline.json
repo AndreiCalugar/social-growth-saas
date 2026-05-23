@@ -67,13 +67,53 @@
     },
     {
       "parameters": {
-        "jsCode": "// Download the IG CDN profile pic and upload it to Supabase Storage.\n// Best-effort: failure here must NOT abort the scrape (letter avatar will remain).\nconst meta = $input.first().json;\nconst { username, profile_pic_url_remote: picUrl, storage_path } = meta;\n\nif (!picUrl) {\n  return [{ json: { ...meta, pic_uploaded: false, pic_skip_reason: 'no_url' } }];\n}\n\ntry {\n  const picResp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: picUrl,\n    encoding: 'arraybuffer',\n    returnFullResponse: true,\n    timeout: 15000,\n  });\n  const buf = Buffer.from(picResp.body);\n  const contentType = (picResp.headers && (picResp.headers['content-type'] || picResp.headers['Content-Type'])) || 'image/jpeg';\n\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${$env.SUPABASE_URL}/storage/v1/object/${storage_path}`,\n    headers: {\n      apikey: $env.SUPABASE_SECRET_KEY,\n      Authorization: `Bearer ${$env.SUPABASE_SECRET_KEY}`,\n      'Content-Type': contentType,\n      'x-upsert': 'true',\n      'Cache-Control': 'public, max-age=86400'\n    },\n    body: buf,\n    timeout: 20000,\n  });\n\n  return [{ json: { ...meta, pic_uploaded: true } }];\n} catch (e) {\n  console.error(`Profile pic upload failed for @${username}:`, e.message);\n  // Clear the public URL so we don't write a broken link to the profile row.\n  return [{ json: { ...meta, profile_pic_url: null, pic_uploaded: false, pic_skip_reason: e.message } }];\n}"
+        "jsCode": "// Download the IG CDN profile pic and emit it as an n8n binary item.\n// The actual upload to Supabase Storage happens in the next HTTP Request node\n// (binary body type). Doing the upload from this Code node failed because\n// Code-node sandbox Buffers don't pass n8n's host-side Buffer.isBuffer check,\n// so the body was JSON.stringify'd and Supabase stored the literal text\n// `{\"type\":\"Buffer\",\"data\":[...]}` instead of raw JPEG bytes.\n// `prepareBinaryData` builds the binary item in host context, which the HTTP\n// Request node forwards as raw octets.\nconst meta = $input.first().json;\nconst { username, profile_pic_url_remote: picUrl, storage_path } = meta;\n\nif (!picUrl) {\n  return [{ json: { ...meta, pic_uploaded: false, pic_skip_reason: 'no_url' } }];\n}\n\ntry {\n  const picResp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: picUrl,\n    encoding: 'arraybuffer',\n    returnFullResponse: true,\n    timeout: 15000,\n  });\n  const buf = Buffer.from(picResp.body);\n  const contentType = (picResp.headers && (picResp.headers['content-type'] || picResp.headers['Content-Type'])) || 'image/jpeg';\n  const filename = `${username}.jpg`;\n  const binaryData = await this.helpers.prepareBinaryData(buf, filename, contentType);\n\n  return [{\n    json: { ...meta, pic_downloaded: true, pic_bytes: buf.length },\n    binary: { data: binaryData },\n  }];\n} catch (e) {\n  console.error(`Profile pic download failed for @${username}:`, e.message);\n  // Clear the public URL so we don't write a broken link to the profile row.\n  return [{ json: { ...meta, profile_pic_url: null, pic_uploaded: false, pic_skip_reason: e.message } }];\n}"
       },
       "id": "upload-profile-pic",
       "name": "Upload Profile Pic",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1120, 480],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/storage/v1/object/{{ $json.storage_path }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public, max-age=86400"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "upload-pic-to-storage",
+      "name": "Upload Pic to Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 480],
       "onError": "continueRegularOutput",
       "continueOnFail": true
     },
@@ -437,6 +477,11 @@
       ]
     },
     "Upload Profile Pic": {
+      "main": [
+        [{ "node": "Upload Pic to Storage", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upload Pic to Storage": {
       "main": [
         [{ "node": "Start Apify Run", "type": "main", "index": 0 }]
       ]
