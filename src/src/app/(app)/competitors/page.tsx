@@ -9,6 +9,7 @@ import { InstagramLink } from "@/components/instagram-link"
 import { DeleteCompetitorButton } from "@/components/delete-competitor-button"
 import { RetryScrapeButton } from "@/components/retry-scrape-button"
 import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
+import { ProfileAvatar } from "@/components/profile-avatar"
 import { Users, Clock, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
@@ -19,7 +20,7 @@ export default async function CompetitorsPage() {
 
   const profilesRes = await supabase
     .from("profiles")
-    .select("id, username, followers, last_scraped, is_own")
+    .select("id, username, followers, last_scraped, is_own, profile_pic_url, full_name, is_verified")
     .eq("user_id", userId)
     .order("is_own", { ascending: false })
     .order("username", { ascending: true })
@@ -198,9 +199,13 @@ export default async function CompetitorsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div className="relative shrink-0">
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm ring-2 ring-white">
-                            <span className="text-sm font-bold text-white">{c.username.charAt(0).toUpperCase()}</span>
-                          </div>
+                          <ProfileAvatar
+                            username={c.username}
+                            profilePicUrl={c.profile_pic_url}
+                            isVerified={c.is_verified ?? false}
+                            size="md"
+                            fallbackGradient="bg-gradient-to-br from-slate-500 to-slate-700"
+                          />
                           <span
                             className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${statusDot.color} ${statusDot.pulse ? "animate-pulse" : ""}`}
                             aria-label={statusDot.label}
@@ -217,7 +222,13 @@ export default async function CompetitorsPage() {
                             </p>
                             <InstagramLink username={c.username} size="xs" className="shrink-0" />
                           </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5 truncate">{statusDot.label}</p>
+                          {c.full_name ? (
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate" title={c.full_name}>
+                              {c.full_name}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">{statusDot.label}</p>
+                          )}
                         </div>
                       </div>
                       <div className="shrink-0">
@@ -226,6 +237,12 @@ export default async function CompetitorsPage() {
                     </div>
 
                     <div className="mt-4 space-y-1.5 flex-1">
+                      {c.followers != null && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                          <Users className="h-3 w-3 text-slate-400" />
+                          {formatNumber(c.followers)} followers
+                        </p>
+                      )}
                       <p className="text-xs text-slate-500 flex items-center gap-1.5">
                         <Clock className="h-3 w-3 text-slate-400" />
                         {c.last_scraped ? `Scraped ${formatRelativeTime(c.last_scraped)}` : "Never scraped"}

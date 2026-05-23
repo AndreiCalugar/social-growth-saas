@@ -7,8 +7,9 @@ import { AddProfileModal } from "@/components/add-profile-modal"
 import { ProfileCardActions } from "@/components/profile-card-actions"
 import { ScrapingCardOverlay } from "@/components/scraping-card-overlay"
 import { InstagramLink } from "@/components/instagram-link"
+import { ProfileAvatar } from "@/components/profile-avatar"
 import { formatNumber, formatRelativeTime } from "@/lib/format"
-import { Clock, FileText, TrendingUp, ArrowRight, Sparkles } from "lucide-react"
+import { Clock, FileText, TrendingUp, ArrowRight, Sparkles, Users } from "lucide-react"
 
 export default async function ProfilesPage() {
   const session = await auth()
@@ -16,7 +17,7 @@ export default async function ProfilesPage() {
 
   const profilesRes = await supabase
     .from("profiles")
-    .select("id, username, followers, last_scraped, is_own")
+    .select("id, username, followers, last_scraped, is_own, profile_pic_url, full_name, is_verified")
     .eq("user_id", userId)
     .order("is_own", { ascending: false })
     .order("username", { ascending: true })
@@ -113,7 +114,16 @@ export default async function ProfilesPage() {
 }
 
 interface ProfileCardProps {
-  profile: { id: string; username: string; followers: number | null; last_scraped: string | null; is_own: boolean }
+  profile: {
+    id: string
+    username: string
+    followers: number | null
+    last_scraped: string | null
+    is_own: boolean
+    profile_pic_url: string | null
+    full_name: string | null
+    is_verified: boolean | null
+  }
   stats: { count: number; avgEngagement: number | null; avgLikes: number | null }
 }
 
@@ -126,7 +136,6 @@ function scrapeStatus(last_scraped: string | null): { dot: string; label: string
 }
 
 function ProfileCard({ profile, stats }: ProfileCardProps) {
-  const initials = profile.username.charAt(0).toUpperCase()
   const status = scrapeStatus(profile.last_scraped)
   return (
     <div className="group relative h-full">
@@ -136,9 +145,12 @@ function ProfileCard({ profile, stats }: ProfileCardProps) {
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="relative shrink-0">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm ring-2 ring-white">
-                  <span className="text-sm font-bold text-white">{initials}</span>
-                </div>
+                <ProfileAvatar
+                  username={profile.username}
+                  profilePicUrl={profile.profile_pic_url}
+                  isVerified={profile.is_verified ?? false}
+                  size="md"
+                />
                 <span
                   className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${status.dot} ${status.pulse ? "animate-pulse" : ""}`}
                   aria-label={status.label}
@@ -155,7 +167,13 @@ function ProfileCard({ profile, stats }: ProfileCardProps) {
                   </p>
                   <InstagramLink username={profile.username} size="xs" className="shrink-0" />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-0.5 truncate">{status.label}</p>
+                {profile.full_name ? (
+                  <p className="text-[11px] text-slate-500 mt-0.5 truncate" title={profile.full_name}>
+                    {profile.full_name}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-500 mt-0.5 truncate">{status.label}</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -164,6 +182,12 @@ function ProfileCard({ profile, stats }: ProfileCardProps) {
           </div>
 
           <div className="mt-4 space-y-1.5 flex-1">
+            {profile.followers != null && (
+              <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                <Users className="h-3 w-3 text-slate-400" />
+                {formatNumber(profile.followers)} followers
+              </p>
+            )}
             <p className="text-xs text-slate-500 flex items-center gap-1.5">
               <FileText className="h-3 w-3 text-slate-400" />
               {stats.count} posts tracked

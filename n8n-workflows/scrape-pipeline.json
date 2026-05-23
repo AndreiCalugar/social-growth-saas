@@ -28,6 +28,98 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "https://api.apify.com/v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.APIFY_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ usernames: [$json.username] }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "run-profile-scraper",
+      "name": "Run Profile Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 480],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse profile-scraper response → extract pic URL, name, verified, bio, followers.\n// Apify sync-get-dataset-items returns a raw JSON array of items. But n8n's HTTP\n// Request node frequently unwraps a top-level array into multiple output items —\n// so $input.first().json is most often the profile OBJECT directly, not the array.\n// Handle every shape we might realistically see.\nconst allInputs = $input.all();\nconst first = allInputs[0]?.json;\nconst username = $('Validate Input').first().json.username;\nconst supabaseUrl = $env.SUPABASE_URL;\nconst storagePath = `profile-pics/${username}.jpg`;\n\nlet profile = {};\nlet shape = 'unknown';\n\nif (Array.isArray(first)) {\n  profile = first[0] || {};\n  shape = 'array-in-json';\n} else if (first && Array.isArray(first.items)) {\n  profile = first.items[0] || {};\n  shape = 'wrapped-items';\n} else if (first && (first.username || first.fullName || first.profilePicUrl)) {\n  // n8n unwrapped the top-level array → single item already IS the profile.\n  profile = first;\n  shape = 'unwrapped-single';\n} else if (allInputs.length > 1) {\n  // n8n split the array into one item per profile.\n  profile = allInputs[0].json || {};\n  shape = 'split-items';\n} else if (first && (first.error || first.statusCode)) {\n  shape = 'error';\n  console.error(`[profile-scraper] error response for @${username}:`, JSON.stringify(first).slice(0, 500));\n}\n\nconst picUrl = profile.profilePicUrlHD || profile.profilePicUrl || null;\nconst publicUrl = picUrl ? `${supabaseUrl}/storage/v1/object/public/${storagePath}` : null;\n\nconsole.log(`[profile-scraper] @${username} shape=${shape} has_pic=${!!picUrl} followers=${profile.followersCount} verified=${profile.verified}`);\n\nreturn [{\n  json: {\n    username,\n    profile_pic_url_remote: picUrl,\n    profile_pic_url: publicUrl,\n    storage_path: storagePath,\n    full_name: profile.fullName || null,\n    is_verified: profile.verified === true,\n    followers: profile.followersCount ?? null,\n    following: profile.followsCount ?? null,\n    bio: profile.biography ?? null,\n    _debug_shape: shape,\n    _debug_raw_keys: first && typeof first === 'object' ? Object.keys(first).slice(0, 30) : null,\n    _debug_input_count: allInputs.length\n  }\n}];"
+      },
+      "id": "extract-profile-meta",
+      "name": "Extract Profile Meta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Download the IG CDN profile pic and emit it as an n8n binary item.\n// The actual upload to Supabase Storage happens in the next HTTP Request node\n// (binary body type). Doing the upload from this Code node failed because\n// Code-node sandbox Buffers don't pass n8n's host-side Buffer.isBuffer check,\n// so the body was JSON.stringify'd and Supabase stored the literal text\n// `{\"type\":\"Buffer\",\"data\":[...]}` instead of raw JPEG bytes.\n// `prepareBinaryData` builds the binary item in host context, which the HTTP\n// Request node forwards as raw octets.\nconst meta = $input.first().json;\nconst { username, profile_pic_url_remote: picUrl, storage_path } = meta;\n\nif (!picUrl) {\n  return [{ json: { ...meta, pic_uploaded: false, pic_skip_reason: 'no_url' } }];\n}\n\ntry {\n  const picResp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: picUrl,\n    encoding: 'arraybuffer',\n    returnFullResponse: true,\n    timeout: 15000,\n  });\n  const buf = Buffer.from(picResp.body);\n  const contentType = (picResp.headers && (picResp.headers['content-type'] || picResp.headers['Content-Type'])) || 'image/jpeg';\n  const filename = `${username}.jpg`;\n  const binaryData = await this.helpers.prepareBinaryData(buf, filename, contentType);\n\n  return [{\n    json: { ...meta, pic_downloaded: true, pic_bytes: buf.length },\n    binary: { data: binaryData },\n  }];\n} catch (e) {\n  console.error(`Profile pic download failed for @${username}:`, e.message);\n  // Clear the public URL so we don't write a broken link to the profile row.\n  return [{ json: { ...meta, profile_pic_url: null, pic_uploaded: false, pic_skip_reason: e.message } }];\n}"
+      },
+      "id": "upload-profile-pic",
+      "name": "Upload Profile Pic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 480],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/storage/v1/object/{{ $json.storage_path }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SECRET_KEY }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "public, max-age=86400"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "upload-pic-to-storage",
+      "name": "Upload Pic to Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 480],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "https://api.apify.com/v2/acts/nH2AHrwxeTRJoN5hX/runs",
         "sendHeaders": true,
         "headerParameters": {
@@ -44,7 +136,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ username: [$json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }, loginCookies: [{ name: 'sessionid', value: $env.INSTAGRAM_SESSION_ID, domain: '.instagram.com' }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ username: [$('Validate Input').first().json.username], resultsLimit: 100, resultsType: 'posts', proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }, loginCookies: [{ name: 'sessionid', value: $env.INSTAGRAM_SESSION_ID, domain: '.instagram.com' }] }) }}",
         "options": {}
       },
       "id": "start-apify-run",
@@ -211,7 +303,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ platform: 'instagram', username: $json.username, profile_url: 'https://www.instagram.com/' + $json.username + '/', followers: $json.owner_followers, following: $json.owner_following, bio: $json.owner_bio }) }}",
+        "jsonBody": "={{ JSON.stringify({ platform: 'instagram', username: $json.username, profile_url: 'https://www.instagram.com/' + $json.username + '/', followers: ($('Extract Profile Meta').first()?.json?.followers ?? $json.owner_followers), following: ($('Extract Profile Meta').first()?.json?.following ?? $json.owner_following), bio: ($('Extract Profile Meta').first()?.json?.bio ?? $json.owner_bio), profile_pic_url: $('Extract Profile Meta').first()?.json?.profile_pic_url ?? null, full_name: $('Extract Profile Meta').first()?.json?.full_name ?? null, is_verified: $('Extract Profile Meta').first()?.json?.is_verified === true }) }}",
         "options": {}
       },
       "id": "upsert-profile",
@@ -370,6 +462,26 @@
       ]
     },
     "Validate Input": {
+      "main": [
+        [{ "node": "Run Profile Scraper", "type": "main", "index": 0 }]
+      ]
+    },
+    "Run Profile Scraper": {
+      "main": [
+        [{ "node": "Extract Profile Meta", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Profile Meta": {
+      "main": [
+        [{ "node": "Upload Profile Pic", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upload Profile Pic": {
+      "main": [
+        [{ "node": "Upload Pic to Storage", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upload Pic to Storage": {
       "main": [
         [{ "node": "Start Apify Run", "type": "main", "index": 0 }]
       ]

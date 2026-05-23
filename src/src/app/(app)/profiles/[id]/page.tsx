@@ -10,10 +10,11 @@ import { RunAnalysisButton } from "@/components/run-analysis-button"
 import { ProfileCharts } from "@/components/profile-charts"
 import { PostsTable } from "@/components/posts-table"
 import { InstagramLink } from "@/components/instagram-link"
+import { ProfileAvatar } from "@/components/profile-avatar"
 import {
   Clock, TrendingUp, TrendingDown, Minus,
   ThumbsUp, ThumbsDown, Sparkles, CalendarClock,
-  BarChart3, Eye, Heart, MessageCircle,
+  BarChart3, Eye, Heart, MessageCircle, Users,
 } from "lucide-react"
 
 const DAYS_ALL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -59,7 +60,7 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
   const [profileRes, postsRes, analysisRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, username, followers, bio, last_scraped, is_own, user_id")
+      .select("id, username, followers, bio, last_scraped, is_own, user_id, profile_pic_url, full_name, is_verified")
       .eq("id", id)
       .eq("user_id", userId)
       .maybeSingle(),
@@ -142,26 +143,46 @@ export default async function ProfileDetailPage({ params }: { params: Promise<{ 
     <div className="p-4 sm:p-6 space-y-8 max-w-5xl">
       {/* Profile header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold inline-flex items-center gap-1.5">
-              @{profile.username}
-              <InstagramLink username={profile.username} size="md" />
-            </h1>
-            {profile.is_own && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                Own account
-              </span>
+        <div className="flex items-start gap-4">
+          <ProfileAvatar
+            username={profile.username}
+            profilePicUrl={profile.profile_pic_url}
+            isVerified={profile.is_verified ?? false}
+            size="lg"
+            fallbackGradient={profile.is_own
+              ? "bg-gradient-to-br from-purple-500 to-purple-700"
+              : "bg-gradient-to-br from-slate-500 to-slate-700"}
+          />
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold inline-flex items-center gap-1.5">
+                @{profile.username}
+                <InstagramLink username={profile.username} size="md" />
+              </h1>
+              {profile.is_own && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                  Own account
+                </span>
+              )}
+            </div>
+            {profile.full_name && (
+              <p className="text-sm font-medium text-slate-700">{profile.full_name}</p>
             )}
-          </div>
-          {profile.bio && (
-            <p className="text-sm text-muted-foreground max-w-lg">{profile.bio}</p>
-          )}
-          <div className="flex items-center gap-4 text-sm text-slate-500">
-            <span className="flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" />
-              {profile.last_scraped ? `Scraped ${formatRelativeTime(profile.last_scraped)}` : "Never scraped"}
-            </span>
+            {profile.bio && (
+              <p className="text-sm text-muted-foreground max-w-lg">{profile.bio}</p>
+            )}
+            <div className="flex items-center gap-4 text-sm text-slate-500">
+              {profile.followers != null && (
+                <span className="flex items-center gap-1">
+                  <Users className="h-3.5 w-3.5" />
+                  {formatNumber(profile.followers)} followers
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                {profile.last_scraped ? `Scraped ${formatRelativeTime(profile.last_scraped)}` : "Never scraped"}
+              </span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

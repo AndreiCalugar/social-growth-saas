@@ -10,6 +10,15 @@ const nextConfig: NextConfig = {
       dynamic: 0,
     },
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/public/profile-pics/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

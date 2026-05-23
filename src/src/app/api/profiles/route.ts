@@ -86,6 +86,19 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !profile) {
+    // 23505 = PG unique_violation. The profiles table has a global
+    // UNIQUE (platform, username) (see schema/005), so a handle that's
+    // already tracked under a different user_id collides here. Surface
+    // a friendly 409 instead of a 500 until we move to a join table.
+    if (error?.code === "23505") {
+      return NextResponse.json(
+        {
+          error: `@${clean} is already being tracked by another account. Multi-user support for the same handle is coming soon.`,
+          code: "handle_taken",
+        },
+        { status: 409 }
+      )
+    }
     console.error("[/api/profiles POST] insert error:", error?.message)
     return NextResponse.json({ error: error?.message ?? "Failed to save profile" }, { status: 500 })
   }
