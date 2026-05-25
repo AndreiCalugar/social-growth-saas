@@ -3,6 +3,7 @@
 import { LandingHeader } from "./landing-header"
 import { LandingHero } from "./landing-hero"
 import { LandingHowItWorks } from "./landing-how-it-works"
+import { LandingMidCta } from "./landing-mid-cta"
 import { LandingFeatures } from "./landing-features"
 import { LandingExample } from "./landing-example"
 import { LandingPricing } from "./landing-pricing"
@@ -16,6 +17,7 @@ export function LandingPage() {
       <main>
         <LandingHero />
         <LandingHowItWorks />
+        <LandingMidCta />
         <LandingFeatures />
         <LandingExample />
         <LandingPricing />

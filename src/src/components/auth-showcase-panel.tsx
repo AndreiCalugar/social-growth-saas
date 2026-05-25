@@ -89,11 +89,11 @@ export function AuthShowcasePanel() {
 
           {/* Stats row */}
           <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-white/70">
-            <span className="font-medium">500+ posts analyzed</span>
+            <span className="font-medium">
+              Tested across bikepacking, coffee shops, music production, and fitness niches
+            </span>
             <span className="text-white/30">·</span>
-            <span className="font-medium">12× avg trend detection</span>
-            <span className="text-white/30">·</span>
-            <span className="font-medium">Used by creators worldwide</span>
+            <span className="font-medium">Analyzing 700+ competitor posts per run</span>
           </div>
         </div>
 

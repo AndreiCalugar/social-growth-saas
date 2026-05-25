@@ -31,7 +31,7 @@ export function LandingHero() {
         aria-hidden
       />
 
-      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-16 pb-20 lg:pt-24 lg:pb-28">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-14 pb-10 lg:pt-20 lg:pb-14">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-10 items-center">
           <div className="max-w-xl">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm px-3 py-1 text-[11px] font-medium text-white/80">
@@ -67,8 +67,8 @@ export function LandingHero() {
           </div>
 
           <div className="relative lg:pl-6">
-            <div className="auth-float">
-              <div className="auth-glow rounded-2xl border border-white/15 bg-white/[0.06] backdrop-blur-xl p-6 shadow-2xl">
+            <div className="hero-float lg:scale-[1.06] origin-center">
+              <div className="hero-card-glow rounded-2xl border border-white/15 bg-white/[0.06] backdrop-blur-xl p-6 shadow-2xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
                     Insights · Mega-tip
