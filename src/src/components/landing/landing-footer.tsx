@@ -42,13 +42,14 @@ export function LandingFooter() {
         </div>
 
         <div className="mt-12 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-            <ExternalLink href="https://instagram.com/andreixperience">Instagram</ExternalLink>
-            <ExternalLink href="https://www.linkedin.com/in/andreicalugar/">LinkedIn</ExternalLink>
-            <ExternalLink href="https://substack.com/@andreixperience">Substack</ExternalLink>
-          </div>
           <p className="text-xs text-slate-500">
-            Made in Romania <span aria-hidden>🇷🇴</span>
+            Questions?{" "}
+            <a
+              href="mailto:andrei.nicolae.calugar@gmail.com"
+              className="text-slate-400 hover:text-white transition-colors"
+            >
+              Send us an email
+            </a>
           </p>
         </div>
       </div>
@@ -81,24 +82,5 @@ function FooterColumn({
         ))}
       </ul>
     </div>
-  )
-}
-
-function ExternalLink({
-  href,
-  children,
-}: {
-  href: string
-  children: React.ReactNode
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-slate-400 hover:text-white transition-colors"
-    >
-      {children}
-    </a>
   )
 }
