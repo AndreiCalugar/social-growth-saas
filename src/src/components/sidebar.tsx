@@ -13,6 +13,7 @@ import {
   LogOut,
   X,
   ClipboardList,
+  MessageCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -30,6 +31,7 @@ const navItems: NavItem[] = [
   { href: "/competitors", label: "Competitors", icon: Swords },
   { href: "/insights", label: "Insights", icon: Sparkles },
   { href: "/briefs", label: "My Briefs", icon: ClipboardList, countKey: "activeBriefs" },
+  { href: "/dms", label: "DM Automation", icon: MessageCircle, badge: "Beta" },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
 
