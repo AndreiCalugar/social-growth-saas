@@ -77,12 +77,19 @@ new block in `.env.example`: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`,
 `NEXTAUTH_URL` must be the public URL (`https://www.getsocialgrowth.tech`) —
 the OAuth redirect and callback build on it.
 
-### 4. Cron jobs (Hostinger)
+### 4. Cron jobs (Vercel + external pinger)
 
-```cron
-* * * * *  curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" https://www.getsocialgrowth.tech/api/cron/process-dms
-0 4 * * *  curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" https://www.getsocialgrowth.tech/api/cron/refresh-tokens
-```
+The app deploys on **Vercel** (project `social-growth-saas`). Vercel's built-in
+crons on the Hobby plan run at most **once per day**, so the two jobs split:
+
+- **Daily token refresh** — `src/vercel.json` declares a Vercel cron for
+  `/api/cron/refresh-tokens` at 04:00 UTC. When `CRON_SECRET` is set as an
+  env var, Vercel automatically sends `Authorization: Bearer $CRON_SECRET`
+  on cron invocations — exactly what the route expects. Nothing else to do.
+- **Queue drain (every minute)** — use a free external pinger
+  ([cron-job.org](https://cron-job.org)): create a job hitting
+  `https://www.getsocialgrowth.tech/api/cron/process-dms` every minute with
+  a custom request header `Authorization: Bearer <CRON_SECRET>`.
 
 The 1-minute cadence means worst-case ~1–2 min DM latency — fine for MVP.
 
