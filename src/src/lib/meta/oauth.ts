@@ -82,8 +82,12 @@ export function getAuthorizationUrl(redirectUri: string, state: string): string 
   const params = new URLSearchParams({
     client_id: requireEnv("INSTAGRAM_APP_ID"),
     redirect_uri: redirectUri,
+    // Only the 3 permissions the Meta app has enabled — requesting a scope
+    // the app doesn't offer can break the authorize screen, and fewer scopes
+    // means a smaller App Review surface later. manage_insights (follower
+    // stats) can be added back if we ever build on it.
     scope:
-      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_manage_insights",
+      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments",
     response_type: "code",
     state,
   })
