@@ -199,6 +199,11 @@ export default function TermsPage() {
       <section id="contact">
         <h2>9. Contact</h2>
         <p>
+          Social Growth is operated by{" "}
+          <strong>CĂLUGĂR ANDREI-NICOLAE PERSOANĂ FIZICĂ AUTORIZATĂ</strong>{" "}
+          (CUI 51961870, Nr. Reg. Com. F2025021277008).
+        </p>
+        <p>
           Questions, complaints, or legal notices go to:{" "}
           <a href="mailto:andrei.nicolae.calugar@gmail.com">
             andrei.nicolae.calugar@gmail.com

@@ -51,6 +51,10 @@ export function LandingFooter() {
               Send us an email
             </a>
           </p>
+          <p className="text-xs text-slate-500">
+            Operated by CĂLUGĂR ANDREI-NICOLAE PERSOANĂ FIZICĂ AUTORIZATĂ · CUI
+            51961870 · Nr. Reg. Com. F2025021277008
+          </p>
         </div>
       </div>
     </footer>

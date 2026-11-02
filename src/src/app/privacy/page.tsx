@@ -34,7 +34,9 @@ export default function PrivacyPage() {
           policy is:
         </p>
         <p>
-          <strong>Andrei Călugăr</strong>
+          <strong>CĂLUGĂR ANDREI-NICOLAE PERSOANĂ FIZICĂ AUTORIZATĂ</strong>
+          <br />
+          CUI: 51961870 · Nr. Reg. Com.: F2025021277008
           <br />
           Cluj-Napoca, Romania
           <br />
@@ -44,8 +46,8 @@ export default function PrivacyPage() {
           </a>
         </p>
         <p>
-          Social Growth is operated as a sole proprietorship by the data
-          controller named above. All questions about your data should be sent
+          Social Growth is operated by Andrei Călugăr as a Romanian sole
+          proprietorship (PFA), the data controller named above. All questions about your data should be sent
           to that email.
         </p>
       </section>
