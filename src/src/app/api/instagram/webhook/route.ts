@@ -5,7 +5,7 @@ import {
   verifyWebhookSignature,
   type WebhookPayload,
 } from "@/lib/meta/webhook"
-import { matchKeywords } from "@/lib/meta/keyword-matcher"
+import { queueMatchingComment } from "@/lib/meta/enqueue"
 
 /**
  * Meta Instagram webhook receiver. Public route (excluded from the auth
@@ -32,16 +32,6 @@ export async function GET(request: NextRequest) {
     return new NextResponse(challenge ?? "", { status: 200 })
   }
   return NextResponse.json({ error: "Verification failed" }, { status: 403 })
-}
-
-interface AutomationRow {
-  id: string
-  user_id: string
-  instagram_account_id: string
-  post_id: string | null
-  match_any_post: boolean
-  keywords: string[]
-  whole_word_match: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -83,71 +73,7 @@ export async function POST(request: NextRequest) {
     const events = parseCommentEvents(payload)
 
     for (const event of events) {
-      // Dedup across Meta redeliveries, before any matching work.
-      const { error: dedupError } = await supabase
-        .from("processed_comments")
-        .insert({
-          instagram_account_id: event.instagramAccountId,
-          comment_id: event.commentId,
-        })
-      // 23505 = unique_violation → already handled this comment.
-      if (dedupError) {
-        if (dedupError.code === "23505") continue
-        throw new Error(`processed_comments insert failed: ${dedupError.message}`)
-      }
-
-      const { data: account } = await supabase
-        .from("instagram_accounts")
-        .select("id, user_id")
-        .eq("instagram_id", event.instagramAccountId)
-        .maybeSingle()
-      if (!account) continue
-
-      const { data: automations } = await supabase
-        .from("dm_automations")
-        .select("id, user_id, instagram_account_id, post_id, match_any_post, keywords, whole_word_match")
-        .eq("instagram_account_id", account.id)
-        .eq("is_active", true)
-
-      for (const automation of (automations ?? []) as AutomationRow[]) {
-        const postMatches =
-          automation.match_any_post ||
-          (automation.post_id !== null &&
-            (automation.post_id === event.mediaId ||
-              automation.post_id === event.originalMediaId))
-        if (!postMatches) continue
-
-        const keywords = Array.isArray(automation.keywords)
-          ? automation.keywords
-          : []
-        const match = matchKeywords(
-          event.commentText,
-          keywords,
-          automation.whole_word_match
-        )
-        if (!match.matched) continue
-
-        // Upsert-ignore on (automation_id, comment_id): a redelivered event
-        // that slipped past processed_comments still can't double-queue.
-        const { error: insertError } = await supabase.from("dm_logs").insert({
-          user_id: automation.user_id,
-          automation_id: automation.id,
-          instagram_account_id: account.id,
-          commenter_id: event.commenterId,
-          commenter_name: event.commenterName ?? null,
-          comment_id: event.commentId,
-          comment_text: event.commentText,
-          matched_keyword: match.matchedKeyword,
-          status: "pending",
-        })
-        if (insertError && insertError.code !== "23505") {
-          throw new Error(`dm_logs insert failed: ${insertError.message}`)
-        }
-        if (!insertError) queued++
-        // First matching automation wins for this comment — matches
-        // OpenReply's behavior of one DM per comment.
-        break
-      }
+      if (await queueMatchingComment(event)) queued++
     }
 
     if (eventRow?.id) {
