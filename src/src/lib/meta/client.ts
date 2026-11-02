@@ -159,6 +159,29 @@ export async function sendCommentReply(
   return handleResponse(response)
 }
 
+export interface InstagramComment {
+  id: string
+  text?: string
+  timestamp: string
+  from?: { id: string; username?: string }
+}
+
+// Newest first. Includes replies, which the poller filters by author.
+export async function getMediaComments(
+  accessToken: string,
+  mediaId: string,
+  limit = 50
+): Promise<InstagramComment[]> {
+  const url = new URL(`${instagramGraphBase()}/${mediaId}/comments`)
+  url.searchParams.set("fields", "id,text,timestamp,from")
+  url.searchParams.set("limit", limit.toString())
+  url.searchParams.set("access_token", accessToken)
+
+  const response = await fetch(url.toString())
+  const data = await handleResponse<{ data: InstagramComment[] }>(response)
+  return data.data
+}
+
 export async function getUserInfo(accessToken: string): Promise<InstagramUser> {
   const url = new URL(`${instagramGraphBase()}/me`)
   url.searchParams.set(

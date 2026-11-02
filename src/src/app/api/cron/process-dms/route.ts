@@ -9,6 +9,7 @@ import {
   sendPrivateReply,
 } from "@/lib/meta/client"
 import { markTokenError } from "@/lib/meta/accounts"
+import { pollAutomationComments } from "@/lib/meta/poll-comments"
 
 /**
  * Drain the DM send queue (dm_logs rows with status='pending').
@@ -27,6 +28,10 @@ import { markTokenError } from "@/lib/meta/accounts"
  * - other errors → exponential backoff, permanent fail after MAX_ATTEMPTS
  * - the public comment reply is handled independently of the DM: a DM
  *   failure never blocks or re-posts the public reply
+ *
+ * Before draining, pollAutomationComments() queues comments on watched posts
+ * that the webhook never delivered, so a missed webhook delays a DM by one
+ * run instead of losing it.
  */
 
 const BATCH_SIZE = 25
@@ -58,6 +63,8 @@ export async function GET(request: NextRequest) {
   }
 
   const nowIso = () => new Date().toISOString()
+
+  const polled = await pollAutomationComments()
 
   // Recover rows stuck in 'processing' from a crashed/killed earlier run.
   const stuckCutoff = new Date(
@@ -281,5 +288,5 @@ export async function GET(request: NextRequest) {
     results.sent++
   }
 
-  return NextResponse.json({ success: true, ...results })
+  return NextResponse.json({ success: true, polled, ...results })
 }
