@@ -86,10 +86,13 @@ crons on the Hobby plan run at most **once per day**, so the two jobs split:
   `/api/cron/refresh-tokens` at 04:00 UTC. When `CRON_SECRET` is set as an
   env var, Vercel automatically sends `Authorization: Bearer $CRON_SECRET`
   on cron invocations — exactly what the route expects. Nothing else to do.
-- **Queue drain (every minute)** — use a free external pinger
-  ([cron-job.org](https://cron-job.org)): create a job hitting
+- **Queue drain (every minute)** — Supabase `pg_cron` + `pg_net` call
   `https://www.getsocialgrowth.tech/api/cron/process-dms` every minute with
-  a custom request header `Authorization: Bearer <CRON_SECRET>`.
+  `Authorization: Bearer <CRON_SECRET>`. Run `schema/018-dm-cron.sql` in the
+  Supabase SQL Editor with the real secret filled in (never commit it).
+  Check it with `SELECT status_code, created FROM net._http_response ORDER BY
+  created DESC LIMIT 5;` — 401 means the secret doesn't match Vercel's.
+  Each run also polls watched posts for comments the webhook missed.
 
 The 1-minute cadence means worst-case ~1–2 min DM latency — fine for MVP.
 
