@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { LogOutButton } from "@/components/log-out-button"
+import { DeleteAccountButton } from "@/components/delete-account-button"
 import { InstagramConnectCard } from "@/components/instagram-connect-card"
 import {
   Mail, User as UserIcon, AtSign, Bell, CreditCard, AlertTriangle,
@@ -167,14 +168,7 @@ export default async function SettingsPage() {
             <p className="text-xs text-red-700/80 mt-1 leading-relaxed">
               Permanently delete your account, all scraped data, and generated insights. This cannot be undone.
             </p>
-            <button
-              type="button"
-              disabled
-              title="Coming soon"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3.5 py-2 text-xs font-semibold text-red-700 shadow-sm cursor-not-allowed opacity-70"
-            >
-              Delete account
-            </button>
+            <DeleteAccountButton />
           </div>
         </div>
       </section>
