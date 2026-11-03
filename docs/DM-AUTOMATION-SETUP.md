@@ -62,10 +62,12 @@ psql $SUPABASE_DB_URL -f schema/017-dm-automation.sql
    (must be **Business or Creator**, not personal). They must accept the
    invite in the Instagram app: Settings → Website permissions → Apps and
    websites → Tester invites.
-8. Switch the app to **Live** mode. Testers work without App Review.
+8. Switch the app to **Live** mode. Testers work without App Review — and
+   their automations reach **every** commenter, not just other testers.
 9. Later, to open the feature to arbitrary users: submit for **Advanced
-   Access** review of the 4 `instagram_business_*` scopes (needs business
-   verification + a screencast). Until then, only tester accounts connect.
+   Access** review of the 3 `instagram_business_*` scopes (needs business
+   verification + a screencast; see docs/META-APP-REVIEW.md). Until then,
+   only accounts with a role on the app can connect.
 
 ### 3. Environment variables
 
