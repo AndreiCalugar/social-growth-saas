@@ -4,13 +4,8 @@ import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
-
-interface ConnectedAccount {
-  username: string
-  token_error: string | null
-  token_expires_at: string | null
-  webhook_subscribed: boolean
-}
+import { InstagramAccountAvatar } from "@/components/instagram-account-avatar"
+import type { ConnectedInstagramAccount } from "@/lib/meta/accounts"
 
 // Feedback for the ?instagram= query param set by the OAuth callback.
 const STATUS_MESSAGES: Record<string, { tone: "ok" | "error"; text: string }> = {
@@ -26,7 +21,7 @@ const STATUS_MESSAGES: Record<string, { tone: "ok" | "error"; text: string }> = 
 export function InstagramConnectCard({
   account,
 }: {
-  account: ConnectedAccount | null
+  account: ConnectedInstagramAccount | null
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -39,7 +34,7 @@ export function InstagramConnectCard({
   async function disconnect() {
     if (
       !window.confirm(
-        "Disconnect Instagram? All DM automations and their history will be deleted."
+        "Disconnect Instagram? All your DM automations and their send history will be permanently deleted. You can reconnect later, but you'll need to recreate your automations."
       )
     ) {
       return
@@ -71,7 +66,26 @@ export function InstagramConnectCard({
               </span>
             </div>
             {account ? (
-              <div className="mt-1 space-y-1">
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <InstagramAccountAvatar
+                    username={account.username}
+                    src={account.profile_picture_url}
+                    className="h-9 w-9"
+                  />
+                  <div className="min-w-0">
+                    {account.name && (
+                      <p className="text-sm font-semibold text-slate-900 truncate">
+                        {account.name}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-500">
+                      @{account.username}
+                      {account.followers_count !== null &&
+                        ` · ${account.followers_count.toLocaleString()} followers`}
+                    </p>
+                  </div>
+                </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   Connected as{" "}
                   <span className="font-semibold text-slate-700">
