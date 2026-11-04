@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase"
 import { LogOutButton } from "@/components/log-out-button"
 import { DeleteAccountButton } from "@/components/delete-account-button"
 import { InstagramConnectCard } from "@/components/instagram-connect-card"
+import { getConnectedAccount } from "@/lib/meta/accounts"
 import {
   Mail, User as UserIcon, AtSign, Bell, CreditCard, AlertTriangle,
 } from "lucide-react"
@@ -16,7 +17,7 @@ export default async function SettingsPage() {
 
   const userId = session.user.id
 
-  const [{ data: user }, { data: ownProfile }, { data: instagramAccount }] =
+  const [{ data: user }, { data: ownProfile }, instagramAccount] =
     await Promise.all([
       supabase.from("users").select("email, name").eq("id", userId).maybeSingle(),
       supabase
@@ -25,11 +26,7 @@ export default async function SettingsPage() {
         .eq("user_id", userId)
         .eq("is_own", true)
         .maybeSingle(),
-      supabase
-        .from("instagram_accounts")
-        .select("username, token_error, token_expires_at, webhook_subscribed")
-        .eq("user_id", userId)
-        .maybeSingle(),
+      getConnectedAccount(userId),
     ])
 
   const displayName = user?.name ?? user?.email?.split("@")[0] ?? "User"
@@ -97,7 +94,7 @@ export default async function SettingsPage() {
       </section>
 
       {/* Instagram DM automation */}
-      <InstagramConnectCard account={instagramAccount ?? null} />
+      <InstagramConnectCard account={instagramAccount} />
 
       {/* Notifications placeholder */}
       <section className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm opacity-75">

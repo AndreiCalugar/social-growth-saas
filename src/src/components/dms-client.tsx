@@ -16,20 +16,18 @@ import {
   XCircle,
   Send,
   Grid3X3,
+  Settings,
+  MessageSquareReply,
+  ExternalLink,
+  Zap,
 } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
+import { InstagramAccountAvatar } from "@/components/instagram-account-avatar"
+import type { ConnectedInstagramAccount } from "@/lib/meta/accounts"
 import { cn } from "@/lib/utils"
 import { trackEvent } from "@/lib/analytics"
 
-export interface DmAccount {
-  id: string
-  username: string
-  name: string | null
-  token_error: string | null
-  token_expires_at: string | null
-  webhook_subscribed: boolean
-  connected_at: string
-}
+export type DmAccount = ConnectedInstagramAccount
 
 export interface DmAutomation {
   id: string
@@ -100,11 +98,13 @@ export function DmsClient({
   initialAutomations,
   initialLogs,
   stats,
+  sentByAutomation,
 }: {
   account: DmAccount | null
   initialAutomations: DmAutomation[]
   initialLogs: DmLogRow[]
   stats: { sent: number; pending: number; failed: number }
+  sentByAutomation: Record<string, number>
 }) {
   const router = useRouter()
   const [automations, setAutomations] = useState(initialAutomations)
@@ -185,10 +185,7 @@ export function DmsClient({
           </div>
           <p className="text-slate-500 text-sm mt-0.5">
             Someone comments a keyword on your post — they get your DM seconds
-            later. Connected as{" "}
-            <span className="font-semibold text-slate-700">
-              @{account.username}
-            </span>
+            later.
           </p>
         </div>
         <button
@@ -201,6 +198,63 @@ export function DmsClient({
           <Plus className="h-4 w-4" />
           New automation
         </button>
+      </div>
+
+      {/* Connected account */}
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
+        <InstagramAccountAvatar
+          username={account.username}
+          src={account.profile_picture_url}
+          className="h-14 w-14"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Connected account
+          </p>
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            {account.name && (
+              <span className="text-base font-semibold text-slate-900 truncate">
+                {account.name}
+              </span>
+            )}
+            <a
+              href={`https://www.instagram.com/${account.username}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-purple-600 hover:underline"
+            >
+              @{account.username}
+            </a>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+            {account.followers_count !== null && (
+              <span>
+                <span className="font-semibold text-slate-700 tabular-nums">
+                  {account.followers_count.toLocaleString()}
+                </span>{" "}
+                followers
+              </span>
+            )}
+            {account.token_error ? (
+              <span className="inline-flex items-center gap-1 text-amber-700">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Needs reconnect
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-emerald-600">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Active{account.webhook_subscribed ? " · listening for comments" : ""}
+              </span>
+            )}
+          </div>
+        </div>
+        <a
+          href="/settings"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900 transition-colors"
+        >
+          <Settings className="h-3.5 w-3.5" />
+          Manage
+        </a>
       </div>
 
       {/* Token error banner */}
@@ -249,15 +303,43 @@ export function DmsClient({
         </h2>
 
         {automations.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-            <MessageCircle className="h-8 w-8 text-slate-300 mx-auto" />
-            <p className="text-sm font-medium text-slate-700 mt-3">
-              No automations yet
-            </p>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Create your first one: pick a post, choose a trigger keyword like
-              &ldquo;LINK&rdquo;, and write the DM that gets sent automatically.
-            </p>
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 sm:p-8">
+            <div className="text-center">
+              <MessageCircle className="h-8 w-8 text-slate-300 mx-auto" />
+              <p className="text-sm font-medium text-slate-700 mt-3">
+                No automations yet
+              </p>
+            </div>
+            <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+              {[
+                { icon: Grid3X3, title: "Pick a post", text: "Choose a post or reel — or let it run on any post." },
+                { icon: Zap, title: "Choose a keyword", text: "Like “LINK” — the word people comment to get your message." },
+                { icon: Send, title: "Write the DM", text: "It's sent automatically, seconds after they comment." },
+              ].map((step, i) => (
+                <li key={step.title} className="rounded-lg bg-slate-50 p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-[11px] font-bold text-white">
+                      {i + 1}
+                    </span>
+                    <step.icon className="h-4 w-4 text-purple-600" />
+                    <span className="text-xs font-semibold text-slate-800">{step.title}</span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">{step.text}</p>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-5 text-center">
+              <button
+                onClick={() => {
+                  setEditing(null)
+                  setShowForm(true)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Create your first automation
+              </button>
+            </div>
           </div>
         )}
 
@@ -288,25 +370,37 @@ export function DmsClient({
                     {automation.is_active ? "Active" : "Paused"}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <span className="inline-flex items-center gap-1 font-semibold text-purple-700">
+                    <Send className="h-3.5 w-3.5" />
+                    {sentByAutomation[automation.id] ?? 0} DMs sent
+                  </span>
                   {automation.match_any_post ? (
-                    "Any post"
+                    <span className="inline-flex items-center gap-1">
+                      <Grid3X3 className="h-3.5 w-3.5" />
+                      Any post
+                    </span>
                   ) : automation.post_url ? (
                     <a
                       href={automation.post_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-purple-600 hover:underline"
+                      className="inline-flex items-center gap-1 text-purple-600 hover:underline"
                     >
-                      Specific post ↗
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      View post
                     </a>
                   ) : (
-                    "Specific post"
+                    <span>Specific post</span>
                   )}
-                  {" · "}
-                  {automation.whole_word_match ? "whole word" : "partial match"}
-                  {automation.public_reply_enabled && " · public reply on"}
-                </p>
+                  <span>{automation.whole_word_match ? "Whole word" : "Partial match"}</span>
+                  {automation.public_reply_enabled && (
+                    <span className="inline-flex items-center gap-1">
+                      <MessageSquareReply className="h-3.5 w-3.5" />
+                      Public reply
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {automation.keywords.map((kw) => (
                     <span
@@ -317,7 +411,7 @@ export function DmsClient({
                     </span>
                   ))}
                 </div>
-                <p className="text-xs text-slate-600 mt-2 line-clamp-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                <p className="mt-2.5 max-w-md text-xs text-white line-clamp-3 whitespace-pre-line rounded-2xl rounded-bl-md bg-gradient-to-br from-purple-600 to-indigo-600 px-3 py-2">
                   {automation.dm_message}
                 </p>
               </div>
@@ -398,7 +492,18 @@ export function DmsClient({
                 {initialLogs.map((log) => (
                   <tr key={log.id} className="border-b border-slate-50 last:border-0">
                     <td className="px-4 py-2.5 font-medium text-slate-700 whitespace-nowrap">
-                      {log.commenter_name ? `@${log.commenter_name}` : log.commenter_id}
+                      {log.commenter_name ? (
+                        <a
+                          href={`https://www.instagram.com/${log.commenter_name}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-purple-600 hover:underline"
+                        >
+                          @{log.commenter_name}
+                        </a>
+                      ) : (
+                        log.commenter_id
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-slate-500 max-w-[200px]">
                       <span className="line-clamp-1" title={log.comment_text}>
@@ -408,8 +513,17 @@ export function DmsClient({
                     <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
                       {automationNames.get(log.automation_id) ?? "—"}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 whitespace-nowrap">
                       <StatusChip status={log.status} error={log.error_message} />
+                      {log.public_reply_sent_at && (
+                        <span
+                          title="Public reply posted"
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700"
+                        >
+                          <MessageSquareReply className="h-3 w-3" />
+                          Replied
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">
                       {formatRelative(log.created_at)}

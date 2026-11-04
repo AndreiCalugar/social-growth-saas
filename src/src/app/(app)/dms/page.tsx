@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
+import { getConnectedAccount } from "@/lib/meta/accounts"
 import { DmsClient, type DmAutomation, type DmLogRow } from "@/components/dms-client"
 
 export const dynamic = "force-dynamic"
@@ -10,25 +11,20 @@ export default async function DmsPage() {
   if (!session?.user?.id) redirect("/login")
   const userId = session.user.id
 
-  const [{ data: account }, { data: automations }, { data: logs }] =
-    await Promise.all([
-      supabase
-        .from("instagram_accounts")
-        .select("id, username, name, token_error, token_expires_at, webhook_subscribed, connected_at")
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("dm_automations")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("dm_logs")
-        .select("id, automation_id, commenter_name, commenter_id, comment_text, matched_keyword, status, error_message, dm_sent_at, public_reply_sent_at, created_at")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(50),
-    ])
+  const [account, { data: automations }, { data: logs }] = await Promise.all([
+    getConnectedAccount(userId),
+    supabase
+      .from("dm_automations")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("dm_logs")
+      .select("id, automation_id, commenter_name, commenter_id, comment_text, matched_keyword, status, error_message, dm_sent_at, public_reply_sent_at, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ])
 
   // Headline stats (all-time), cheap head-count queries.
   const [sentCount, pendingCount, failedCount] = await Promise.all(
@@ -42,12 +38,26 @@ export default async function DmsPage() {
     })
   )
 
+  // DMs sent per automation, shown on each card.
+  const sentByAutomation: Record<string, number> = {}
+  await Promise.all(
+    ((automations ?? []) as DmAutomation[]).map(async (a) => {
+      const { count } = await supabase
+        .from("dm_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("automation_id", a.id)
+        .eq("status", "sent")
+      sentByAutomation[a.id] = count ?? 0
+    })
+  )
+
   return (
     <DmsClient
-      account={account ?? null}
+      account={account}
       initialAutomations={(automations ?? []) as DmAutomation[]}
       initialLogs={(logs ?? []) as DmLogRow[]}
       stats={{ sent: sentCount, pending: pendingCount, failed: failedCount }}
+      sentByAutomation={sentByAutomation}
     />
   )
 }
