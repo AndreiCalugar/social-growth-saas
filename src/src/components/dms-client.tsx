@@ -26,6 +26,11 @@ import { InstagramAccountAvatar } from "@/components/instagram-account-avatar"
 import { DmPhonePreview, type PreviewMode } from "@/components/dm-phone-preview"
 import type { ConnectedInstagramAccount } from "@/lib/meta/accounts"
 import type { BetaRequest } from "@/lib/beta"
+import {
+  MAX_REPLY_VARIANTS,
+  joinReplyVariants,
+  parseReplyVariants,
+} from "@/lib/meta/reply-variants"
 import { cn } from "@/lib/utils"
 import { trackEvent } from "@/lib/analytics"
 
@@ -80,7 +85,8 @@ interface FormState {
   wholeWordMatch: boolean
   dmMessage: string
   publicReplyEnabled: boolean
-  publicReplyMessage: string
+  // Reply variations; one is picked at random per comment.
+  publicReplyMessages: string[]
 }
 
 const EMPTY_FORM: FormState = {
@@ -92,7 +98,7 @@ const EMPTY_FORM: FormState = {
   wholeWordMatch: true,
   dmMessage: "",
   publicReplyEnabled: false,
-  publicReplyMessage: "",
+  publicReplyMessages: [""],
 }
 
 export function DmsClient({
@@ -402,6 +408,8 @@ export function DmsClient({
                     <span className="inline-flex items-center gap-1">
                       <MessageSquareReply className="h-3.5 w-3.5" />
                       Public reply
+                      {parseReplyVariants(automation.public_reply_message).length > 1 &&
+                        ` · ${parseReplyVariants(automation.public_reply_message).length} variations`}
                     </span>
                   )}
                 </div>
@@ -853,7 +861,9 @@ function AutomationForm({
           wholeWordMatch: editing.whole_word_match,
           dmMessage: editing.dm_message,
           publicReplyEnabled: editing.public_reply_enabled,
-          publicReplyMessage: editing.public_reply_message ?? "",
+          publicReplyMessages: parseReplyVariants(editing.public_reply_message).length
+            ? parseReplyVariants(editing.public_reply_message)
+            : [""],
         }
       : EMPTY_FORM
   )
@@ -863,6 +873,7 @@ function AutomationForm({
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState<PreviewMode>("comment")
+  const [previewReplyIndex, setPreviewReplyIndex] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -925,7 +936,8 @@ function AutomationForm({
     if (!form.matchAnyPost && !form.postId)
       return setFormError("Pick a post, or switch to “Any post”.")
     if (!form.dmMessage.trim()) return setFormError("Write the DM message.")
-    if (form.publicReplyEnabled && !form.publicReplyMessage.trim())
+    const publicReplies = joinReplyVariants(form.publicReplyMessages)
+    if (form.publicReplyEnabled && !publicReplies)
       return setFormError("Write the public reply, or turn it off.")
 
     setSaving(true)
@@ -940,7 +952,7 @@ function AutomationForm({
         dm_message: form.dmMessage,
         public_reply_enabled: form.publicReplyEnabled,
         public_reply_message: form.publicReplyEnabled
-          ? form.publicReplyMessage
+          ? publicReplies
           : null,
       }
       const res = await fetch(
@@ -1213,16 +1225,65 @@ function AutomationForm({
                   </button>
                 </label>
                 {form.publicReplyEnabled && (
-                  <input
-                    type="text"
-                    value={form.publicReplyMessage}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, publicReplyMessage: e.target.value }))
-                    }
-                    onFocus={() => setPreviewMode("comment")}
-                    placeholder={"Sent you a DM! 📩"}
-                    className={cn(inputCls, "mt-3 h-10")}
-                  />
+                  <div className="mt-3 space-y-2">
+                    {form.publicReplyMessages.map((reply, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={reply}
+                          onChange={(e) =>
+                            setForm((f) => ({
+                              ...f,
+                              publicReplyMessages: f.publicReplyMessages.map((r, j) =>
+                                j === i ? e.target.value : r
+                              ),
+                            }))
+                          }
+                          onFocus={() => {
+                            setPreviewMode("comment")
+                            setPreviewReplyIndex(i)
+                          }}
+                          placeholder={REPLY_PLACEHOLDERS[i] ?? "Another variation…"}
+                          className={cn(inputCls, "h-10")}
+                        />
+                        {form.publicReplyMessages.length > 1 && (
+                          <button
+                            type="button"
+                            title="Remove this variation"
+                            onClick={() => {
+                              setForm((f) => ({
+                                ...f,
+                                publicReplyMessages: f.publicReplyMessages.filter((_, j) => j !== i),
+                              }))
+                              setPreviewReplyIndex(0)
+                            }}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-600 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {form.publicReplyMessages.length < MAX_REPLY_VARIANTS && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            publicReplyMessages: [...f.publicReplyMessages, ""],
+                          }))
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-50 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add a variation
+                      </button>
+                    )}
+                    <p className="text-[11px] text-slate-400">
+                      Each comment gets one of these at random, so replies under
+                      your post don&rsquo;t all look the same.
+                    </p>
+                  </div>
                 )}
               </Step>
             </div>
@@ -1242,7 +1303,11 @@ function AutomationForm({
               keyword={previewKeyword}
               dmMessage={form.dmMessage}
               publicReplyEnabled={form.publicReplyEnabled}
-              publicReplyMessage={form.publicReplyMessage}
+              publicReplyMessage={
+                form.publicReplyMessages[previewReplyIndex] ??
+                form.publicReplyMessages[0] ??
+                ""
+              }
             />
           </div>
         </div>
@@ -1250,6 +1315,12 @@ function AutomationForm({
     </div>
   )
 }
+
+const REPLY_PLACEHOLDERS = [
+  "Sent you a DM! 📩",
+  "Check your inbox 😉",
+  "Done, it's in your DMs! 🚀",
+]
 
 function Step({
   n,
