@@ -11,7 +11,7 @@ import { trackEvent } from "@/lib/analytics"
 export default function LoginPage() {
   const router = useRouter()
   const search = useSearchParams()
-  const callbackUrl = search.get("callbackUrl") || "/overview"
+  const callbackUrl = search.get("callbackUrl") || "/dms"
   // NextAuth redirects OAuth failures back here with one of these codes
   // (Google denied, user cancelled, misconfigured client, etc). We collapse
   // them into a single friendly line and let the user retry.
@@ -81,7 +81,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile-only compact logo */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 mb-6">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 shadow-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-coral shadow-sm">
               <TrendingUp className="h-4 w-4 text-white" strokeWidth={2.5} />
             </div>
             <span className="font-bold text-slate-900 tracking-tight">Social Growth</span>
@@ -89,7 +89,7 @@ export default function LoginPage() {
 
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome back</h1>
-            <p className="text-sm text-slate-500 mt-1">Sign in to keep an eye on your competitors.</p>
+            <p className="text-sm text-slate-500 mt-1">Sign in to manage your DM automations.</p>
           </div>
 
           <form
@@ -135,8 +135,8 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className={`h-11 w-full pl-11 pr-4 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-purple-500/20 transition-all ${
-                    error ? "border-red-500" : "border-slate-200 focus:border-purple-500"
+                  className={`h-11 w-full pl-11 pr-4 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-coral/20 transition-all ${
+                    error ? "border-red-500" : "border-slate-200 focus:border-coral"
                   }`}
                 />
               </div>
@@ -149,7 +149,7 @@ export default function LoginPage() {
                 </label>
                 <button
                   type="button"
-                  className="text-xs text-purple-600 hover:text-purple-700 font-medium"
+                  className="text-xs text-coral-deep hover:text-coral font-medium"
                   onClick={(e) => e.preventDefault()}
                   title="Coming soon"
                 >
@@ -166,8 +166,8 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className={`h-11 w-full pl-11 pr-11 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-purple-500/20 transition-all ${
-                    error ? "border-red-500" : "border-slate-200 focus:border-purple-500"
+                  className={`h-11 w-full pl-11 pr-11 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-coral/20 transition-all ${
+                    error ? "border-red-500" : "border-slate-200 focus:border-coral"
                   }`}
                 />
                 <button
@@ -189,7 +189,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={submitting || googleLoading}
-              className="h-11 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium text-sm shadow-sm shadow-purple-500/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
+              className="h-11 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-coral hover:bg-coral-deep text-white font-medium text-sm shadow-sm shadow-coral/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Log in"}
             </button>
@@ -197,7 +197,7 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-semibold text-purple-600 hover:text-purple-700">
+            <Link href="/signup" className="font-semibold text-coral-deep hover:text-coral">
               Sign up
             </Link>
           </p>

@@ -89,7 +89,7 @@ export default function SignupPage() {
       email,
       password,
       redirect: false,
-      callbackUrl: "/overview",
+      callbackUrl: "/dms",
     })
     setSubmitting(false)
 
@@ -99,7 +99,7 @@ export default function SignupPage() {
       return
     }
     trackEvent("login_completed", { method: "email" })
-    router.push("/overview")
+    router.push("/dms")
     router.refresh()
   }
 
@@ -117,9 +117,9 @@ export default function SignupPage() {
     trackEvent("signup_started", { method: "google" })
     // The user could already have an account — that's fine, the signIn
     // callback will link to the existing row and this becomes a login.
-    // /overview renders the onboarding landing when the user has no
-    // profiles, so a single callbackUrl covers both new and returning users.
-    await signIn("google", { callbackUrl: "/overview" })
+    // /dms shows the connect-Instagram state for new users, so a single
+    // callbackUrl covers both new and returning users.
+    await signIn("google", { callbackUrl: "/dms" })
   }
 
   return (
@@ -131,16 +131,16 @@ export default function SignupPage() {
         <div className="w-full max-w-sm">
           {/* Mobile-only compact logo */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 mb-6">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 shadow-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-coral shadow-sm">
               <TrendingUp className="h-4 w-4 text-white" strokeWidth={2.5} />
             </div>
             <span className="font-bold text-slate-900 tracking-tight">Social Growth</span>
           </div>
 
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Start growing today</h1>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Join the beta</h1>
             <p className="text-sm text-slate-500 mt-1">
-              Create your free account — setup takes 2 minutes.
+              Create your free account, then connect Instagram in 2 minutes.
             </p>
           </div>
 
@@ -212,8 +212,8 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 8 characters"
-                  className={`h-11 w-full pl-11 pr-11 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-purple-500/20 transition-all ${
-                    error ? "border-red-500" : "border-slate-200 focus:border-purple-500"
+                  className={`h-11 w-full pl-11 pr-11 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-coral/20 transition-all ${
+                    error ? "border-red-500" : "border-slate-200 focus:border-coral"
                   }`}
                 />
                 <button
@@ -262,7 +262,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={submitting || googleLoading}
-              className="h-11 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium text-sm shadow-sm shadow-purple-500/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
+              className="h-11 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-coral hover:bg-coral-deep text-white font-medium text-sm shadow-sm shadow-coral/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
             </button>
@@ -270,7 +270,7 @@ export default function SignupPage() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-purple-600 hover:text-purple-700">
+            <Link href="/login" className="font-semibold text-coral-deep hover:text-coral">
               Log in
             </Link>
           </p>
@@ -323,8 +323,8 @@ function FieldWithIcon({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`h-11 w-full pl-11 pr-4 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-purple-500/20 transition-all ${
-            hasError ? "border-red-500" : "border-slate-200 focus:border-purple-500"
+          className={`h-11 w-full pl-11 pr-4 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-coral/20 transition-all ${
+            hasError ? "border-red-500" : "border-slate-200 focus:border-coral"
           }`}
         />
       </div>

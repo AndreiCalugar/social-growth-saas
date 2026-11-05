@@ -244,3 +244,37 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 }
+
+/* ── Landing (RO) ─────────────────────────────────────────────────────────
+   Ink / white / mist surfaces with one coral accent — the colour of a new
+   comment notification. Fonts come from next/font variables set on the
+   landing wrapper (app/page.tsx). */
+@theme inline {
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-stamp: var(--font-jetbrains), ui-monospace, monospace;
+  --color-ink: #17131f;
+  --color-ink-soft: #4a4555;
+  --color-mist: #f3f1f6;
+  --color-coral: #ff5b4a;
+  --color-coral-deep: #e8432f;
+  --color-coral-soft: #ffe8e4;
+  --color-sent: #12a877;
+}
+
+@keyframes demo-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes demo-typing {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+.demo-in { animation: demo-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.demo-dot { animation: demo-typing 1s ease-in-out infinite; }
+.demo-dot:nth-child(2) { animation-delay: 0.15s; }
+.demo-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-in, .demo-dot { animation: none; }
+}
