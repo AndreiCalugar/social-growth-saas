@@ -10,6 +10,7 @@ import {
 } from "@/lib/meta/client"
 import { markTokenError } from "@/lib/meta/accounts"
 import { pollAutomationComments } from "@/lib/meta/poll-comments"
+import { pickReplyVariant } from "@/lib/meta/reply-variants"
 
 /**
  * Drain the DM send queue (dm_logs rows with status='pending').
@@ -256,17 +257,15 @@ export async function GET(request: NextRequest) {
     if (terminalFailure) continue
 
     // --- Public comment reply, independent of the DM outcome ---
+    // One of the automation's reply variations, picked at random.
+    const publicReply = pickReplyVariant(automation.public_reply_message)
     if (
       automation.public_reply_enabled &&
-      automation.public_reply_message &&
+      publicReply &&
       !row.public_reply_sent_at
     ) {
       try {
-        await sendCommentReply(
-          account.token,
-          row.comment_id,
-          automation.public_reply_message
-        )
+        await sendCommentReply(account.token, row.comment_id, publicReply)
         await supabase
           .from("dm_logs")
           .update({ public_reply_sent_at: nowIso(), updated_at: nowIso() })

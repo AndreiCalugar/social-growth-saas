@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { joinReplyVariants, parseReplyVariants } from "@/lib/meta/reply-variants"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getAccountForUser } from "@/lib/meta/accounts"
@@ -43,7 +44,10 @@ function validateAutomationBody(body: AutomationBody): string | null {
   if (!body.match_any_post && !body.post_id) {
     return "Pick a post or enable match_any_post"
   }
-  if (body.public_reply_enabled && !body.public_reply_message?.trim()) {
+  if (
+    body.public_reply_enabled &&
+    !joinReplyVariants(parseReplyVariants(body.public_reply_message))
+  ) {
     return "public_reply_message is required when public reply is enabled"
   }
   return null
@@ -114,7 +118,9 @@ export async function POST(req: NextRequest) {
       whole_word_match: body.whole_word_match ?? true,
       dm_message: body.dm_message!.trim(),
       public_reply_enabled: Boolean(body.public_reply_enabled),
-      public_reply_message: body.public_reply_message?.trim() || null,
+      // One variation per line, normalized (max 5, trimmed, deduped).
+      public_reply_message:
+        joinReplyVariants(parseReplyVariants(body.public_reply_message)) || null,
       is_active: body.is_active ?? true,
     })
     .select()

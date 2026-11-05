@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { joinReplyVariants, parseReplyVariants } from "@/lib/meta/reply-variants"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 
@@ -88,7 +89,9 @@ export async function PATCH(
     patch.public_reply_enabled = Boolean(body.public_reply_enabled)
   }
   if (body.public_reply_message !== undefined) {
-    patch.public_reply_message = body.public_reply_message?.trim() || null
+    // One variation per line, normalized (max 5, trimmed, deduped).
+    patch.public_reply_message =
+      joinReplyVariants(parseReplyVariants(body.public_reply_message)) || null
   }
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active)
 
