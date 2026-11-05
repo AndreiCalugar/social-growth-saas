@@ -23,17 +23,26 @@ type NavItem = {
   icon: typeof LayoutDashboard
   badge?: string
   countKey?: "activeBriefs"
+  // Competitor-analysis pages depend on the Apify scraper, which is paused.
+  // Hidden from the menu (routes still work) until it's switched back on.
+  scraper?: boolean
 }
 
-const navItems: NavItem[] = [
-  { href: "/overview", label: "Overview", icon: LayoutDashboard },
-  { href: "/profiles", label: "Profiles", icon: Users },
-  { href: "/competitors", label: "Competitors", icon: Swords },
-  { href: "/insights", label: "Insights", icon: Sparkles },
-  { href: "/briefs", label: "My Briefs", icon: ClipboardList, countKey: "activeBriefs" },
+const SHOW_SCRAPER_FEATURES = false
+
+const allNavItems: NavItem[] = [
   { href: "/dms", label: "DM Automation", icon: MessageCircle, badge: "Beta" },
+  { href: "/overview", label: "Overview", icon: LayoutDashboard, scraper: true },
+  { href: "/profiles", label: "Profiles", icon: Users, scraper: true },
+  { href: "/competitors", label: "Competitors", icon: Swords, scraper: true },
+  { href: "/insights", label: "Insights", icon: Sparkles, scraper: true },
+  { href: "/briefs", label: "My Briefs", icon: ClipboardList, countKey: "activeBriefs", scraper: true },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
+
+const navItems = allNavItems.filter(
+  (item) => SHOW_SCRAPER_FEATURES || !item.scraper
+)
 
 export function Sidebar({
   username,
