@@ -3,6 +3,7 @@ import { ArrowRight, Check, Plus } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
 import { BrandMark } from "@/components/brand-mark"
 import { PhoneDemo } from "./phone-demo"
+import { RotatingKeyword } from "./rotating-keyword"
 
 // Romanian landing for the comment-to-DM product. The previous English
 // landing (competitor insights) lives in components/landing/ and is unused
@@ -174,7 +175,7 @@ function Header() {
 // „LINK” set as the thing it is — a comment someone types.
 function KeywordChip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mx-1.5 inline-block -rotate-2 rounded-[0.6em] rounded-bl-[0.2em] bg-brand px-[0.45em] pb-[0.1em] text-white">
+    <span className="ml-1.5 mr-0.5 inline-block min-w-[5.4em] -rotate-2 rounded-[0.6em] rounded-bl-[0.2em] bg-brand px-[0.45em] pb-[0.1em] text-center text-white">
       {children}
     </span>
   )
@@ -213,17 +214,20 @@ function HeroCopy({ onPhoto = false }: { onPhoto?: boolean }) {
         </span>
       </h1>
       <p className="mt-6 max-w-xl font-display text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
-        Cineva scrie<KeywordChip>LINK</KeywordChip>la postarea ta și primește
-        linkul în DM, în câteva secunde. Automat.
+        Alegi un cuvânt, de exemplu
+        <KeywordChip>
+          <RotatingKeyword />
+        </KeywordChip>. Cine îl comentează la postarea ta primește automat mesajul tău în DM,
+        în câteva secunde.
       </p>
       <p
         className={`mt-4 max-w-xl text-[17px] leading-relaxed ${
           onPhoto ? "text-white/75" : "text-ink-soft"
         }`}
       >
-        Social Growth răspunde în locul tău la comentariile de pe Instagram: un
-        mesaj privat și un răspuns public sub comentariu. Prin API-ul oficial
-        Meta, fără să-ți dai parola.
+        Trimiți ce vrei: un link, un preț, un ghid sau detalii de programare.
+        Plus un răspuns public sub comentariu, ca toată lumea să vadă că
+        funcționează. Prin API-ul oficial Meta, fără să-ți dai parola.
       </p>
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <PrimaryButton href="/signup">
