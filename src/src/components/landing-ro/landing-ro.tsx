@@ -15,7 +15,7 @@ const INSTAGRAM_URL = "https://www.instagram.com/andreixperience/"
 //   shows the animated phone instead.
 // - FOUNDER_PHOTO: square-ish portrait for "De ce l-am construit"; falls back
 //   to a monogram.
-const HERO_PHOTO: string | null = null // e.g. "/images/hero.jpg"
+const HERO_PHOTO: string | null = "/images/hero.jpg"
 const FOUNDER_PHOTO: string | null = null // e.g. "/images/founder.jpg"
 
 const USE_CASES = [
@@ -174,7 +174,7 @@ function Header() {
 // „LINK” set as the thing it is — a comment someone types.
 function KeywordChip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mx-1 inline-block -rotate-2 rounded-2xl rounded-bl-md bg-brand px-3 pb-1 text-white">
+    <span className="mx-1.5 inline-block -rotate-2 rounded-[0.6em] rounded-bl-[0.2em] bg-brand px-[0.45em] pb-[0.1em] text-white">
       {children}
     </span>
   )
@@ -205,23 +205,25 @@ function HeroCopy({ onPhoto = false }: { onPhoto?: boolean }) {
         <span className="h-1.5 w-1.5 rounded-full bg-sent" />
         Beta deschis · pentru creatori și afaceri mici din România
       </p>
-      <h1 className="mt-6 font-display text-[2.4rem] font-extrabold leading-[1.02] tracking-[-0.03em] sm:text-6xl xl:text-[4.1rem]">
-        Cineva scrie<KeywordChip>LINK</KeywordChip>
+      <h1 className="mt-6 font-display text-[2.6rem] font-extrabold leading-[1] tracking-[-0.035em] sm:text-6xl xl:text-[4rem]">
+        Social media,
         <br />
-        Primește linkul în DM.
-        <br />
-        <span className={onPhoto ? "text-white/70" : "text-ink-soft"}>
-          Tu nu faci nimic.
+        <span className={onPhoto ? "text-white/75" : "text-ink-soft"}>
+          mai ușor și mai rapid.
         </span>
       </h1>
+      <p className="mt-6 max-w-xl font-display text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
+        Cineva scrie<KeywordChip>LINK</KeywordChip>la postarea ta și primește
+        linkul în DM, în câteva secunde. Automat.
+      </p>
       <p
-        className={`mt-6 max-w-xl text-lg leading-relaxed ${
-          onPhoto ? "text-white/80" : "text-ink-soft"
+        className={`mt-4 max-w-xl text-[17px] leading-relaxed ${
+          onPhoto ? "text-white/75" : "text-ink-soft"
         }`}
       >
-        Social Growth răspunde automat la comentariile de pe Instagram: trimite
-        mesajul promis în privat și lasă un răspuns public sub comentariu, în
-        câteva secunde. Prin API-ul oficial Meta, fără să-ți dai parola.
+        Social Growth răspunde în locul tău la comentariile de pe Instagram: un
+        mesaj privat și un răspuns public sub comentariu. Prin API-ul oficial
+        Meta, fără să-ți dai parola.
       </p>
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <PrimaryButton href="/signup">
@@ -254,12 +256,12 @@ function PhotoHero({ src }: { src: string }) {
       <img
         src={src}
         alt=""
-        className="absolute inset-0 -z-20 h-full w-full object-cover object-[70%_center]"
+        className="absolute inset-0 -z-20 h-full w-full object-cover object-[60%_center] lg:origin-left lg:scale-[1.42]"
       />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-ink/90 via-ink/60 to-ink/10" />
+      <div className="absolute inset-0 -z-10 bg-ink/65 lg:bg-transparent lg:bg-gradient-to-r lg:from-ink/90 lg:via-ink/55 lg:to-ink/0" />
       <div className="absolute inset-x-0 bottom-0 -z-10 h-40 bg-gradient-to-t from-ink/60 to-transparent" />
 
-      <div className="mx-auto flex min-h-[calc(100svh-4rem)] max-w-6xl flex-col justify-center px-4 py-20 sm:px-6">
+      <div className="mx-auto flex min-h-[min(calc(100svh-4rem),860px)] max-w-6xl flex-col justify-center px-4 py-20 sm:px-6">
         <div className="max-w-2xl">
           <HeroCopy onPhoto />
         </div>
@@ -361,19 +363,45 @@ function HowItWorks() {
           eyebrow="Cum funcționează"
           title="Gata în două minute. Fără scheme complicate."
         />
-        <ol className="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="border-t-2 border-ink pt-5">
-              <span className="font-display text-5xl font-extrabold text-brand">
-                {i + 1}
-              </span>
-              <h3 className="mt-3 font-display text-xl font-bold tracking-tight">
-                {s.title}
-              </h3>
-              <p className="mt-2 leading-relaxed text-ink-soft">{s.text}</p>
-            </li>
-          ))}
-        </ol>
+        <div className="mt-12 grid items-center gap-12 lg:grid-cols-[0.9fr_1fr] lg:gap-16">
+          {/* You get on with your day; the DMs go out on their own. */}
+          <div className="relative mx-auto w-full max-w-md">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/desk.jpg"
+              alt="Antreprenoare la birou, cu telefonul în mână"
+              loading="lazy"
+              className="aspect-[4/5] w-full rounded-[2rem] object-cover"
+            />
+            <div className="absolute -right-3 bottom-8 w-64 rounded-2xl bg-white p-3 shadow-xl shadow-ink/15 sm:-right-8">
+              <div className="flex items-center gap-2">
+                <BrandMark className="h-6 w-6 rounded-md [&_svg]:h-3 [&_svg]:w-3" />
+                <p className="text-[12px] font-semibold">Social Growth</p>
+                <span className="ml-auto font-stamp text-[10px] text-ink-soft">acum</span>
+              </div>
+              <p className="mt-1.5 text-[13px] leading-snug">
+                DM trimis automat către <strong>@andreea_m</strong> pentru
+                comentariul „LINK”.
+              </p>
+            </div>
+          </div>
+
+          <ol className="space-y-8">
+            {STEPS.map((s, i) => (
+              <li key={s.title} className="flex gap-5 border-t-2 border-ink pt-5">
+                <span className="font-display text-5xl font-extrabold leading-none text-brand">
+                  {i + 1}
+                </span>
+                <div>
+                  <h3 className="font-display text-xl font-bold tracking-tight">
+                    {s.title}
+                  </h3>
+                  <p className="mt-2 leading-relaxed text-ink-soft">{s.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </section>
   )
@@ -496,7 +524,15 @@ function Faq() {
 function FinalCta() {
   return (
     <section className="px-4 pb-20 sm:px-6">
-      <div className="mx-auto max-w-6xl rounded-[2rem] bg-ink px-6 py-14 text-center text-white sm:px-10">
+      <div className="relative isolate mx-auto max-w-6xl overflow-hidden rounded-[2rem] bg-ink px-6 py-20 text-center text-white sm:px-10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/team-bw.jpg"
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 -z-20 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 -z-10 bg-ink/80" />
         <h2 className="mx-auto max-w-2xl font-display text-[2rem] font-bold leading-[1.08] tracking-[-0.02em] sm:text-5xl">
           Vrei să-l încerci pe contul tău?
         </h2>
