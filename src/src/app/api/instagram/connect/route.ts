@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getBaseUrl, getMissingInstagramOAuthEnv } from "@/lib/meta/env"
 import { createOAuthState, getAuthorizationUrl } from "@/lib/meta/oauth"
+import { getBetaRequest } from "@/lib/beta"
 
 /**
  * Kick off the Instagram Login OAuth flow ("Instagram API with Instagram
@@ -13,6 +14,13 @@ export async function GET() {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.redirect(`${getBaseUrl()}/login`)
+  }
+
+  // Only approved beta users are Instagram Testers; anyone else would hit
+  // Instagram's error page, so send them back to the request screen.
+  const beta = await getBetaRequest(session.user.id, session.user.email)
+  if (beta.status !== "approved") {
+    return NextResponse.redirect(`${getBaseUrl()}/dms`)
   }
 
   const missing = getMissingInstagramOAuthEnv()

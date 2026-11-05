@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getConnectedAccount } from "@/lib/meta/accounts"
+import { getBetaRequest } from "@/lib/beta"
 import { DmsClient, type DmAutomation, type DmLogRow } from "@/components/dms-client"
 
 export const dynamic = "force-dynamic"
@@ -11,8 +12,9 @@ export default async function DmsPage() {
   if (!session?.user?.id) redirect("/login")
   const userId = session.user.id
 
-  const [account, { data: automations }, { data: logs }] = await Promise.all([
+  const [account, beta, { data: automations }, { data: logs }] = await Promise.all([
     getConnectedAccount(userId),
+    getBetaRequest(userId, session.user.email),
     supabase
       .from("dm_automations")
       .select("*")
@@ -54,6 +56,7 @@ export default async function DmsPage() {
   return (
     <DmsClient
       account={account}
+      beta={beta}
       initialAutomations={(automations ?? []) as DmAutomation[]}
       initialLogs={(logs ?? []) as DmLogRow[]}
       stats={{ sent: sentCount, pending: pendingCount, failed: failedCount }}
