@@ -1,14 +1,13 @@
 import { Send } from "lucide-react"
+import { BrandMark } from "@/components/brand-mark"
 
 // Login / signup side panel. Stays in English while the Meta app review is
 // running — reviewers sign in through this page.
 
 function Wordmark({ light = false }: { light?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="flex h-7 w-7 items-center justify-center rounded-[9px] rounded-bl-[3px] bg-coral text-[13px] font-extrabold text-white">
-        S
-      </span>
+    <div className="flex items-center gap-2.5">
+      <BrandMark />
       <span className={`text-sm font-semibold tracking-tight ${light ? "text-white" : "text-ink"}`}>
         Social Growth
       </span>
@@ -25,7 +24,7 @@ export function AuthShowcasePanel() {
         <div className="flex max-w-xl flex-1 flex-col justify-center">
           <h2 className="text-3xl font-bold leading-[1.1] tracking-tight xl:text-[2.6rem]">
             Someone comments{" "}
-            <span className="inline-block -rotate-2 rounded-2xl rounded-bl-md bg-coral px-3 pb-1">
+            <span className="inline-block -rotate-2 rounded-2xl rounded-bl-md bg-brand px-3 pb-1">
               LINK
             </span>
             <br />
@@ -46,7 +45,7 @@ export function AuthShowcasePanel() {
               </div>
             </div>
             <div className="ml-10 flex items-start gap-2.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-coral">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand">
                 <Send className="h-3.5 w-3.5" />
               </span>
               <div>

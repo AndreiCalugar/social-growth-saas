@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowRight, Check, Plus } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
+import { BrandMark } from "@/components/brand-mark"
 import { PhoneDemo } from "./phone-demo"
 
 // Romanian landing for the comment-to-DM product. The previous English
@@ -8,9 +9,14 @@ import { PhoneDemo } from "./phone-demo"
 // while the scraper features are paused.
 
 const INSTAGRAM_URL = "https://www.instagram.com/andreixperience/"
-// Swap for a real photo (e.g. "/founder.jpg" in /public) — falls back to a
-// monogram until then.
-const FOUNDER_PHOTO: string | null = null
+// Photos live in src/public/images/. Set a path to switch the photo on:
+// - HERO_PHOTO: full-bleed hero (landscape, ~2400px wide, subject on the
+//   right, calm space on the left for the headline). Without it the hero
+//   shows the animated phone instead.
+// - FOUNDER_PHOTO: square-ish portrait for "De ce l-am construit"; falls back
+//   to a monogram.
+const HERO_PHOTO: string | null = null // e.g. "/images/hero.jpg"
+const FOUNDER_PHOTO: string | null = null // e.g. "/images/founder.jpg"
 
 const USE_CASES = [
   {
@@ -86,7 +92,14 @@ export function LandingRo() {
     <div className="min-h-screen bg-white font-body text-ink antialiased">
       <Header />
       <main>
-        <Hero />
+        {HERO_PHOTO ? (
+          <>
+            <PhotoHero src={HERO_PHOTO} />
+            <DemoSection />
+          </>
+        ) : (
+          <Hero />
+        )}
         <UseCases />
         <HowItWorks />
         <FounderNote />
@@ -101,10 +114,8 @@ export function LandingRo() {
 
 function Wordmark() {
   return (
-    <Link href="/" className="flex items-center gap-2">
-      <span className="flex h-7 w-7 items-center justify-center rounded-[9px] rounded-bl-[3px] bg-coral text-[13px] font-display font-extrabold text-white">
-        S
-      </span>
+    <Link href="/" className="flex items-center gap-2.5">
+      <BrandMark />
       <span className="font-display text-[17px] font-bold tracking-tight">
         Social Growth
       </span>
@@ -124,7 +135,7 @@ function PrimaryButton({
   return (
     <Link
       href={href}
-      className={`inline-flex items-center justify-center gap-2 rounded-full bg-coral px-6 py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-coral-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${className}`}
     >
       {children}
     </Link>
@@ -163,7 +174,7 @@ function Header() {
 // „LINK” set as the thing it is — a comment someone types.
 function KeywordChip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mx-1 inline-block -rotate-2 rounded-2xl rounded-bl-md bg-coral px-3 pb-1 text-white">
+    <span className="mx-1 inline-block -rotate-2 rounded-2xl rounded-bl-md bg-brand px-3 pb-1 text-white">
       {children}
     </span>
   )
@@ -173,41 +184,120 @@ function Hero() {
   return (
     <section className="mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-12 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-20 lg:pt-20">
       <div>
-        <p className="inline-flex items-center gap-2 rounded-full bg-mist px-3 py-1 text-[13px] font-medium text-ink-soft">
-          <span className="h-1.5 w-1.5 rounded-full bg-sent" />
-          Beta deschis · pentru creatori și afaceri mici din România
-        </p>
-        <h1 className="mt-6 font-display text-[2.4rem] font-extrabold leading-[1.02] tracking-[-0.03em] sm:text-6xl xl:text-[4.1rem]">
-          Cineva scrie<KeywordChip>LINK</KeywordChip>
-          <br />
-          Primește linkul în DM.
-          <br />
-          <span className="text-ink-soft">Tu nu faci nimic.</span>
-        </h1>
-        <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-soft">
-          Social Growth răspunde automat la comentariile de pe Instagram: trimite
-          mesajul promis în privat și lasă un răspuns public sub comentariu, în
-          câteva secunde. Prin API-ul oficial Meta, fără să-ți dai parola.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          <PrimaryButton href="/signup">
-            Intră în beta, gratuit
-            <ArrowRight className="h-4 w-4" />
-          </PrimaryButton>
-          <a
-            href="#cum-functioneaza"
-            className="rounded-full px-5 py-3.5 text-[15px] font-semibold text-ink hover:bg-mist"
-          >
-            Vezi cum funcționează
-          </a>
-        </div>
-        <p className="mt-4 text-[13px] text-ink-soft">
-          Ai nevoie de un cont Instagram Business sau Creator.
-        </p>
+        <HeroCopy />
       </div>
 
       <div className="flex justify-center lg:justify-end">
         <PhoneDemo />
+      </div>
+    </section>
+  )
+}
+
+function HeroCopy({ onPhoto = false }: { onPhoto?: boolean }) {
+  return (
+    <>
+      <p
+        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[13px] font-medium ${
+          onPhoto ? "bg-white/15 text-white/90 backdrop-blur-sm" : "bg-mist text-ink-soft"
+        }`}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-sent" />
+        Beta deschis · pentru creatori și afaceri mici din România
+      </p>
+      <h1 className="mt-6 font-display text-[2.4rem] font-extrabold leading-[1.02] tracking-[-0.03em] sm:text-6xl xl:text-[4.1rem]">
+        Cineva scrie<KeywordChip>LINK</KeywordChip>
+        <br />
+        Primește linkul în DM.
+        <br />
+        <span className={onPhoto ? "text-white/70" : "text-ink-soft"}>
+          Tu nu faci nimic.
+        </span>
+      </h1>
+      <p
+        className={`mt-6 max-w-xl text-lg leading-relaxed ${
+          onPhoto ? "text-white/80" : "text-ink-soft"
+        }`}
+      >
+        Social Growth răspunde automat la comentariile de pe Instagram: trimite
+        mesajul promis în privat și lasă un răspuns public sub comentariu, în
+        câteva secunde. Prin API-ul oficial Meta, fără să-ți dai parola.
+      </p>
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        <PrimaryButton href="/signup">
+          Intră în beta, gratuit
+          <ArrowRight className="h-4 w-4" />
+        </PrimaryButton>
+        <a
+          href="#cum-functioneaza"
+          className={`rounded-full px-5 py-3.5 text-[15px] font-semibold ${
+            onPhoto
+              ? "border border-white/30 text-white hover:bg-white/10"
+              : "text-ink hover:bg-mist"
+          }`}
+        >
+          Vezi cum funcționează
+        </a>
+      </div>
+      <p className={`mt-4 text-[13px] ${onPhoto ? "text-white/60" : "text-ink-soft"}`}>
+        Ai nevoie de un cont Instagram Business sau Creator.
+      </p>
+    </>
+  )
+}
+
+// Full-bleed photo hero with the comment → DM exchange floating over it.
+function PhotoHero({ src }: { src: string }) {
+  return (
+    <section className="relative isolate overflow-hidden bg-ink text-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        className="absolute inset-0 -z-20 h-full w-full object-cover object-[70%_center]"
+      />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-ink/90 via-ink/60 to-ink/10" />
+      <div className="absolute inset-x-0 bottom-0 -z-10 h-40 bg-gradient-to-t from-ink/60 to-transparent" />
+
+      <div className="mx-auto flex min-h-[calc(100svh-4rem)] max-w-6xl flex-col justify-center px-4 py-20 sm:px-6">
+        <div className="max-w-2xl">
+          <HeroCopy onPhoto />
+        </div>
+      </div>
+
+      <div className="absolute bottom-12 right-[7%] hidden w-72 space-y-3 lg:block" aria-hidden>
+        <div className="flex items-end gap-2">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#7c6cf0] text-[10px] font-bold">
+            A
+          </span>
+          <p className="rounded-2xl rounded-bl-md bg-white/15 px-3.5 py-2 text-sm backdrop-blur-md">
+            LINK 🙏
+          </p>
+        </div>
+        <div className="ml-9 rounded-2xl rounded-bl-md bg-brand p-3 text-sm leading-snug shadow-xl shadow-ink/30">
+          Salut, Andreea! 👋 Uite ghidul promis: contultau.ro/ghid-reel
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-white/75">
+            <span className="rounded bg-white/20 px-1 font-stamp">0:16</span>
+            trimis automat
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// With a photo hero, the animated phone gets its own section right after.
+function DemoSection() {
+  return (
+    <section className="py-20">
+      <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-20">
+        <SectionTitle
+          eyebrow="Vezi cum arată"
+          title="De la comentariu la DM, în câteva secunde."
+        />
+        <div className="flex justify-center">
+          <PhoneDemo />
+        </div>
       </div>
     </section>
   )
@@ -224,7 +314,7 @@ function SectionTitle({
 }) {
   return (
     <div id={id} className="scroll-mt-24">
-      <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-coral">
+      <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-brand">
         {eyebrow}
       </p>
       <h2 className="mt-3 max-w-2xl font-display text-[2rem] font-bold leading-[1.08] tracking-[-0.02em] sm:text-[2.6rem]">
@@ -274,7 +364,7 @@ function HowItWorks() {
         <ol className="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
           {STEPS.map((s, i) => (
             <li key={s.title} className="border-t-2 border-ink pt-5">
-              <span className="font-display text-5xl font-extrabold text-coral">
+              <span className="font-display text-5xl font-extrabold text-brand">
                 {i + 1}
               </span>
               <h3 className="mt-3 font-display text-xl font-bold tracking-tight">
@@ -293,7 +383,7 @@ function FounderNote() {
   return (
     <section className="pb-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="grid items-center gap-10 rounded-[2rem] bg-coral-soft p-6 sm:p-10 md:grid-cols-[auto_1fr]">
+        <div className="grid items-center gap-10 rounded-[2rem] bg-brand-soft p-6 sm:p-10 md:grid-cols-[auto_1fr]">
           {FOUNDER_PHOTO ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -302,12 +392,12 @@ function FounderNote() {
               className="h-40 w-40 rounded-[1.75rem] object-cover md:h-56 md:w-56"
             />
           ) : (
-            <div className="flex h-40 w-40 items-center justify-center rounded-[1.75rem] bg-coral font-display text-7xl font-extrabold text-white md:h-56 md:w-56">
+            <div className="flex h-40 w-40 items-center justify-center rounded-[1.75rem] bg-brand font-display text-7xl font-extrabold text-white md:h-56 md:w-56">
               A
             </div>
           )}
           <div>
-            <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-coral-deep">
+            <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-brand-deep">
               De ce l-am construit
             </p>
             <p className="mt-3 max-w-2xl font-display text-2xl font-semibold leading-snug tracking-tight sm:text-[1.7rem]">
@@ -390,9 +480,9 @@ function Faq() {
         <div className="mt-10 divide-y divide-ink/10 border-y border-ink/10">
           {FAQ.map((item) => (
             <details key={item.q} className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-display text-lg font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-coral [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-display text-lg font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-brand [&::-webkit-details-marker]:hidden">
                 {item.q}
-                <Plus className="h-5 w-5 shrink-0 text-coral transition-transform group-open:rotate-45" />
+                <Plus className="h-5 w-5 shrink-0 text-brand transition-transform group-open:rotate-45" />
               </summary>
               <p className="mt-3 leading-relaxed text-ink-soft">{item.a}</p>
             </details>
@@ -444,10 +534,10 @@ function Footer() {
             Răspunsuri automate în DM pentru comentariile de pe Instagram.
           </p>
           <a
-            href="mailto:hello@getsocialgrowth.tech"
+            href="mailto:andrei.nicolae.calugar@gmail.com"
             className="mt-3 inline-block text-sm font-medium text-ink underline underline-offset-4"
           >
-            hello@getsocialgrowth.tech
+            andrei.nicolae.calugar@gmail.com
           </a>
         </div>
         <nav className="grid grid-cols-2 gap-x-10 gap-y-2 text-sm text-ink-soft">

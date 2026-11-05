@@ -131,7 +131,7 @@ export default function SignupPage() {
         <div className="w-full max-w-sm">
           {/* Mobile-only compact logo */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 mb-6">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-coral shadow-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 shadow-sm">
               <TrendingUp className="h-4 w-4 text-white" strokeWidth={2.5} />
             </div>
             <span className="font-bold text-slate-900 tracking-tight">Social Growth</span>
@@ -212,8 +212,8 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 8 characters"
-                  className={`h-11 w-full pl-11 pr-11 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-coral/20 transition-all ${
-                    error ? "border-red-500" : "border-slate-200 focus:border-coral"
+                  className={`h-11 w-full pl-11 pr-11 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand/20 transition-all ${
+                    error ? "border-red-500" : "border-slate-200 focus:border-brand"
                   }`}
                 />
                 <button
@@ -262,7 +262,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={submitting || googleLoading}
-              className="h-11 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-coral hover:bg-coral-deep text-white font-medium text-sm shadow-sm shadow-coral/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
+              className="h-11 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-brand hover:bg-brand-deep text-white font-medium text-sm shadow-sm shadow-brand/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
             </button>
@@ -270,7 +270,7 @@ export default function SignupPage() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-coral-deep hover:text-coral">
+            <Link href="/login" className="font-semibold text-brand-deep hover:text-brand">
               Log in
             </Link>
           </p>
@@ -323,8 +323,8 @@ function FieldWithIcon({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`h-11 w-full pl-11 pr-4 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-coral/20 transition-all ${
-            hasError ? "border-red-500" : "border-slate-200 focus:border-coral"
+          className={`h-11 w-full pl-11 pr-4 rounded-lg border bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand/20 transition-all ${
+            hasError ? "border-red-500" : "border-slate-200 focus:border-brand"
           }`}
         />
       </div>
