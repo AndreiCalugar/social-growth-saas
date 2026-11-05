@@ -69,7 +69,7 @@ export async function pollAutomationComments(): Promise<{
       }
 
       for (const [mediaId, since] of Array.from(media)) {
-        const comments = await getMediaComments(token, mediaId)
+        const comments = await getMediaComments(token, mediaId, { since })
         for (const c of comments) {
           if (!c.from?.id || c.from.id === account.instagram_id) continue
           if (new Date(c.timestamp).getTime() < since) continue

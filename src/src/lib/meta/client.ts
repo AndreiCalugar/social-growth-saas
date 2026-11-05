@@ -166,20 +166,39 @@ export interface InstagramComment {
   from?: { id: string; username?: string }
 }
 
-// Newest first. Includes replies, which the poller filters by author.
+/**
+ * Comments on a post, newest first (verified against the Graph API: pages
+ * are sorted by timestamp descending). Follows pagination until it reaches
+ * comments older than `since`, runs out of pages, or hits `maxPages` — so a
+ * busy reel with more than one page of new comments per poll isn't cut off.
+ * Includes replies, which the poller filters by author.
+ */
 export async function getMediaComments(
   accessToken: string,
   mediaId: string,
-  limit = 50
+  { since = 0, pageSize = 50, maxPages = 10 }: {
+    since?: number
+    pageSize?: number
+    maxPages?: number
+  } = {}
 ): Promise<InstagramComment[]> {
-  const url = new URL(`${instagramGraphBase()}/${mediaId}/comments`)
-  url.searchParams.set("fields", "id,text,timestamp,from")
-  url.searchParams.set("limit", limit.toString())
-  url.searchParams.set("access_token", accessToken)
+  const first = new URL(`${instagramGraphBase()}/${mediaId}/comments`)
+  first.searchParams.set("fields", "id,text,timestamp,from")
+  first.searchParams.set("limit", pageSize.toString())
+  first.searchParams.set("access_token", accessToken)
 
-  const response = await fetch(url.toString())
-  const data = await handleResponse<{ data: InstagramComment[] }>(response)
-  return data.data
+  const comments: InstagramComment[] = []
+  let next: string | undefined = first.toString()
+  for (let page = 0; next && page < maxPages; page++) {
+    const response: Response = await fetch(next)
+    const data: { data: InstagramComment[]; paging?: { next?: string } } =
+      await handleResponse(response)
+    comments.push(...data.data)
+    const oldest = data.data[data.data.length - 1]
+    if (!oldest || new Date(oldest.timestamp).getTime() < since) break
+    next = data.paging?.next
+  }
+  return comments
 }
 
 export async function getUserInfo(accessToken: string): Promise<InstagramUser> {
