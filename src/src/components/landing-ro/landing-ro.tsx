@@ -16,7 +16,7 @@ const INSTAGRAM_URL = "https://www.instagram.com/andreixperience/"
 // - FOUNDER_PHOTO: square-ish portrait for "De ce l-am construit"; falls back
 //   to a monogram.
 const HERO_PHOTO: string | null = "/images/hero.jpg"
-const FOUNDER_PHOTO: string | null = null // e.g. "/images/founder.jpg"
+const FOUNDER_PHOTO: string | null = "/images/founder.jpg"
 
 const USE_CASES = [
   {
@@ -417,7 +417,7 @@ function FounderNote() {
             <img
               src={FOUNDER_PHOTO}
               alt="Andrei, fondatorul Social Growth"
-              className="h-40 w-40 rounded-[1.75rem] object-cover md:h-56 md:w-56"
+              className="h-40 w-40 rounded-[1.75rem] object-cover object-[center_40%] contrast-[1.08] grayscale md:h-56 md:w-56"
             />
           ) : (
             <div className="flex h-40 w-40 items-center justify-center rounded-[1.75rem] bg-brand font-display text-7xl font-extrabold text-white md:h-56 md:w-56">
