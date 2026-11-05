@@ -774,9 +774,9 @@ function AutomationForm({
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div className="min-h-0 flex-1 overflow-y-auto lg:flex lg:flex-row lg:overflow-hidden">
           {/* Settings */}
-          <div className="min-h-0 overflow-y-auto lg:w-[460px] lg:shrink-0 lg:border-r lg:border-slate-100">
+          <div className="lg:min-h-0 lg:w-[460px] lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-slate-100">
             <div className="space-y-7 px-4 py-6 sm:px-6">
               {formError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -828,7 +828,7 @@ function AutomationForm({
                         {postsError ?? "No posts found on this account."}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-4 gap-1.5 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5">
+                      <div className="grid max-h-80 grid-cols-3 gap-1.5 overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white p-1.5 sm:max-h-60 sm:grid-cols-4">
                         {posts.map((post) => (
                           <button
                             key={post.id}
@@ -843,7 +843,7 @@ function AutomationForm({
                             }}
                             title={post.caption.slice(0, 100)}
                             className={cn(
-                              "relative aspect-[4/5] overflow-hidden rounded-md border-2 transition-all",
+                              "relative block w-full overflow-hidden rounded-md border-2 pt-[125%] transition-all",
                               form.postId === post.id
                                 ? "border-purple-600 ring-2 ring-purple-500/30"
                                 : "border-transparent hover:border-slate-300"
@@ -854,10 +854,10 @@ function AutomationForm({
                               <img
                                 src={post.thumbnail_url}
                                 alt=""
-                                className="h-full w-full object-cover"
+                                className="absolute inset-0 h-full w-full object-cover"
                               />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[9px] text-slate-400 p-1 text-center">
+                              <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-[9px] text-slate-400 p-1 text-center">
                                 {post.media_type}
                               </div>
                             )}
@@ -1000,7 +1000,7 @@ function AutomationForm({
           </div>
 
           {/* Live preview */}
-          <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto bg-slate-50 px-4 py-6 lg:justify-center">
+          <div className="flex flex-col items-center bg-slate-50 px-4 py-6 lg:min-h-0 lg:flex-1 lg:justify-center lg:overflow-y-auto">
             <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               Live preview
             </p>

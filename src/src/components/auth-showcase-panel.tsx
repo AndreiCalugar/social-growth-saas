@@ -17,11 +17,19 @@ function Wordmark({ light = false }: { light?: boolean }) {
 
 export function AuthShowcasePanel() {
   return (
-    <aside className="relative hidden overflow-hidden bg-ink text-white lg:flex lg:w-[55%] xl:w-[58%]">
+    <aside className="relative isolate hidden overflow-hidden bg-ink text-white lg:flex lg:w-[55%] xl:w-[58%]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/images/login.jpg"
+        alt=""
+        className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_30%]"
+      />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-ink via-ink/75 to-ink/10" />
+
       <div className="relative z-10 flex w-full flex-col p-10 xl:p-14">
         <Wordmark light />
 
-        <div className="flex max-w-xl flex-1 flex-col justify-center">
+        <div className="flex max-w-xl flex-1 flex-col justify-end pb-10">
           <h2 className="text-3xl font-bold leading-[1.1] tracking-tight xl:text-[2.6rem]">
             Someone comments{" "}
             <span className="inline-block -rotate-2 rounded-2xl rounded-bl-md bg-brand px-3 pb-1">
