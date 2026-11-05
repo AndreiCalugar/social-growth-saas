@@ -84,11 +84,16 @@ export function AuthShowcasePanel() {
 /** Condensed mobile banner shown above the form when the big panel is hidden. */
 export function AuthMobileBanner() {
   return (
-    <div className="w-full bg-ink text-white lg:hidden">
-      <div className="mx-auto max-w-md px-6 py-6 text-center">
-        <div className="mb-3 inline-flex">
-          <Wordmark light />
-        </div>
+    <div className="relative isolate w-full overflow-hidden bg-ink text-white lg:hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/images/login.jpg"
+        alt=""
+        className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_28%]"
+      />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-ink via-ink/50 to-transparent" />
+      {/* No logo here — the form below already shows it. */}
+      <div className="mx-auto flex min-h-64 max-w-md flex-col justify-end px-6 pb-6 pt-32 text-center">
         <h2 className="text-base font-bold leading-snug">
           Comments become DMs, automatically
         </h2>
