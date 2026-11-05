@@ -5,6 +5,7 @@ import { LogOutButton } from "@/components/log-out-button"
 import { DeleteAccountButton } from "@/components/delete-account-button"
 import { InstagramConnectCard } from "@/components/instagram-connect-card"
 import { getConnectedAccount } from "@/lib/meta/accounts"
+import { getBetaRequest } from "@/lib/beta"
 import {
   Mail, User as UserIcon, AtSign, Bell, CreditCard, AlertTriangle,
 } from "lucide-react"
@@ -94,7 +95,10 @@ export default async function SettingsPage() {
       </section>
 
       {/* Instagram DM automation */}
-      <InstagramConnectCard account={instagramAccount} />
+      <InstagramConnectCard
+        account={instagramAccount}
+        betaApproved={(await getBetaRequest(userId, session.user.email)).status === "approved"}
+      />
 
       {/* Notifications placeholder */}
       <section className="rounded-xl border border-slate-200/60 bg-white p-6 shadow-sm opacity-75">

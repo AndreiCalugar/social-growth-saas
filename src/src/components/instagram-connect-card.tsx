@@ -20,8 +20,11 @@ const STATUS_MESSAGES: Record<string, { tone: "ok" | "error"; text: string }> = 
 
 export function InstagramConnectCard({
   account,
+  betaApproved,
 }: {
   account: ConnectedInstagramAccount | null
+  // Not-yet-approved beta users request access on /dms instead of connecting.
+  betaApproved: boolean
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -135,13 +138,20 @@ export function InstagramConnectCard({
               {disconnecting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Disconnect
             </button>
-          ) : (
+          ) : betaApproved ? (
             <a
               href="/api/instagram/connect"
               className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
             >
               <InstagramIcon className="h-3.5 w-3.5" />
               Connect
+            </a>
+          ) : (
+            <a
+              href="/dms"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
+            >
+              Request beta access
             </a>
           )}
         </div>

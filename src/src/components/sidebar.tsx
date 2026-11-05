@@ -14,8 +14,10 @@ import {
   X,
   ClipboardList,
   MessageCircle,
+  ShieldCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isAdminEmail } from "@/lib/admin"
 
 type NavItem = {
   href: string
@@ -43,6 +45,8 @@ const allNavItems: NavItem[] = [
 const navItems = allNavItems.filter(
   (item) => SHOW_SCRAPER_FEATURES || !item.scraper
 )
+
+const adminNavItem: NavItem = { href: "/admin/beta", label: "Beta access", icon: ShieldCheck }
 
 export function Sidebar({
   username,
@@ -98,7 +102,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex flex-col gap-0.5 p-3 flex-1 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon, badge, countKey }) => {
+        {(isAdminEmail(userEmail) ? [...navItems, adminNavItem] : navItems).map(({ href, label, icon: Icon, badge, countKey }) => {
           const isActive = href === "/" ? pathname === href : pathname.startsWith(href)
           const count = countKey ? counts[countKey] : 0
           return (

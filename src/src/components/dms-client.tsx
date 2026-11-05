@@ -25,6 +25,7 @@ import { InstagramIcon } from "@/components/instagram-icon"
 import { InstagramAccountAvatar } from "@/components/instagram-account-avatar"
 import { DmPhonePreview, type PreviewMode } from "@/components/dm-phone-preview"
 import type { ConnectedInstagramAccount } from "@/lib/meta/accounts"
+import type { BetaRequest } from "@/lib/beta"
 import { cn } from "@/lib/utils"
 import { trackEvent } from "@/lib/analytics"
 
@@ -100,7 +101,9 @@ export function DmsClient({
   initialLogs,
   stats,
   sentByAutomation,
+  beta,
 }: {
+  beta: BetaRequest
   account: DmAccount | null
   initialAutomations: DmAutomation[]
   initialLogs: DmLogRow[]
@@ -121,7 +124,7 @@ export function DmsClient({
   }, [automations])
 
   if (!account) {
-    return <NotConnectedState />
+    return <NotConnectedState beta={beta} />
   }
 
   async function toggleActive(automation: DmAutomation) {
@@ -556,49 +559,275 @@ export function DmsClient({
   )
 }
 
-function NotConnectedState() {
+// Before Meta grants Advanced Access only Instagram Testers can connect, so
+// the screen depends on the user's beta status: request access → waiting →
+// approved (accept the tester invite, then connect).
+function NotConnectedState({ beta }: { beta: BetaRequest }) {
   return (
-    <div className="p-4 sm:p-6 max-w-3xl">
+    <div className="p-4 sm:p-6 max-w-2xl">
       <div className="flex items-center gap-2">
-        <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
           DM Automation
         </h1>
         <span className="inline-flex items-center rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
           Beta
         </span>
       </div>
-      <p className="text-slate-500 text-sm mt-0.5">
+      <p className="text-slate-500 text-base mt-1">
         Turn comments into conversations, automatically
       </p>
 
-      <div className="mt-6 rounded-xl border border-slate-200/60 bg-white p-8 shadow-sm text-center">
-        <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm">
-          <InstagramIcon className="h-7 w-7 text-white" />
-        </div>
-        <h2 className="text-base font-semibold text-slate-900 mt-4">
-          Connect your Instagram account
-        </h2>
-        <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto leading-relaxed">
-          When someone comments a keyword like{" "}
-          <span className="font-semibold text-slate-700">&ldquo;LINK&rdquo;</span>{" "}
-          on your post or reel, they automatically get a DM from you — within a
-          minute. Uses Instagram&rsquo;s official API: no password sharing, no
-          scraping, fully within Meta&rsquo;s rules.
-        </p>
-        <a
-          href="/api/instagram/connect"
-          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
-        >
-          <InstagramIcon className="h-4 w-4" />
-          Connect Instagram
-        </a>
-        <p className="text-[11px] text-slate-400 mt-4 max-w-sm mx-auto">
-          Requires an Instagram <strong>Business or Creator</strong> account.
-          During the beta, your account also needs to be added as a tester —
-          contact us and we&rsquo;ll set you up in minutes.
-        </p>
+      <div className="mt-6 rounded-2xl border border-slate-200/60 bg-white p-6 sm:p-8 shadow-sm">
+        {beta.status === "approved" ? (
+          <ApprovedConnect />
+        ) : beta.status === "pending" ? (
+          <BetaPending username={beta.instagram_username} />
+        ) : (
+          <BetaRequestForm />
+        )}
       </div>
     </div>
+  )
+}
+
+function ConnectIntro() {
+  return (
+    <>
+      <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm">
+        <InstagramIcon className="h-7 w-7 text-white" />
+      </div>
+      <p className="mt-5 text-base text-slate-600 leading-relaxed">
+        When someone comments a keyword like{" "}
+        <span className="font-semibold text-slate-900">&ldquo;LINK&rdquo;</span> or{" "}
+        <span className="font-semibold text-slate-900">&ldquo;PRICE&rdquo;</span> on
+        your post, they automatically get your DM within seconds. Official
+        Instagram API: no password sharing.
+      </p>
+    </>
+  )
+}
+
+function BetaRequestForm() {
+  const router = useRouter()
+  const [username, setUsername] = useState("")
+  const [isProfessional, setIsProfessional] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!isProfessional) {
+      return setError(
+        "Your account needs to be Business or Creator. Switch it in Instagram first (it's free), then tick the box."
+      )
+    }
+    setSending(true)
+    try {
+      const res = await fetch("/api/beta/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instagram_username: username, is_professional: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Couldn't send the request")
+      trackEvent("beta_access_requested")
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't send the request")
+      setSending(false)
+    }
+  }
+
+  return (
+    <>
+      <ConnectIntro />
+      <h2 className="mt-6 text-xl font-bold text-slate-900">Request beta access</h2>
+      <p className="mt-1.5 text-base text-slate-600 leading-relaxed">
+        During the beta we activate every account by hand. Send us your
+        Instagram username and we&rsquo;ll get back to you in a DM within a few
+        hours.
+      </p>
+      <form onSubmit={submit} className="mt-5 space-y-4">
+        <div>
+          <label htmlFor="ig-username" className="text-sm font-medium text-slate-700">
+            Your Instagram username
+          </label>
+          <div className="mt-1.5 flex items-center rounded-xl border border-slate-200 bg-white focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20">
+            <span className="pl-4 text-base text-slate-400">@</span>
+            <input
+              id="ig-username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="yourbrand"
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              className="h-12 w-full rounded-xl bg-transparent px-1.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none"
+            />
+          </div>
+        </div>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isProfessional}
+            onChange={(e) => setIsProfessional(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500/30"
+          />
+          <span className="text-base text-slate-700">
+            My account is <strong>Business</strong> or <strong>Creator</strong>
+            <span className="block text-sm text-slate-500">
+              Not sure? In Instagram: Settings → Account type and tools. Switching
+              is free.
+            </span>
+          </span>
+        </label>
+        {error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={sending || !username.trim()}
+          className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-base font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors disabled:opacity-50 sm:w-auto"
+        >
+          {sending && <Loader2 className="h-4 w-4 animate-spin" />}
+          Request access
+        </button>
+      </form>
+    </>
+  )
+}
+
+function BetaPending({ username }: { username: string | null }) {
+  return (
+    <>
+      <div className="h-14 w-14 rounded-2xl bg-amber-100 flex items-center justify-center">
+        <Clock className="h-7 w-7 text-amber-600" />
+      </div>
+      <h2 className="mt-5 text-xl font-bold text-slate-900">Request received ✅</h2>
+      <p className="mt-2 text-base text-slate-600 leading-relaxed">
+        We&rsquo;re activating{" "}
+        <span className="font-semibold text-slate-900">@{username ?? "your account"}</span>{" "}
+        for the beta. You&rsquo;ll get a DM from us on Instagram within a few
+        hours with the next step. This page will then show the{" "}
+        <strong>Connect Instagram</strong> button.
+      </p>
+      <p className="mt-4 text-sm text-slate-500">
+        Wrong username? <RequestAgainLink />
+      </p>
+    </>
+  )
+}
+
+// Lets a waiting user fix their handle by showing the form again.
+function RequestAgainLink() {
+  const [open, setOpen] = useState(false)
+  if (open) {
+    return (
+      <span className="mt-4 block border-t border-slate-100 pt-4">
+        <BetaRequestFormInline />
+      </span>
+    )
+  }
+  return (
+    <button onClick={() => setOpen(true)} className="font-semibold text-purple-600 hover:underline">
+      Change it
+    </button>
+  )
+}
+
+function BetaRequestFormInline() {
+  const router = useRouter()
+  const [username, setUsername] = useState("")
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setSending(true)
+    setError(null)
+    const res = await fetch("/api/beta/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instagram_username: username, is_professional: true }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error ?? "Couldn't save")
+      setSending(false)
+      return
+    }
+    router.refresh()
+  }
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+      <input
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        placeholder="@yourbrand"
+        autoCapitalize="none"
+        className="h-11 flex-1 rounded-xl border border-slate-200 px-3 text-base focus:outline-none focus:border-purple-500"
+      />
+      <button
+        disabled={sending || !username.trim()}
+        className="h-11 rounded-xl bg-purple-600 px-4 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        Save
+      </button>
+      {error && <span className="text-sm text-red-600">{error}</span>}
+    </form>
+  )
+}
+
+function ApprovedConnect() {
+  return (
+    <>
+      <ConnectIntro />
+      <h2 className="mt-6 text-xl font-bold text-slate-900">
+        You&rsquo;re in the beta 🎉 Two steps left
+      </h2>
+      <ol className="mt-4 space-y-4">
+        <li className="flex gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-600 text-sm font-bold text-white">
+            1
+          </span>
+          <div className="text-base text-slate-700 leading-relaxed">
+            <strong>Accept the tester invite</strong> on Instagram&rsquo;s website
+            (it doesn&rsquo;t show in the app): Settings → Apps and websites →{" "}
+            <em>Tester invites</em> → Accept.
+            <a
+              href="https://www.instagram.com/accounts/manage_access/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 flex w-fit items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+            >
+              Open tester invites
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-600 text-sm font-bold text-white">
+            2
+          </span>
+          <div className="text-base text-slate-700 leading-relaxed">
+            <strong>Connect your account</strong>
+            <a
+              href="/api/instagram/connect"
+              className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-base font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors sm:w-fit"
+            >
+              <InstagramIcon className="h-5 w-5" />
+              Connect Instagram
+            </a>
+          </div>
+        </li>
+      </ol>
+      <p className="mt-5 text-sm text-slate-500">
+        Requires an Instagram <strong>Business or Creator</strong> account.
+      </p>
+    </>
   )
 }
 
