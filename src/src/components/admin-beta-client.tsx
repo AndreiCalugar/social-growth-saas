@@ -75,8 +75,21 @@ export function AdminBetaClient({
     )
   }
 
-  async function run(action: "approve" | "revoke", ids: string[]) {
+  async function run(action: "approve" | "revoke" | "reset", ids: string[]) {
     if (ids.length === 0) return
+    if (action === "reset") {
+      const picked = rows.filter((r) => ids.includes(r.userId))
+      const connected = picked.filter((r) => r.connectedAs).map((r) => `@${r.connectedAs}`)
+      const ok = window.confirm(
+        `Reset ${picked.length} account(s) to the start?\n\n` +
+          `• Their beta request is removed — they'll see "Request beta access" again.\n` +
+          (connected.length
+            ? `• Instagram is disconnected for ${connected.join(", ")}, and their automations and DM history are deleted.\n`
+            : "") +
+          `\nTheir login account itself stays.`
+      )
+      if (!ok) return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -176,6 +189,15 @@ export function AdminBetaClient({
 
       {visible.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
+          {tab !== "none" && (
+            <button
+              onClick={() => run("reset", selectedHere)}
+              disabled={busy || selectedHere.length === 0}
+              className="order-last inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              Reset to start ({selectedHere.length})
+            </button>
+          )}
           {tab !== "approved" ? (
             <button
               onClick={() => run("approve", selectedHere)}
