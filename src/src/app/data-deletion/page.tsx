@@ -57,8 +57,8 @@ export default function DataDeletionPage() {
         <h2>3. Delete by email</h2>
         <p>
           Email{" "}
-          <a href="mailto:hello@getsocialgrowth.tech">
-            hello@getsocialgrowth.tech
+          <a href="mailto:andrei.nicolae.calugar@gmail.com">
+            andrei.nicolae.calugar@gmail.com
           </a>{" "}
           from the address associated with your account with the subject{" "}
           <em>&quot;Delete my data&quot;</em>. We will delete your account and

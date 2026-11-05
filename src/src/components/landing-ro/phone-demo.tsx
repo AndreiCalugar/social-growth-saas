@@ -118,7 +118,7 @@ function CreatorAvatar({ size = "h-6 w-6" }: { size?: string }) {
     <div
       className={cn(
         size,
-        "flex shrink-0 items-center justify-center rounded-full bg-coral font-display text-[10px] font-bold"
+        "flex shrink-0 items-center justify-center rounded-full bg-brand font-display text-[10px] font-bold"
       )}
     >
       C
@@ -143,7 +143,7 @@ function CommentsScreen({ phase }: { phase: number }) {
       </div>
 
       {/* The post: a carousel cover, the kind that ends with "comment LINK". */}
-      <div className="relative flex h-[200px] shrink-0 flex-col justify-end bg-gradient-to-br from-coral to-[#ff8a5c] p-4">
+      <div className="relative flex h-[200px] shrink-0 flex-col justify-end bg-gradient-to-br from-brand to-[#c026d3] p-4">
         <p className="font-display text-[22px] font-extrabold leading-[1.05] tracking-tight text-white">
           Ghidul meu gratuit pentru primul reel
         </p>

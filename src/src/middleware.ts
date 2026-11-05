@@ -15,7 +15,8 @@ export const config = {
      * - /api/instagram/webhook (Meta calls it — verified by X-Hub-Signature-256, not a session)
      * - /api/cron (system cron calls it — verified by CRON_SECRET bearer token)
      * - Next internals (_next, favicon, etc.)
+     * - Image files from /public (landing photos, app icon)
      */
-    "/((?!login|signup|privacy|terms|cookies|data-deletion|api/auth|api/instagram/webhook|api/cron|_next/static|_next/image|favicon.ico|$).*)",
+    "/((?!login|signup|privacy|terms|cookies|data-deletion|api/auth|api/instagram/webhook|api/cron|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|webp|avif|svg|gif|ico)$|$).*)",
   ],
 }

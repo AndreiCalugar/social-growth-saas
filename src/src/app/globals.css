@@ -246,9 +246,9 @@
 }
 
 /* ── Landing (RO) ─────────────────────────────────────────────────────────
-   Ink / white / mist surfaces with one coral accent — the colour of a new
-   comment notification. Fonts come from next/font variables set on the
-   landing wrapper (app/page.tsx). */
+   Ink / white / mist surfaces with one brand-purple accent (the app icon's
+   purple). Fonts come from next/font variables set on the landing wrapper
+   (app/page.tsx). */
 @theme inline {
   --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
@@ -256,9 +256,9 @@
   --color-ink: #17131f;
   --color-ink-soft: #4a4555;
   --color-mist: #f3f1f6;
-  --color-coral: #ff5b4a;
-  --color-coral-deep: #e8432f;
-  --color-coral-soft: #ffe8e4;
+  --color-brand: #7c3aed;
+  --color-brand-deep: #6d28d9;
+  --color-brand-soft: #f1eafe;
   --color-sent: #12a877;
 }
 
