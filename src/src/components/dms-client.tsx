@@ -638,11 +638,11 @@ function BetaRequestForm() {
         body: JSON.stringify({ instagram_username: username, is_professional: true }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Couldn't send the request")
+      if (!res.ok) throw new Error(data.error ?? "Couldn't save your username")
       trackEvent("beta_access_requested")
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't send the request")
+      setError(err instanceof Error ? err.message : "Couldn't save your username")
       setSending(false)
     }
   }
@@ -650,11 +650,14 @@ function BetaRequestForm() {
   return (
     <>
       <ConnectIntro />
-      <h2 className="mt-6 text-xl font-bold text-slate-900">Request beta access</h2>
+      <h2 className="mt-6 text-xl font-bold text-slate-900">
+        Confirm your Instagram account
+      </h2>
       <p className="mt-1.5 text-base text-slate-600 leading-relaxed">
-        During the beta we activate every account by hand. Send us your
-        Instagram username and we&rsquo;ll get back to you in a DM within a few
-        hours.
+        Tell us which Instagram account you&rsquo;ll use. If you&rsquo;re
+        already on the beta list, the Connect button appears right away.
+        Otherwise we&rsquo;ll activate you within a few hours and let you know
+        in a DM.
       </p>
       <form onSubmit={submit} className="mt-5 space-y-4">
         <div>
@@ -702,7 +705,7 @@ function BetaRequestForm() {
           className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-base font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors disabled:opacity-50 sm:w-auto"
         >
           {sending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Request access
+          Continue
         </button>
       </form>
     </>

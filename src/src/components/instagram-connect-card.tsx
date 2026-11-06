@@ -151,7 +151,7 @@ export function InstagramConnectCard({
               href="/dms"
               className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
             >
-              Request beta access
+              Get started
             </a>
           )}
         </div>
