@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { isAdminEmail } from "@/lib/admin"
+import { summarizeConnectAttempts, type ConnectAttempt } from "@/lib/meta/connect-attempts"
 import { AdminBetaClient, type AdminBetaRow } from "@/components/admin-beta-client"
 
 export const dynamic = "force-dynamic"
@@ -16,6 +17,7 @@ export default async function AdminBetaPage() {
     { data: beta, error: betaError },
     { data: accounts },
     { data: preapproved, error: preapprovedError },
+    { data: attempts },
   ] = await Promise.all([
       supabase
         .from("users")
@@ -29,10 +31,22 @@ export default async function AdminBetaPage() {
         .from("beta_preapproved_handles")
         .select("instagram_username, added_at")
         .order("added_at", { ascending: false }),
+      supabase
+        .from("instagram_connect_attempts")
+        .select("user_id, outcome, detail, created_at")
+        .order("created_at", { ascending: false })
+        .limit(2000),
     ])
 
   const betaByUser = new Map((beta ?? []).map((b) => [b.user_id, b]))
   const connectedByUser = new Map((accounts ?? []).map((a) => [a.user_id, a.username]))
+
+  const attemptsByUser = new Map<string, ConnectAttempt[]>()
+  for (const a of attempts ?? []) {
+    const list = attemptsByUser.get(a.user_id) ?? []
+    list.push(a)
+    attemptsByUser.set(a.user_id, list)
+  }
 
   const rows: AdminBetaRow[] = (users ?? []).map((u) => {
     const b = betaByUser.get(u.id)
@@ -47,6 +61,7 @@ export default async function AdminBetaPage() {
       requestedAt: b?.requested_at ?? null,
       approvedAt: b?.approved_at ?? null,
       connectedAs: connectedByUser.get(u.id) ?? null,
+      connect: summarizeConnectAttempts(attemptsByUser.get(u.id) ?? []),
     }
   })
 

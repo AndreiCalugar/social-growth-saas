@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import type { ConnectSummary } from "@/lib/meta/connect-attempts"
 
 export interface AdminBetaRow {
   userId: string
@@ -26,6 +27,8 @@ export interface AdminBetaRow {
   requestedAt: string | null
   approvedAt: string | null
   connectedAs: string | null
+  /** Latest "Connect Instagram" attempt, null if they never clicked it. */
+  connect: ConnectSummary | null
 }
 
 // Meta dashboard page where Instagram Testers are added.
@@ -323,9 +326,7 @@ export function AdminBetaClient({
                           Connected @{r.connectedAs}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">
-                          Approved, not connected yet
-                        </span>
+                        <ConnectStatus summary={r.connect} />
                       )
                     ) : (
                       formatDate(tab === "pending" ? r.requestedAt : r.signedUpAt)
@@ -337,6 +338,40 @@ export function AdminBetaClient({
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+const CONNECT_TONES: Record<ConnectSummary["tone"], string> = {
+  ok: "bg-emerald-100 text-emerald-700",
+  warn: "bg-amber-100 text-amber-800",
+  error: "bg-red-100 text-red-700",
+  neutral: "bg-slate-100 text-slate-600",
+}
+
+// Why an approved user isn't connected, from their Connect Instagram attempts.
+function ConnectStatus({ summary }: { summary: ConnectSummary | null }) {
+  if (!summary) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">
+        Never clicked Connect
+      </span>
+    )
+  }
+  return (
+    <div className="max-w-xs whitespace-normal">
+      <span
+        className={cn(
+          "inline-flex items-center rounded-full px-2 py-0.5 font-semibold",
+          CONNECT_TONES[summary.tone]
+        )}
+      >
+        {summary.label}
+      </span>
+      <p className="mt-1 text-slate-500">
+        {summary.tries > 0 && `Tried ${summary.tries}× · `}last {formatDate(summary.lastAt)}
+      </p>
+      {summary.hint && <p className="mt-0.5 text-slate-600">{summary.hint}</p>}
     </div>
   )
 }
