@@ -11,8 +11,12 @@ export default async function AdminBetaPage() {
   if (!session?.user?.id) redirect("/login")
   if (!isAdminEmail(session.user.email)) notFound()
 
-  const [{ data: users }, { data: beta, error: betaError }, { data: accounts }] =
-    await Promise.all([
+  const [
+    { data: users },
+    { data: beta, error: betaError },
+    { data: accounts },
+    { data: preapproved, error: preapprovedError },
+  ] = await Promise.all([
       supabase
         .from("users")
         .select("id, email, name, created_at")
@@ -21,6 +25,10 @@ export default async function AdminBetaPage() {
         .from("beta_access")
         .select("user_id, instagram_username, is_professional, status, requested_at, approved_at"),
       supabase.from("instagram_accounts").select("user_id, username"),
+      supabase
+        .from("beta_preapproved_handles")
+        .select("instagram_username, added_at")
+        .order("added_at", { ascending: false }),
     ])
 
   const betaByUser = new Map((beta ?? []).map((b) => [b.user_id, b]))
@@ -42,5 +50,12 @@ export default async function AdminBetaPage() {
     }
   })
 
-  return <AdminBetaClient rows={rows} migrationMissing={Boolean(betaError)} />
+  return (
+    <AdminBetaClient
+      rows={rows}
+      preapproved={(preapproved ?? []).map((p) => p.instagram_username)}
+      migrationMissing={Boolean(betaError)}
+      preapprovedMissing={Boolean(preapprovedError)}
+    />
+  )
 }

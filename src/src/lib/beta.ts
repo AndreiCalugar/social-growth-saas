@@ -41,6 +41,24 @@ export async function getBetaRequest(
   }
 }
 
+/**
+ * Handles the admin already added as Instagram Testers in Meta
+ * (schema/020-beta-preapproved.sql). A request with one of these is approved
+ * immediately. Missing table → nothing is pre-approved.
+ */
+export async function isPreapprovedHandle(handle: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("beta_preapproved_handles")
+    .select("instagram_username")
+    .eq("instagram_username", handle)
+    .maybeSingle()
+  if (error) {
+    console.warn("[beta] pre-approved lookup failed:", error.message)
+    return false
+  }
+  return !!data
+}
+
 // Instagram usernames: letters, digits, dots, underscores, max 30.
 export function normalizeInstagramUsername(raw: string): string | null {
   const handle = raw

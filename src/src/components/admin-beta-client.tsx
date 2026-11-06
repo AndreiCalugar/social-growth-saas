@@ -9,7 +9,9 @@ import {
   ExternalLink,
   Loader2,
   ShieldCheck,
+  UserPlus,
   Users,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -30,14 +32,18 @@ export interface AdminBetaRow {
 const META_ROLES_URL =
   "https://developers.facebook.com/apps/1407330664831432/roles/roles/"
 
-type Tab = "pending" | "approved" | "none"
+type Tab = "pending" | "approved" | "none" | "preapproved"
 
 export function AdminBetaClient({
   rows,
+  preapproved,
   migrationMissing,
+  preapprovedMissing,
 }: {
   rows: AdminBetaRow[]
+  preapproved: string[]
   migrationMissing: boolean
+  preapprovedMissing: boolean
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("pending")
@@ -48,6 +54,7 @@ export function AdminBetaClient({
 
   const byTab = useMemo(
     () => ({
+      preapproved: [] as AdminBetaRow[],
       pending: rows
         .filter((r) => r.status === "pending")
         .sort((a, b) => (a.requestedAt ?? "").localeCompare(b.requestedAt ?? "")),
@@ -157,6 +164,7 @@ export function AdminBetaClient({
             ["pending", "Waiting", Clock],
             ["approved", "Approved", CheckCircle2],
             ["none", "No request", Users],
+            ["preapproved", "Pre-approved", UserPlus],
           ] as const
         ).map(([key, label, Icon]) => (
           <button
@@ -175,7 +183,7 @@ export function AdminBetaClient({
             <Icon className="h-4 w-4" />
             {label}
             <span className={cn("tabular-nums", tab === key ? "text-white/70" : "text-slate-400")}>
-              {byTab[key].length}
+              {key === "preapproved" ? preapproved.length : byTab[key].length}
             </span>
           </button>
         ))}
@@ -187,7 +195,15 @@ export function AdminBetaClient({
         </div>
       )}
 
-      {visible.length > 0 && (
+      {tab === "preapproved" && (
+        <PreapprovedPanel
+          handles={preapproved}
+          rows={rows}
+          missing={preapprovedMissing}
+        />
+      )}
+
+      {tab !== "preapproved" && visible.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {tab !== "none" && (
             <button
@@ -225,7 +241,7 @@ export function AdminBetaClient({
         </div>
       )}
 
-      {visible.length === 0 ? (
+      {tab === "preapproved" ? null : visible.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
           {tab === "pending" ? "No one is waiting. 🎉" : "Nothing here."}
         </div>
@@ -317,6 +333,142 @@ export function AdminBetaClient({
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Handles already added as Instagram Testers in Meta: their beta request is
+// approved the moment they submit it.
+function PreapprovedPanel({
+  handles,
+  rows,
+  missing,
+}: {
+  handles: string[]
+  rows: AdminBetaRow[]
+  missing: boolean
+}) {
+  const router = useRouter()
+  const [input, setInput] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const byHandle = new Map(
+    rows.filter((r) => r.instagramUsername).map((r) => [r.instagramUsername!, r])
+  )
+
+  async function send(body: { add?: string[]; remove?: string[] }) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/admin/beta/preapproved", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed")
+      setInput("")
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (missing) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        Run <code>schema/020-beta-preapproved.sql</code> in the Supabase SQL
+        Editor to enable pre-approved handles.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
+        <p className="text-sm text-slate-600">
+          Paste handles you&rsquo;ve already added as Instagram Testers in Meta
+          (one per line or comma-separated). When they request access in the
+          app they&rsquo;re approved instantly and see Connect Instagram.
+        </p>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          rows={3}
+          placeholder={"@handle_one\n@handle_two"}
+          className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+        />
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={() => send({ add: input.split(/[\s,]+/).filter(Boolean) })}
+            disabled={busy || !input.trim()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 disabled:opacity-50"
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            Pre-approve
+          </button>
+          {error && <span className="text-sm text-red-600">{error}</span>}
+        </div>
+      </div>
+
+      {handles.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-sm">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-[11px] uppercase tracking-wider text-slate-400">
+                <th className="px-4 py-2.5 font-semibold">Instagram</th>
+                <th className="px-4 py-2.5 font-semibold">In the app</th>
+                <th className="px-4 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {handles.map((h) => {
+                const row = byHandle.get(h)
+                return (
+                  <tr key={h} className="border-b border-slate-50 last:border-0">
+                    <td className="px-4 py-2.5">
+                      <a
+                        href={`https://www.instagram.com/${h}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-slate-900 hover:text-purple-600 hover:underline"
+                      >
+                        @{h}
+                      </a>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs">
+                      {row?.connectedAs ? (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">
+                          Connected
+                        </span>
+                      ) : row?.status === "approved" ? (
+                        <span className="rounded-full bg-purple-100 px-2 py-0.5 font-semibold text-purple-700">
+                          Signed up · can connect
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Hasn&rsquo;t signed up yet</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        onClick={() => send({ remove: [h] })}
+                        disabled={busy}
+                        title="Remove from pre-approved"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
