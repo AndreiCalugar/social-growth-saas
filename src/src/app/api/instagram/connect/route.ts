@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { getBaseUrl, getMissingInstagramOAuthEnv } from "@/lib/meta/env"
 import { createOAuthState, getAuthorizationUrl } from "@/lib/meta/oauth"
 import { getBetaRequest } from "@/lib/beta"
+import { logConnectAttempt } from "@/lib/meta/connect-attempts"
 
 /**
  * Kick off the Instagram Login OAuth flow ("Instagram API with Instagram
@@ -20,6 +21,7 @@ export async function GET() {
   // Instagram's error page, so send them back to the request screen.
   const beta = await getBetaRequest(session.user.id, session.user.email)
   if (beta.status !== "approved") {
+    await logConnectAttempt(session.user.id, "not_approved")
     return NextResponse.redirect(`${getBaseUrl()}/dms`)
   }
 
@@ -30,6 +32,7 @@ export async function GET() {
     )
   }
 
+  await logConnectAttempt(session.user.id, "started")
   const state = createOAuthState(session.user.id)
   const redirectUri = `${getBaseUrl()}/api/instagram/callback`
   return NextResponse.redirect(getAuthorizationUrl(redirectUri, state))

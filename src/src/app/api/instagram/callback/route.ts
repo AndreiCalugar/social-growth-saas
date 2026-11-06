@@ -12,6 +12,7 @@ import {
   exchangeCodeForToken,
   verifyOAuthState,
 } from "@/lib/meta/oauth"
+import { logConnectAttempt } from "@/lib/meta/connect-attempts"
 
 /**
  * Instagram OAuth callback. Exchanges the code for a long-lived token,
@@ -28,15 +29,29 @@ export async function GET(request: NextRequest) {
   const state = verifyOAuthState(request.nextUrl.searchParams.get("state"))
   const baseUrl = getBaseUrl()
 
+  const session = await auth()
+  // Attribute the attempt to whoever is signed in, else to the user the
+  // signed state was issued for.
+  const attemptUserId = session?.user?.id ?? state?.userId
+
   if (error) {
+    if (attemptUserId) {
+      const reason = [
+        request.nextUrl.searchParams.get("error_reason"),
+        request.nextUrl.searchParams.get("error_description"),
+      ]
+        .filter(Boolean)
+        .join(": ")
+      await logConnectAttempt(attemptUserId, "denied", reason || error)
+    }
     return NextResponse.redirect(`${baseUrl}/settings?instagram=denied`)
   }
 
   if (!code || !state) {
+    if (attemptUserId) await logConnectAttempt(attemptUserId, "invalid")
     return NextResponse.redirect(`${baseUrl}/settings?instagram=invalid`)
   }
 
-  const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.redirect(`${baseUrl}/login`)
   }
@@ -44,6 +59,7 @@ export async function GET(request: NextRequest) {
   // The state was signed for the user who started the flow — reject a
   // callback landing in a different session.
   if (state.userId !== session.user.id) {
+    await logConnectAttempt(session.user.id, "forbidden")
     return NextResponse.redirect(`${baseUrl}/settings?instagram=forbidden`)
   }
 
@@ -70,6 +86,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (existing && existing.user_id !== session.user.id) {
+      await logConnectAttempt(session.user.id, "already_connected", `@${userInfo.username}`)
       return NextResponse.redirect(
         `${baseUrl}/settings?instagram=already_connected`
       )
@@ -110,10 +127,13 @@ export async function GET(request: NextRequest) {
 
     if (upsertError) throw new Error(upsertError.message)
 
+    await logConnectAttempt(session.user.id, "connected", `@${userInfo.username}`)
+
     return NextResponse.redirect(`${baseUrl}/settings?instagram=connected`)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     console.error("[Instagram Callback] Error:", err)
+    await logConnectAttempt(session.user.id, "failed", message)
     return NextResponse.redirect(
       `${baseUrl}/settings?instagram=failed&reason=${encodeURIComponent(
         message.slice(0, 200)
