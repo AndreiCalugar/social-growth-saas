@@ -7,7 +7,7 @@ import { InstagramConnectCard } from "@/components/instagram-connect-card"
 import { getConnectedAccount } from "@/lib/meta/accounts"
 import { getBetaRequest } from "@/lib/beta"
 import {
-  Mail, User as UserIcon, AtSign, Bell, CreditCard, AlertTriangle,
+  Mail, User as UserIcon, Bell, CreditCard, AlertTriangle,
 } from "lucide-react"
 
 export const dynamic = "force-dynamic"
@@ -18,17 +18,10 @@ export default async function SettingsPage() {
 
   const userId = session.user.id
 
-  const [{ data: user }, { data: ownProfile }, instagramAccount] =
-    await Promise.all([
-      supabase.from("users").select("email, name").eq("id", userId).maybeSingle(),
-      supabase
-        .from("profiles")
-        .select("username")
-        .eq("user_id", userId)
-        .eq("is_own", true)
-        .maybeSingle(),
-      getConnectedAccount(userId),
-    ])
+  const [{ data: user }, instagramAccount] = await Promise.all([
+    supabase.from("users").select("email, name").eq("id", userId).maybeSingle(),
+    getConnectedAccount(userId),
+  ])
 
   const displayName = user?.name ?? user?.email?.split("@")[0] ?? "User"
   const initials = displayName.charAt(0).toUpperCase()
@@ -81,15 +74,6 @@ export default async function SettingsPage() {
                 className="h-10 w-full pl-10 pr-4 rounded-lg border border-slate-200 bg-slate-100 text-sm text-slate-600 cursor-not-allowed"
               />
             </Field>
-
-            <Field label="Tracked Instagram profile" icon={AtSign} readOnly>
-              <input
-                type="text"
-                value={ownProfile ? `@${ownProfile.username}` : "Not set"}
-                readOnly
-                className="h-10 w-full pl-10 pr-4 rounded-lg border border-slate-200 bg-slate-100 text-sm text-slate-600 cursor-not-allowed"
-              />
-            </Field>
           </div>
         </div>
       </section>
@@ -115,7 +99,7 @@ export default async function SettingsPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Email + in-app alerts when insights finish, scrapes fail, or a mega-tip trend changes.
+                Email alerts when a DM can't be sent or your Instagram connection needs attention.
               </p>
             </div>
           </div>
@@ -140,7 +124,7 @@ export default async function SettingsPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Upgrade for more competitors, faster scrapes, and unlimited insight runs.
+                Upgrade for more automations and higher DM volume.
               </p>
             </div>
           </div>
@@ -167,7 +151,7 @@ export default async function SettingsPage() {
           <div className="flex-1">
             <h2 className="text-sm font-semibold text-red-900">Danger zone</h2>
             <p className="text-xs text-red-700/80 mt-1 leading-relaxed">
-              Permanently delete your account, all scraped data, and generated insights. This cannot be undone.
+              Permanently delete your account and all its data, including your Instagram connection, automations and DM history. This cannot be undone.
             </p>
             <DeleteAccountButton />
           </div>
