@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { supabase } from "@/lib/supabase"
 import {
   parseCommentEvents,
@@ -6,16 +6,19 @@ import {
   type WebhookPayload,
 } from "@/lib/meta/webhook"
 import { queueMatchingComment } from "@/lib/meta/enqueue"
+import { drainDmQueue } from "@/lib/meta/process-queue"
 
 /**
  * Meta Instagram webhook receiver. Public route (excluded from the auth
  * middleware) — authenticity comes from the X-Hub-Signature-256 HMAC, not a
  * session. Structure adapted from OpenReply's app/api/webhook (MIT), with
- * BullMQ replaced by inserting pending rows into dm_logs; the cron
- * processor (/api/cron/process-dms) does the actual sending.
+ * BullMQ replaced by inserting pending rows into dm_logs. When something was
+ * queued, the queue is drained right after the response is sent (after()),
+ * so the DM goes out within seconds; the cron run is the backup.
  *
  * Design rules:
- * - Keep it fast: a few indexed queries, no external calls.
+ * - Keep the response fast: a few indexed queries, no external calls before
+ *   responding — sending happens in after().
  * - After the signature verifies, ALWAYS return 200 — Meta throttles and
  *   eventually disables subscriptions that keep failing. Errors are recorded
  *   on the webhook_events row instead of the HTTP status.
@@ -98,6 +101,16 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", eventRow.id)
     }
+  }
+
+  if (queued > 0) {
+    after(async () => {
+      try {
+        await drainDmQueue()
+      } catch (err) {
+        console.error("[Instagram Webhook] immediate send failed:", err)
+      }
+    })
   }
 
   // Signature was valid → 200 no matter what happened above.
