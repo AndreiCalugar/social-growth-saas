@@ -15,12 +15,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const userId = session.user.id
 
-  const [{ data: ownProfile }, { data: user }, activeBriefsResp] = await Promise.all([
+  const [{ data: instagram }, { data: user }, activeBriefsResp] = await Promise.all([
+    // The Instagram account connected for DM automation.
     supabase
-      .from("profiles")
+      .from("instagram_accounts")
       .select("username")
       .eq("user_id", userId)
-      .eq("is_own", true)
       .maybeSingle(),
     supabase
       .from("users")
@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ])
 
   const displayName =
-    ownProfile?.username ??
+    (instagram?.username ? `@${instagram.username}` : null) ??
     user?.name ??
     user?.email?.split("@")[0] ??
     "—"

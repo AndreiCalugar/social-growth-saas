@@ -156,10 +156,10 @@ export function Sidebar({
       >
         <div className="flex items-center gap-2.5 rounded-lg px-3 py-2">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-xs font-semibold text-white shrink-0 shadow-sm ring-1 ring-white/20">
-            {username.charAt(0).toUpperCase()}
+            {username.replace(/^@/, "").charAt(0).toUpperCase()}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-semibold text-white truncate">@{username}</span>
+            <span className="text-xs font-semibold text-white truncate">{username}</span>
             <span className="text-[10px] text-slate-500 truncate">{userEmail ?? "Free plan"}</span>
           </div>
         </div>
