@@ -3,7 +3,13 @@ import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getConnectedAccount } from "@/lib/meta/accounts"
 import { getBetaRequest } from "@/lib/beta"
-import { DmsClient, type ClickStats, type DmAutomation, type DmLogRow } from "@/components/dms-client"
+import {
+  DmsClient,
+  type AutomationSendStats,
+  type ClickStats,
+  type DmAutomation,
+  type DmLogRow,
+} from "@/components/dms-client"
 
 export const dynamic = "force-dynamic"
 
@@ -25,31 +31,27 @@ export default async function DmsPage() {
       .select("id, automation_id, commenter_name, commenter_id, comment_text, matched_keyword, status, error_message, dm_sent_at, public_reply_sent_at, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(50),
+      // The activity list shows a few at a time (filterable per automation).
+      .limit(200),
   ])
 
-  // Headline stats (all-time), cheap head-count queries.
-  const [sentCount, pendingCount, failedCount] = await Promise.all(
-    ["sent", "pending", "failed"].map(async (status) => {
-      const { count } = await supabase
-        .from("dm_logs")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("status", status)
-      return count ?? 0
-    })
-  )
-
-  // DMs sent per automation, shown on each card.
-  const sentByAutomation: Record<string, number> = {}
+  // Sent / queued / failed per automation, shown on each row. Head-count
+  // queries, so they stay exact however many DMs there are.
+  const STATUSES = ["sent", "pending", "failed"] as const
+  const statsByAutomation: Record<string, AutomationSendStats> = {}
   await Promise.all(
     ((automations ?? []) as DmAutomation[]).map(async (a) => {
-      const { count } = await supabase
-        .from("dm_logs")
-        .select("id", { count: "exact", head: true })
-        .eq("automation_id", a.id)
-        .eq("status", "sent")
-      sentByAutomation[a.id] = count ?? 0
+      const [sent, pending, failed] = await Promise.all(
+        STATUSES.map(async (status) => {
+          const { count } = await supabase
+            .from("dm_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("automation_id", a.id)
+            .eq("status", status)
+          return count ?? 0
+        })
+      )
+      statsByAutomation[a.id] = { sent, pending, failed }
     })
   )
 
@@ -61,8 +63,7 @@ export default async function DmsPage() {
       beta={beta}
       initialAutomations={(automations ?? []) as DmAutomation[]}
       initialLogs={(logs ?? []) as DmLogRow[]}
-      stats={{ sent: sentCount, pending: pendingCount, failed: failedCount }}
-      sentByAutomation={sentByAutomation}
+      statsByAutomation={statsByAutomation}
       clickStats={clickStats}
     />
   )
