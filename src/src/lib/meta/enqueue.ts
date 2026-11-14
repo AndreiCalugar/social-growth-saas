@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase"
 import { matchKeywords } from "@/lib/meta/keyword-matcher"
-import type { WebhookCommentEvent } from "@/lib/meta/webhook"
+import type { WebhookCommentEvent, WebhookMessageEvent } from "@/lib/meta/webhook"
+
+export type TriggerType = "comment" | "dm" | "story_reply"
 
 interface AutomationRow {
   id: string
@@ -10,14 +12,46 @@ interface AutomationRow {
   match_any_post: boolean
   keywords: string[]
   whole_word_match: boolean
+  trigger_type: TriggerType
+}
+
+const AUTOMATION_COLUMNS =
+  "id, user_id, instagram_account_id, post_id, match_any_post, keywords, whole_word_match"
+
+// One answer per person per automation in this window, so someone who keeps
+// messaging the keyword (or a conversation that repeats it) isn't spammed.
+const MESSAGE_TRIGGER_COOLDOWN_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The account's active automations. Before schema/025 runs there is no
+ * trigger_type column: then every automation is a comment automation, so
+ * the comment flow behaves exactly as it did.
+ */
+async function loadActiveAutomations(accountId: string): Promise<AutomationRow[]> {
+  const { data, error } = await supabase
+    .from("dm_automations")
+    .select(`${AUTOMATION_COLUMNS}, trigger_type`)
+    .eq("instagram_account_id", accountId)
+    .eq("is_active", true)
+  if (!error) return (data ?? []) as AutomationRow[]
+
+  const { data: legacy } = await supabase
+    .from("dm_automations")
+    .select(AUTOMATION_COLUMNS)
+    .eq("instagram_account_id", accountId)
+    .eq("is_active", true)
+  return ((legacy ?? []) as Omit<AutomationRow, "trigger_type">[]).map((a) => ({
+    ...a,
+    trigger_type: "comment",
+  }))
 }
 
 /**
- * Match one comment against the account's active automations and queue a
- * pending dm_logs row for the first hit. Shared by the webhook receiver and
- * the comment poller, so a comment seen by both is only handled once:
- * processed_comments dedups before matching, and the (automation_id,
- * comment_id) unique key backs that up.
+ * Match one comment against the account's active comment automations and
+ * queue a pending dm_logs row for the first hit. Shared by the webhook
+ * receiver and the comment poller, so a comment seen by both is only
+ * handled once: processed_comments dedups before matching, and the
+ * (automation_id, comment_id) unique key backs that up.
  *
  * Returns true if a new row was queued.
  */
@@ -43,13 +77,11 @@ export async function queueMatchingComment(
     .maybeSingle()
   if (!account) return false
 
-  const { data: automations } = await supabase
-    .from("dm_automations")
-    .select("id, user_id, instagram_account_id, post_id, match_any_post, keywords, whole_word_match")
-    .eq("instagram_account_id", account.id)
-    .eq("is_active", true)
+  const automations = (await loadActiveAutomations(account.id)).filter(
+    (a) => (a.trigger_type ?? "comment") === "comment"
+  )
 
-  for (const automation of (automations ?? []) as AutomationRow[]) {
+  for (const automation of automations) {
     const postMatches =
       automation.match_any_post ||
       (automation.post_id !== null &&
@@ -83,6 +115,68 @@ export async function queueMatchingComment(
     }
     // First matching automation wins for this comment — matches
     // OpenReply's behavior of one DM per comment.
+    return !insertError
+  }
+
+  return false
+}
+
+/**
+ * Match an incoming DM against the account's DM and story-reply
+ * automations and queue the answer. A story reply is checked against
+ * story-reply automations first, then DM automations (it is a DM too); a
+ * plain DM only against DM automations. The message id goes in
+ * dm_logs.comment_id, so a webhook delivered twice is queued once.
+ *
+ * Returns true if a new row was queued.
+ */
+export async function queueMatchingMessage(
+  event: WebhookMessageEvent
+): Promise<boolean> {
+  const { data: account } = await supabase
+    .from("instagram_accounts")
+    .select("id")
+    .eq("instagram_id", event.instagramAccountId)
+    .maybeSingle()
+  if (!account) return false
+
+  const all = await loadActiveAutomations(account.id)
+  const order: TriggerType[] = event.isStoryReply ? ["story_reply", "dm"] : ["dm"]
+  const candidates = order.flatMap((type) => all.filter((a) => a.trigger_type === type))
+
+  for (const automation of candidates) {
+    const match = matchKeywords(
+      event.text,
+      Array.isArray(automation.keywords) ? automation.keywords : [],
+      automation.whole_word_match
+    )
+    if (!match.matched) continue
+
+    // Already answered this person recently → do nothing (no other
+    // automation either: they're mid-conversation about this one).
+    const since = new Date(Date.now() - MESSAGE_TRIGGER_COOLDOWN_MS).toISOString()
+    const { count } = await supabase
+      .from("dm_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("automation_id", automation.id)
+      .eq("commenter_id", event.senderId)
+      .gte("created_at", since)
+    if ((count ?? 0) > 0) return false
+
+    const { error: insertError } = await supabase.from("dm_logs").insert({
+      user_id: automation.user_id,
+      automation_id: automation.id,
+      instagram_account_id: account.id,
+      commenter_id: event.senderId,
+      comment_id: event.messageId,
+      comment_text: event.text,
+      matched_keyword: match.matchedKeyword,
+      trigger_type: automation.trigger_type,
+      status: "pending",
+    })
+    if (insertError && insertError.code !== "23505") {
+      throw new Error(`dm_logs insert failed: ${insertError.message}`)
+    }
     return !insertError
   }
 

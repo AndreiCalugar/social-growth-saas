@@ -52,7 +52,29 @@ export interface DmAutomation {
   is_active: boolean
   // Missing until schema/024 has run.
   track_clicks?: boolean
+  // Missing until schema/025 has run (then everything is "comment").
+  trigger_type?: TriggerType
   created_at: string
+}
+
+export type TriggerType = "comment" | "dm" | "story_reply"
+
+const TRIGGERS: { value: TriggerType; label: string; hint: string }[] = [
+  { value: "comment", label: "Comment", hint: "On a post or reel" },
+  { value: "dm", label: "DM", hint: "A message to you" },
+  { value: "story_reply", label: "Story reply", hint: "A reply to your story" },
+]
+
+// "Comments on any post containing", shown on each automation row.
+function triggerSummary(automation: DmAutomation): string {
+  switch (automation.trigger_type ?? "comment") {
+    case "dm":
+      return "DMs containing"
+    case "story_reply":
+      return "Story replies containing"
+    default:
+      return `Comments on ${automation.match_any_post ? "any post" : "a post"} containing`
+  }
 }
 
 export interface AutomationSendStats {
@@ -97,6 +119,7 @@ interface InstagramPost {
 }
 
 interface FormState {
+  trigger: TriggerType
   name: string
   matchAnyPost: boolean
   postId: string | null
@@ -111,6 +134,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
+  trigger: "comment",
   name: "",
   matchAnyPost: false,
   postId: null,
@@ -416,7 +440,7 @@ export function DmsClient({
                     </span>
                     <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
                       <InstagramIcon className="h-3.5 w-3.5 shrink-0" />
-                      Comments on {automation.match_any_post ? "any post" : "a post"} containing
+                      {triggerSummary(automation)}
                       {automation.keywords.slice(0, 3).map((kw) => (
                         <span
                           key={kw}
@@ -957,6 +981,7 @@ function AutomationForm({
   const [form, setForm] = useState<FormState>(
     editing
       ? {
+          trigger: editing.trigger_type ?? "comment",
           name: editing.name,
           matchAnyPost: editing.match_any_post,
           postId: editing.post_id,
@@ -987,6 +1012,9 @@ function AutomationForm({
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState<PreviewMode>("comment")
+  const isComment = form.trigger === "comment"
+  // Step numbers shift: DM and story automations skip "post" and "public reply".
+  const stepKeywords = isComment ? 3 : 2
   const [previewReplyIndex, setPreviewReplyIndex] = useState(0)
 
   useEffect(() => {
@@ -1047,25 +1075,27 @@ function AutomationForm({
     if (!form.name.trim()) return setFormError("Give the automation a name.")
     if (keywords.length === 0)
       return setFormError("Add at least one trigger keyword.")
-    if (!form.matchAnyPost && !form.postId)
+    if (isComment && !form.matchAnyPost && !form.postId)
       return setFormError("Pick a post, or switch to “Any post”.")
     if (!form.dmMessage.trim()) return setFormError("Write the DM message.")
     const publicReplies = joinReplyVariants(form.publicReplyMessages)
-    if (form.publicReplyEnabled && !publicReplies)
+    if (isComment && form.publicReplyEnabled && !publicReplies)
       return setFormError("Write the public reply, or turn it off.")
 
     setSaving(true)
     try {
+      // DM and story-reply automations have no post and no public reply.
       const payload = {
+        trigger_type: form.trigger,
         name: form.name,
-        match_any_post: form.matchAnyPost,
-        post_id: form.matchAnyPost ? null : form.postId,
-        post_url: form.matchAnyPost ? null : form.postUrl,
+        match_any_post: isComment && form.matchAnyPost,
+        post_id: isComment && !form.matchAnyPost ? form.postId : null,
+        post_url: isComment && !form.matchAnyPost ? form.postUrl : null,
         keywords,
         whole_word_match: form.wholeWordMatch,
         dm_message: form.dmMessage,
-        public_reply_enabled: form.publicReplyEnabled,
-        public_reply_message: form.publicReplyEnabled
+        public_reply_enabled: isComment && form.publicReplyEnabled,
+        public_reply_message: isComment && form.publicReplyEnabled
           ? publicReplies
           : null,
         track_clicks: form.trackClicks,
@@ -1140,8 +1170,44 @@ function AutomationForm({
                 </div>
               )}
 
-              {/* Step 1: post */}
-              <Step n={1} title="When someone comments on">
+              {/* Step 1: what starts it */}
+              <Step n={1} title="What starts it">
+                <div className="grid grid-cols-3 gap-2">
+                  {TRIGGERS.map((t) => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => {
+                        setForm((f) => ({ ...f, trigger: t.value }))
+                        setPreviewMode(t.value === "comment" ? "comment" : "dm")
+                      }}
+                      className={cn(
+                        "rounded-lg border px-2 py-2 text-left transition-colors",
+                        form.trigger === t.value
+                          ? "border-purple-500 bg-purple-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      )}
+                    >
+                      <span className={cn("block text-xs font-semibold", form.trigger === t.value ? "text-purple-700" : "text-slate-700")}>
+                        {t.label}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">{t.hint}</span>
+                    </button>
+                  ))}
+                </div>
+                {!isComment && (
+                  <p className="text-[11px] leading-snug text-slate-500">
+                    {form.trigger === "dm"
+                      ? "When someone sends you a message with your keyword, they get your DM right back."
+                      : "When someone replies to any of your stories with your keyword, they get your DM right back."}{" "}
+                    Each person gets it at most once a day.
+                  </p>
+                )}
+              </Step>
+
+              {/* Step 2: post (comments only) */}
+              {isComment && (
+              <Step n={2} title="When someone comments on">
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1229,11 +1295,21 @@ function AutomationForm({
                   </div>
                 )}
               </Step>
+              )}
 
-              {/* Step 2: keywords */}
-              <Step n={2} title="And the comment contains">
+              {/* Keywords */}
+              <Step
+                n={stepKeywords}
+                title={
+                  form.trigger === "dm"
+                    ? "And the message contains"
+                    : form.trigger === "story_reply"
+                      ? "And the story reply contains"
+                      : "And the comment contains"
+                }
+              >
                 <div
-                  onFocus={() => setPreviewMode("comment")}
+                  onFocus={() => setPreviewMode(isComment ? "comment" : "dm")}
                   className="flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white p-2 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 transition-all"
                 >
                   {form.keywords.map((kw) => (
@@ -1294,8 +1370,8 @@ function AutomationForm({
                 </label>
               </Step>
 
-              {/* Step 3: DM */}
-              <Step n={3} title="They will get a DM">
+              {/* DM */}
+              <Step n={stepKeywords + 1} title="They will get a DM">
                 <textarea
                   value={form.dmMessage}
                   onChange={(e) =>
@@ -1340,8 +1416,9 @@ function AutomationForm({
                 </label>
               </Step>
 
-              {/* Step 4: public reply */}
-              <Step n={4} title="And a public reply" optional>
+              {/* Public reply (comments only) */}
+              {isComment && (
+              <Step n={5} title="And a public reply" optional>
                 <label className="flex items-center justify-between gap-3 cursor-pointer">
                   <span className="text-xs text-slate-600">
                     Reply under their comment so others see it works
@@ -1429,6 +1506,7 @@ function AutomationForm({
                   </div>
                 )}
               </Step>
+              )}
             </div>
           </div>
 

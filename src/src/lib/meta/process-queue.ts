@@ -5,6 +5,7 @@ import {
   TokenExpiredError,
   MetaApiError,
   sendCommentReply,
+  sendDirectMessage,
   sendPrivateReply,
 } from "@/lib/meta/client"
 import { markTokenError } from "@/lib/meta/accounts"
@@ -39,10 +40,41 @@ interface QueueRow {
   id: string
   automation_id: string
   instagram_account_id: string
+  // For DM and story-reply triggers this holds the incoming message id.
   comment_id: string
+  commenter_id: string
   attempts: number
   dm_sent_at: string | null
   public_reply_sent_at: string | null
+  trigger_type: "comment" | "dm" | "story_reply"
+}
+
+const QUEUE_COLUMNS =
+  "id, automation_id, instagram_account_id, comment_id, commenter_id, attempts, dm_sent_at, public_reply_sent_at"
+
+/**
+ * Due rows, oldest first. Before schema/025 there is no trigger_type
+ * column; then every row is a comment row, as it was.
+ */
+async function loadPendingRows(now: string): Promise<QueueRow[]> {
+  const query = (columns: string) =>
+    supabase
+      .from("dm_logs")
+      .select(columns)
+      .eq("status", "pending")
+      .lte("next_attempt_at", now)
+      .order("created_at", { ascending: true })
+      .limit(BATCH_SIZE)
+
+  const { data, error } = await query(`${QUEUE_COLUMNS}, trigger_type`)
+  if (!error) return (data ?? []) as unknown as QueueRow[]
+
+  console.warn("[process-queue] reading queue without trigger_type:", error.message)
+  const { data: legacy } = await query(QUEUE_COLUMNS)
+  return ((legacy ?? []) as unknown as Omit<QueueRow, "trigger_type">[]).map((r) => ({
+    ...r,
+    trigger_type: "comment" as const,
+  }))
 }
 
 function backoffMs(attempts: number): number {
@@ -104,13 +136,7 @@ export async function drainDmQueue(): Promise<DrainResult> {
     .eq("status", "processing")
     .lt("updated_at", stuckCutoff)
 
-  const { data: candidates } = await supabase
-    .from("dm_logs")
-    .select("id, automation_id, instagram_account_id, comment_id, attempts, dm_sent_at, public_reply_sent_at")
-    .eq("status", "pending")
-    .lte("next_attempt_at", nowIso())
-    .order("created_at", { ascending: true })
-    .limit(BATCH_SIZE)
+  const candidates = await loadPendingRows(nowIso())
 
   const results = { sent: 0, failed: 0, requeued: 0, skipped: 0 }
   // Caches per invocation: hourly counts and decrypted tokens per account.
@@ -120,7 +146,7 @@ export async function drainDmQueue(): Promise<DrainResult> {
     { instagram_id: string; token: string } | null
   >()
 
-  for (const row of (candidates ?? []) as QueueRow[]) {
+  for (const row of candidates) {
     // Atomic claim: the .eq("status","pending") guard means a concurrently
     // running cron can't grab the same row.
     const { data: claimed } = await supabase
@@ -221,12 +247,13 @@ export async function drainDmQueue(): Promise<DrainResult> {
               dmLogId: row.id,
             })
           : automation.dm_message
-        await sendPrivateReply(
-          account.token,
-          account.instagram_id,
-          row.comment_id,
-          message
-        )
+        if (row.trigger_type === "comment") {
+          // Private reply, tied to their comment.
+          await sendPrivateReply(account.token, account.instagram_id, row.comment_id, message)
+        } else {
+          // They messaged us (DM or story reply): answer in the conversation.
+          await sendDirectMessage(account.token, account.instagram_id, row.commenter_id, message)
+        }
         dmOk = true
         hourlyCount.set(
           row.instagram_account_id,
@@ -292,7 +319,9 @@ export async function drainDmQueue(): Promise<DrainResult> {
     // --- Public comment reply, independent of the DM outcome ---
     // One of the automation's reply variations, picked at random.
     const publicReply = pickReplyVariant(automation.public_reply_message)
+    // Only comments have something to reply to publicly.
     if (
+      row.trigger_type === "comment" &&
       automation.public_reply_enabled &&
       publicReply &&
       !row.public_reply_sent_at

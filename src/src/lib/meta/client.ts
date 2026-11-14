@@ -142,6 +142,35 @@ export async function sendPrivateReply(
   return handleResponse(response)
 }
 
+/**
+ * A normal DM to someone who messaged the account (Send API). Allowed for
+ * 24 hours after their last message, which is the window DM and
+ * story-reply automations answer in.
+ */
+export async function sendDirectMessage(
+  accessToken: string,
+  instagramAccountId: string,
+  recipientId: string,
+  message: string
+): Promise<{ recipient_id: string; message_id: string }> {
+  const response = await fetch(
+    `${instagramGraphBase()}/${instagramAccountId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        recipient: { id: recipientId },
+        message: { text: message },
+      }),
+    }
+  )
+
+  return handleResponse(response)
+}
+
 export async function sendCommentReply(
   accessToken: string,
   commentId: string,

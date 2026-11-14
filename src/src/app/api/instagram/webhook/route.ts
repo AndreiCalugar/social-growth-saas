@@ -2,10 +2,11 @@ import { NextRequest, NextResponse, after } from "next/server"
 import { supabase } from "@/lib/supabase"
 import {
   parseCommentEvents,
+  parseMessageEvents,
   verifyWebhookSignature,
   type WebhookPayload,
 } from "@/lib/meta/webhook"
-import { queueMatchingComment } from "@/lib/meta/enqueue"
+import { queueMatchingComment, queueMatchingMessage } from "@/lib/meta/enqueue"
 import { drainDmQueue } from "@/lib/meta/process-queue"
 
 /**
@@ -77,6 +78,16 @@ export async function POST(request: NextRequest) {
 
     for (const event of events) {
       if (await queueMatchingComment(event)) queued++
+    }
+
+    // DM and story-reply triggers. Kept apart so a problem here can never
+    // stop the comment automations above.
+    try {
+      for (const message of parseMessageEvents(payload)) {
+        if (await queueMatchingMessage(message)) queued++
+      }
+    } catch (err) {
+      console.error("[Instagram Webhook] message trigger error:", err)
     }
 
     if (eventRow?.id) {
