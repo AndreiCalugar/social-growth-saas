@@ -9,6 +9,7 @@ import {
 } from "@/lib/meta/client"
 import { markTokenError } from "@/lib/meta/accounts"
 import { pickReplyVariant } from "@/lib/meta/reply-variants"
+import { withTrackedLinks } from "@/lib/link-tracking"
 
 /**
  * Drain the DM send queue (dm_logs rows with status='pending'). Called by the
@@ -47,6 +48,40 @@ interface QueueRow {
 function backoffMs(attempts: number): number {
   // 10min, 20min, 40min...
   return Math.pow(2, attempts) * 5 * 60 * 1000
+}
+
+interface QueueAutomation {
+  id: string
+  user_id: string
+  is_active: boolean
+  dm_message: string
+  track_clicks: boolean
+  public_reply_enabled: boolean
+  public_reply_message: string | null
+}
+
+const AUTOMATION_COLUMNS = "id, user_id, is_active, dm_message, public_reply_enabled, public_reply_message"
+
+/**
+ * The automation for a queued DM. If the database doesn't have the
+ * track_clicks column yet (schema/024 not run), reads it without tracking
+ * instead of failing, so a deploy before the migration can't stop DMs.
+ */
+async function loadAutomation(id: string): Promise<QueueAutomation | null> {
+  const { data, error } = await supabase
+    .from("dm_automations")
+    .select(`${AUTOMATION_COLUMNS}, track_clicks`)
+    .eq("id", id)
+    .maybeSingle()
+  if (!error) return data as QueueAutomation | null
+
+  console.warn("[process-queue] reading automation without track_clicks:", error.message)
+  const { data: legacy } = await supabase
+    .from("dm_automations")
+    .select(AUTOMATION_COLUMNS)
+    .eq("id", id)
+    .maybeSingle()
+  return legacy ? { ...(legacy as Omit<QueueAutomation, "track_clicks">), track_clicks: false } : null
 }
 
 export interface DrainResult {
@@ -100,11 +135,7 @@ export async function drainDmQueue(): Promise<DrainResult> {
     }
 
     // Load automation + account (fresh each row is fine at BATCH_SIZE=25).
-    const { data: automation } = await supabase
-      .from("dm_automations")
-      .select("id, is_active, dm_message, public_reply_enabled, public_reply_message")
-      .eq("id", row.automation_id)
-      .maybeSingle()
+    const automation = await loadAutomation(row.automation_id)
 
     if (!automation || !automation.is_active) {
       await supabase
@@ -180,11 +211,21 @@ export async function drainDmQueue(): Promise<DrainResult> {
     let terminalFailure = false
     if (!dmOk) {
       try {
+        // Short links per recipient when click tracking is on; falls back to
+        // the original text on any tracking error.
+        const message = automation.track_clicks
+          ? await withTrackedLinks({
+              message: automation.dm_message,
+              userId: automation.user_id,
+              automationId: automation.id,
+              dmLogId: row.id,
+            })
+          : automation.dm_message
         await sendPrivateReply(
           account.token,
           account.instagram_id,
           row.comment_id,
-          automation.dm_message
+          message
         )
         dmOk = true
         hourlyCount.set(

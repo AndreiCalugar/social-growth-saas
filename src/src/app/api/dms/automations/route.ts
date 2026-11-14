@@ -19,6 +19,7 @@ interface AutomationBody {
   public_reply_enabled?: boolean
   public_reply_message?: string | null
   is_active?: boolean
+  track_clicks?: boolean
 }
 
 function validateAutomationBody(body: AutomationBody): string | null {
@@ -105,9 +106,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { data: automation, error } = await supabase
-    .from("dm_automations")
-    .insert({
+  const values: Record<string, unknown> = {
       user_id: session.user.id,
       instagram_account_id: account.id,
       name: body.name!.trim(),
@@ -122,9 +121,18 @@ export async function POST(req: NextRequest) {
       public_reply_message:
         joinReplyVariants(parseReplyVariants(body.public_reply_message)) || null,
       is_active: body.is_active ?? true,
-    })
-    .select()
-    .maybeSingle()
+  }
+  if (body.track_clicks !== undefined) values.track_clicks = Boolean(body.track_clicks)
+
+  const insert = (row: Record<string, unknown>) =>
+    supabase.from("dm_automations").insert(row).select().maybeSingle()
+
+  let { data: automation, error } = await insert(values)
+  // Database not migrated yet (schema/024): create it without tracking.
+  if (error && "track_clicks" in values && error.message.includes("track_clicks")) {
+    const { track_clicks: _skipped, ...rest } = values
+    ;({ data: automation, error } = await insert(rest))
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

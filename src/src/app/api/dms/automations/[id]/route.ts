@@ -17,6 +17,7 @@ interface AutomationPatch {
   public_reply_enabled?: boolean
   public_reply_message?: string | null
   is_active?: boolean
+  track_clicks?: boolean
 }
 
 export async function PATCH(
@@ -94,14 +95,23 @@ export async function PATCH(
       joinReplyVariants(parseReplyVariants(body.public_reply_message)) || null
   }
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active)
+  if (body.track_clicks !== undefined) patch.track_clicks = Boolean(body.track_clicks)
 
-  const { data: automation, error } = await supabase
-    .from("dm_automations")
-    .update(patch)
-    .eq("id", id)
-    .eq("user_id", session.user.id)
-    .select()
-    .maybeSingle()
+  const update = (values: Record<string, unknown>) =>
+    supabase
+      .from("dm_automations")
+      .update(values)
+      .eq("id", id)
+      .eq("user_id", session.user.id)
+      .select()
+      .maybeSingle()
+
+  let { data: automation, error } = await update(patch)
+  // Database not migrated yet (schema/024): save everything else.
+  if (error && "track_clicks" in patch && error.message.includes("track_clicks")) {
+    const { track_clicks: _skipped, ...rest } = patch
+    ;({ data: automation, error } = await update(rest))
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

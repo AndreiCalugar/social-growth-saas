@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getConnectedAccount } from "@/lib/meta/accounts"
 import { getBetaRequest } from "@/lib/beta"
-import { DmsClient, type DmAutomation, type DmLogRow } from "@/components/dms-client"
+import { DmsClient, type ClickStats, type DmAutomation, type DmLogRow } from "@/components/dms-client"
 
 export const dynamic = "force-dynamic"
 
@@ -53,6 +53,8 @@ export default async function DmsPage() {
     })
   )
 
+  const clickStats = await loadClickStats(userId)
+
   return (
     <DmsClient
       account={account}
@@ -61,6 +63,44 @@ export default async function DmsPage() {
       initialLogs={(logs ?? []) as DmLogRow[]}
       stats={{ sent: sentCount, pending: pendingCount, failed: failedCount }}
       sentByAutomation={sentByAutomation}
+      clickStats={clickStats}
     />
   )
+}
+
+// Click numbers per automation, counted per DM (one DM can hold several
+// links). Empty if schema/024 hasn't run yet.
+async function loadClickStats(userId: string): Promise<ClickStats> {
+  const empty: ClickStats = { byAutomation: {}, clickedLogIds: [], totalClickedDms: 0 }
+  const { data, error } = await supabase
+    .from("tracked_links")
+    .select("automation_id, dm_log_id, click_count")
+    .eq("user_id", userId)
+    .limit(10000)
+  if (error || !data) return empty
+
+  const tracked = new Map<string, Set<string>>()
+  const clicked = new Map<string, Set<string>>()
+  const clicks = new Map<string, number>()
+  const clickedLogIds = new Set<string>()
+  for (const row of data) {
+    if (!tracked.has(row.automation_id)) tracked.set(row.automation_id, new Set())
+    tracked.get(row.automation_id)!.add(row.dm_log_id)
+    if (row.click_count > 0) {
+      if (!clicked.has(row.automation_id)) clicked.set(row.automation_id, new Set())
+      clicked.get(row.automation_id)!.add(row.dm_log_id)
+      clickedLogIds.add(row.dm_log_id)
+      clicks.set(row.automation_id, (clicks.get(row.automation_id) ?? 0) + row.click_count)
+    }
+  }
+
+  const byAutomation: ClickStats["byAutomation"] = {}
+  for (const [automationId, dms] of tracked) {
+    byAutomation[automationId] = {
+      trackedDms: dms.size,
+      clickedDms: clicked.get(automationId)?.size ?? 0,
+      clicks: clicks.get(automationId) ?? 0,
+    }
+  }
+  return { byAutomation, clickedLogIds: Array.from(clickedLogIds), totalClickedDms: clickedLogIds.size }
 }

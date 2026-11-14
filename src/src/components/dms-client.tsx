@@ -19,6 +19,7 @@ import {
   Settings,
   MessageSquareReply,
   ExternalLink,
+  MousePointerClick,
   Zap,
 } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
@@ -50,7 +51,16 @@ export interface DmAutomation {
   public_reply_enabled: boolean
   public_reply_message: string | null
   is_active: boolean
+  // Missing until schema/024 has run.
+  track_clicks?: boolean
   created_at: string
+}
+
+/** Per-automation link click numbers (only DMs sent with tracking count). */
+export interface ClickStats {
+  byAutomation: Record<string, { trackedDms: number; clickedDms: number; clicks: number }>
+  clickedLogIds: string[]
+  totalClickedDms: number
 }
 
 export interface DmLogRow {
@@ -89,6 +99,7 @@ interface FormState {
   publicReplyEnabled: boolean
   // Reply variations; one is picked at random per comment.
   publicReplyMessages: string[]
+  trackClicks: boolean
 }
 
 const EMPTY_FORM: FormState = {
@@ -101,6 +112,8 @@ const EMPTY_FORM: FormState = {
   dmMessage: "",
   publicReplyEnabled: false,
   publicReplyMessages: [""],
+  // On for new automations; existing ones keep whatever they had.
+  trackClicks: true,
 }
 
 export function DmsClient({
@@ -109,6 +122,7 @@ export function DmsClient({
   initialLogs,
   stats,
   sentByAutomation,
+  clickStats,
   beta,
 }: {
   beta: BetaRequest
@@ -117,7 +131,9 @@ export function DmsClient({
   initialLogs: DmLogRow[]
   stats: { sent: number; pending: number; failed: number }
   sentByAutomation: Record<string, number>
+  clickStats: ClickStats
 }) {
+  const clickedLogs = useMemo(() => new Set(clickStats.clickedLogIds), [clickStats.clickedLogIds])
   const router = useRouter()
   const [automations, setAutomations] = useState(initialAutomations)
   const [showForm, setShowForm] = useState(false)
@@ -307,8 +323,9 @@ export function DmsClient({
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard icon={Send} label="DMs sent" value={stats.sent} tone="purple" />
+        <StatCard icon={MousePointerClick} label="Opened your link" value={clickStats.totalClickedDms} tone="green" />
         <StatCard icon={Clock} label="Queued" value={stats.pending} tone="slate" />
         <StatCard icon={XCircle} label="Failed" value={stats.failed} tone="red" />
       </div>
@@ -390,6 +407,7 @@ export function DmsClient({
                     <span>Specific post</span>
                   )}
                   <span>{automation.whole_word_match ? "Whole word" : "Partial match"}</span>
+                  <ClickBadge stats={clickStats.byAutomation[automation.id]} tracking={Boolean(automation.track_clicks)} />
                   {automation.public_reply_enabled && (
                     <span className="inline-flex items-center gap-1">
                       <MessageSquareReply className="h-3.5 w-3.5" />
@@ -521,6 +539,15 @@ export function DmsClient({
                         >
                           <MessageSquareReply className="h-3 w-3" />
                           Replied
+                        </span>
+                      )}
+                      {clickedLogs.has(log.id) && (
+                        <span
+                          title="Opened the link in your DM"
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+                        >
+                          <MousePointerClick className="h-3 w-3" />
+                          Clicked
                         </span>
                       )}
                     </td>
@@ -869,6 +896,7 @@ function AutomationForm({
           publicReplyMessages: parseReplyVariants(editing.public_reply_message).length
             ? parseReplyVariants(editing.public_reply_message)
             : [""],
+          trackClicks: Boolean(editing.track_clicks),
         }
       : draft
         ? {
@@ -968,6 +996,7 @@ function AutomationForm({
         public_reply_message: form.publicReplyEnabled
           ? publicReplies
           : null,
+        track_clicks: form.trackClicks,
       }
       const res = await fetch(
         editing ? `/api/dms/automations/${editing.id}` : "/api/dms/automations",
@@ -1209,6 +1238,34 @@ function AutomationForm({
                 <p className="text-[11px] text-slate-400 text-right">
                   {form.dmMessage.length}/1000
                 </p>
+                <label className="flex items-start justify-between gap-3 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                      <MousePointerClick className="h-3.5 w-3.5 text-purple-600" />
+                      Track link clicks
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+                      Links are sent as a short link so you can see who clicked. They still open your page.
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.trackClicks}
+                    onClick={() => setForm((f) => ({ ...f, trackClicks: !f.trackClicks }))}
+                    className={cn(
+                      "relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors",
+                      form.trackClicks ? "bg-purple-600" : "bg-slate-300"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                        form.trackClicks && "translate-x-4"
+                      )}
+                    />
+                  </button>
+                </label>
               </Step>
 
               {/* Step 4: public reply */}
@@ -1363,6 +1420,35 @@ function Step({
   )
 }
 
+// "7 clicked · 58%" on an automation card. Rate = recipients who opened a
+// link / DMs sent with tracking on.
+function ClickBadge({
+  stats,
+  tracking,
+}: {
+  stats?: { trackedDms: number; clickedDms: number; clicks: number }
+  tracking: boolean
+}) {
+  if (!stats || stats.trackedDms === 0) {
+    return tracking ? (
+      <span className="inline-flex items-center gap-1" title="Click tracking is on. Numbers show after the first DMs go out.">
+        <MousePointerClick className="h-3.5 w-3.5" />
+        Tracking clicks
+      </span>
+    ) : null
+  }
+  const rate = Math.round((stats.clickedDms / stats.trackedDms) * 100)
+  return (
+    <span
+      className="inline-flex items-center gap-1 font-semibold text-emerald-700"
+      title={`${stats.clickedDms} of ${stats.trackedDms} people opened your link (${stats.clicks} clicks in total)`}
+    >
+      <MousePointerClick className="h-3.5 w-3.5" />
+      {stats.clickedDms} clicked · {rate}%
+    </span>
+  )
+}
+
 function StatCard({
   icon: Icon,
   label,
@@ -1372,10 +1458,11 @@ function StatCard({
   icon: React.ComponentType<{ className?: string }>
   label: string
   value: number
-  tone: "purple" | "slate" | "red"
+  tone: "purple" | "slate" | "red" | "green"
 }) {
   const tones = {
     purple: "bg-purple-50 text-purple-600",
+    green: "bg-emerald-50 text-emerald-600",
     slate: "bg-slate-100 text-slate-500",
     red: "bg-red-50 text-red-500",
   }
