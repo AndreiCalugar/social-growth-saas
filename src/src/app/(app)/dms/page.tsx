@@ -28,7 +28,9 @@ export default async function DmsPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("dm_logs")
-      .select("id, automation_id, commenter_name, commenter_id, comment_text, matched_keyword, status, error_message, dm_sent_at, public_reply_sent_at, created_at")
+      // "*" so columns from later migrations (gate_status) show up once they
+      // exist, without breaking the page before.
+      .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       // The activity list shows a few at a time (filterable per automation).

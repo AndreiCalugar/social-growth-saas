@@ -19,6 +19,7 @@ interface AutomationPatch {
   is_active?: boolean
   track_clicks?: boolean
   trigger_type?: string
+  follow_gate?: boolean
 }
 
 export async function PATCH(
@@ -97,6 +98,7 @@ export async function PATCH(
   }
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active)
   if (body.track_clicks !== undefined) patch.track_clicks = Boolean(body.track_clicks)
+  if (body.follow_gate !== undefined) patch.follow_gate = Boolean(body.follow_gate)
   if (body.trigger_type !== undefined) {
     if (!["comment", "dm", "story_reply"].includes(body.trigger_type)) {
       return NextResponse.json({ error: "trigger_type must be comment, dm or story_reply" }, { status: 400 })
@@ -124,6 +126,17 @@ export async function PATCH(
       .maybeSingle()
 
   let { data: automation, error } = await update(patch)
+  // Before schema/026 nothing is gated, so "off" needs no column.
+  if (error && patch.follow_gate === false && error.message.includes("follow_gate")) {
+    delete patch.follow_gate
+    ;({ data: automation, error } = await update(patch))
+  }
+  if (error && patch.follow_gate === true && error.message.includes("follow_gate")) {
+    return NextResponse.json(
+      { error: "The follow-gate needs a database update (schema/026) first." },
+      { status: 503 }
+    )
+  }
   // Before schema/025 every automation is a comment one, so "comment"
   // needs no column. Anything else must not be half-saved.
   if (error && patch.trigger_type === "comment" && error.message.includes("trigger_type")) {

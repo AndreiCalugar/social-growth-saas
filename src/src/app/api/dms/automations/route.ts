@@ -21,6 +21,7 @@ interface AutomationBody {
   is_active?: boolean
   track_clicks?: boolean
   trigger_type?: string
+  follow_gate?: boolean
 }
 
 const TRIGGER_TYPES = ["comment", "dm", "story_reply"] as const
@@ -135,6 +136,8 @@ export async function POST(req: NextRequest) {
       is_active: body.is_active ?? true,
   }
   if (body.track_clicks !== undefined) values.track_clicks = Boolean(body.track_clicks)
+  // Only written when on, so creating without it works before schema/026.
+  if (body.follow_gate) values.follow_gate = true
 
   // Comment automations leave trigger_type to its default, so they work
   // the same before and after schema/025. DM and story ones have no post
@@ -153,6 +156,12 @@ export async function POST(req: NextRequest) {
     supabase.from("dm_automations").insert(row).select().maybeSingle()
 
   let { data: automation, error } = await insert(values)
+  if (error && error.message.includes("follow_gate")) {
+    return NextResponse.json(
+      { error: "The follow-gate needs a database update (schema/026) first." },
+      { status: 503 }
+    )
+  }
   // Never save a DM/story automation without its trigger: it would turn
   // into a comment automation on no post.
   if (error && error.message.includes("trigger_type")) {
