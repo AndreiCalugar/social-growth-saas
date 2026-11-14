@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  MessageCircle,
+  Sparkles,
   Plus,
   Trash2,
   Pencil,
@@ -33,6 +33,8 @@ import {
 } from "@/lib/meta/reply-variants"
 import { cn } from "@/lib/utils"
 import { trackEvent } from "@/lib/analytics"
+import { DmTemplatePicker } from "@/components/dm-template-picker"
+import type { TemplateDraft } from "@/lib/dm-templates"
 
 export type DmAccount = ConnectedInstagramAccount
 
@@ -119,7 +121,10 @@ export function DmsClient({
   const router = useRouter()
   const [automations, setAutomations] = useState(initialAutomations)
   const [showForm, setShowForm] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
   const [editing, setEditing] = useState<DmAutomation | null>(null)
+  // Prefill from a template for a new automation; null = blank form.
+  const [draft, setDraft] = useState<TemplateDraft | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -131,6 +136,14 @@ export function DmsClient({
 
   if (!account) {
     return <NotConnectedState beta={beta} />
+  }
+
+  function openNew(fromDraft: TemplateDraft | null) {
+    setEditing(null)
+    setDraft(fromDraft)
+    setShowPicker(false)
+    setShowForm(true)
+    if (fromDraft) trackEvent("dm_template_picked", { template: fromDraft.templateId })
   }
 
   async function toggleActive(automation: DmAutomation) {
@@ -199,10 +212,7 @@ export function DmsClient({
           </p>
         </div>
         <button
-          onClick={() => {
-            setEditing(null)
-            setShowForm(true)
-          }}
+          onClick={() => setShowPicker(true)}
           className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -313,42 +323,18 @@ export function DmsClient({
         </h2>
 
         {automations.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 sm:p-8">
-            <div className="text-center">
-              <MessageCircle className="h-8 w-8 text-slate-300 mx-auto" />
-              <p className="text-sm font-medium text-slate-700 mt-3">
-                No automations yet
-              </p>
+          // First automation: lead with templates so new creators don't
+          // stall on a blank form.
+          <div className="rounded-xl border border-slate-200/60 bg-gradient-to-br from-purple-50/80 via-white to-indigo-50/60 p-4 sm:p-6">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              <p className="text-sm font-semibold text-slate-900">Create your first automation in a minute</p>
             </div>
-            <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-              {[
-                { icon: Grid3X3, title: "Pick a post", text: "Choose a post or reel — or let it run on any post." },
-                { icon: Zap, title: "Choose a keyword", text: "Like “LINK” — the word people comment to get your message." },
-                { icon: Send, title: "Write the DM", text: "It's sent automatically, seconds after they comment." },
-              ].map((step, i) => (
-                <li key={step.title} className="rounded-lg bg-slate-50 p-3">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-[11px] font-bold text-white">
-                      {i + 1}
-                    </span>
-                    <step.icon className="h-4 w-4 text-purple-600" />
-                    <span className="text-xs font-semibold text-slate-800">{step.title}</span>
-                  </div>
-                  <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">{step.text}</p>
-                </li>
-              ))}
-            </ol>
-            <div className="mt-5 text-center">
-              <button
-                onClick={() => {
-                  setEditing(null)
-                  setShowForm(true)
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Create your first automation
-              </button>
+            <p className="mt-1 text-xs text-slate-500">
+              Pick what you want to send. People comment a keyword on your post and get your DM seconds later.
+            </p>
+            <div className="mt-4">
+              <DmTemplatePicker variant="inline" onPick={openNew} onScratch={() => openNew(null)} />
             </div>
           </div>
         )}
@@ -447,6 +433,7 @@ export function DmsClient({
                 <button
                   onClick={() => {
                     setEditing(automation)
+                    setDraft(null)
                     setShowForm(true)
                   }}
                   title="Edit"
@@ -548,18 +535,31 @@ export function DmsClient({
         )}
       </section>
 
+      {showPicker && (
+        <DmTemplatePicker
+          variant="modal"
+          onPick={openNew}
+          onScratch={() => openNew(null)}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+
       {showForm && (
         <AutomationForm
-          key={editing?.id ?? "new"}
+          key={editing?.id ?? draft?.templateId ?? "new"}
           account={account}
           editing={editing}
+          draft={draft}
           onClose={() => setShowForm(false)}
           onSaved={(saved, isNew) => {
             setAutomations((prev) =>
               isNew ? [saved, ...prev] : prev.map((a) => (a.id === saved.id ? saved : a))
             )
             setShowForm(false)
-            trackEvent(isNew ? "dm_automation_created" : "dm_automation_updated")
+            trackEvent(
+              isNew ? "dm_automation_created" : "dm_automation_updated",
+              isNew ? { template: draft?.templateId ?? "scratch" } : undefined
+            )
           }}
         />
       )}
@@ -845,11 +845,13 @@ function ApprovedConnect() {
 function AutomationForm({
   account,
   editing,
+  draft,
   onClose,
   onSaved,
 }: {
   account: DmAccount
   editing: DmAutomation | null
+  draft: TemplateDraft | null
   onClose: () => void
   onSaved: (automation: DmAutomation, isNew: boolean) => void
 }) {
@@ -868,7 +870,16 @@ function AutomationForm({
             ? parseReplyVariants(editing.public_reply_message)
             : [""],
         }
-      : EMPTY_FORM
+      : draft
+        ? {
+            ...EMPTY_FORM,
+            name: draft.name,
+            keywords: draft.keywords,
+            dmMessage: draft.dmMessage,
+            publicReplyEnabled: draft.publicReplyEnabled,
+            publicReplyMessages: draft.publicReplyMessages,
+          }
+        : EMPTY_FORM
   )
   const [keywordInput, setKeywordInput] = useState("")
   const [posts, setPosts] = useState<InstagramPost[] | null>(null)
