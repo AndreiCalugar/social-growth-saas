@@ -50,6 +50,30 @@ function readBody(req: IncomingMessage): Promise<string> {
   })
 }
 
+// Fake Claude (the app runs with ANTHROPIC_BASE_URL pointing here): a
+// predictable answer from the question, and the system prompt it got.
+const claudeCalls: { system: string; question: string }[] = []
+function fakeClaude(body: { system?: string; messages: { role: string; content: string }[] }) {
+  const question = String(body.messages.at(-1)?.content ?? "")
+  claudeCalls.push({ system: body.system ?? "", question })
+  const q = question.toLowerCase()
+  const answer = q.includes("parking")
+    ? { reply: "Good question! I'll pass it to the creator, who'll get back to you.", needs_human: true }
+    : q.includes("price") || q.includes("much")
+      ? { reply: "It costs 100 lei, materials included.", needs_human: false }
+      : { reply: "It's at Studio X, Main Street 1.", needs_human: false }
+  return {
+    id: `msg_sim_${randomUUID()}`,
+    type: "message",
+    role: "assistant",
+    model: "claude-haiku-5-5",
+    content: [{ type: "text", text: JSON.stringify(answer) }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: { input_tokens: 10, output_tokens: 10 },
+  }
+}
+
 const simServer = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${SIM_PORT}`)
   const parts = url.pathname.split("/").filter(Boolean) // [version, id, edge?]
@@ -58,6 +82,9 @@ const simServer = createServer(async (req, res) => {
     res.end(JSON.stringify(body))
   }
 
+  if (req.method === "POST" && url.pathname === "/v1/messages") {
+    return reply(200, fakeClaude(JSON.parse(await readBody(req))))
+  }
   if (req.method === "POST" && parts[2] === "messages") {
     const body = JSON.parse(await readBody(req))
     const buttons = (body.message?.quick_replies ?? []).map((q: { title: string; payload: string }) => ({
@@ -214,6 +241,9 @@ async function setup() {
     { key: "welcome", name: "SIM welcome", trigger_type: "new_conversation", triggers: ["new_conversation"], match_any_post: false, keywords: [], dm_message: "Welcome! Here's a gift: https://example.com/gift", is_active: false },
     { key: "fu", name: "SIM follow-up", trigger_type: "dm", triggers: ["dm"], match_any_post: false, keywords: ["FU"], dm_message: "Event link: https://example.com/event", track_clicks: true, followup_enabled: true, followup_delay_hours: 20, followup_audience: "not_clicked", followup_message: "Did you see the link? Seats are filling up: https://example.com/event" },
     { key: "fuReply", name: "SIM follow-up no reply", trigger_type: "dm", triggers: ["dm"], match_any_post: false, keywords: ["HELLO"], dm_message: "What can I help you with?", followup_enabled: true, followup_audience: "not_replied", followup_message: "Just making sure you saw my message!" },
+    // schema/029: AI assistant, 2 answers per person.
+    { key: "ai", name: "SIM ai", trigger_type: "dm", triggers: ["dm"], match_any_post: false, keywords: ["ASK"], dm_message: "Here are the details: https://example.com/ws", ai_enabled: true, ai_knowledge: "Workshop. Price: 100 lei. Place: Studio X, Main Street 1.", ai_tone: "warm", ai_max_replies: 2 },
+    { key: "aiComment", name: "SIM ai comment", trigger_type: "comment", match_any_post: true, keywords: ["ASKC"], dm_message: "Details in DM: https://example.com/ws", ai_enabled: true, ai_knowledge: "Workshop. Price: 100 lei.", ai_max_replies: 3 },
     { key: "fuComment", name: "SIM follow-up comment", trigger_type: "comment", match_any_post: true, keywords: ["FUC"], dm_message: "Comment link: https://example.com/c", followup_enabled: true, followup_message: "Reminder!" },
     // schema/027: one automation answering both comments and DMs.
     { key: "multi", name: "SIM multi", trigger_type: "comment", triggers: ["comment", "dm"], match_any_post: true, keywords: ["BOTH"], dm_message: "Both ways: https://example.com/both", public_reply_enabled: true, public_reply_message: "Sent!" },
@@ -473,6 +503,84 @@ try {
     const { count } = await supabase.from("dm_followups").select("id", { count: "exact", head: true }).eq("dm_log_id", log.id)
     assert(count === 0, `${count} follow-ups scheduled`)
     return "none scheduled"
+  })
+
+  // ── AI assistant ──
+  async function aiThreadFor(automationId: string, user: string) {
+    const [log] = await logFor(automationId, user)
+    const { data } = await supabase.from("dm_ai_threads").select("*").eq("dm_log_id", log.id).maybeSingle()
+    return data
+  }
+
+  await scenario("AI assistant: answers questions from the creator's info, first answer says it's AI", async () => {
+    const user = `u_ai_${runId}`
+    await dm(bizId, user, "ASK")
+    await waitFor("automation DM", () => to(user)[0])
+    await sleep(300)
+    await dm(bizId, user, "how much is it?")
+    const a1 = await waitFor("first AI answer", () => to(user)[1])
+    assert(/AI assistant/.test(a1.text) && a1.text.includes("100 lei"), `unexpected: ${a1.text}`)
+    assert(claudeCalls.at(-1)!.system.includes("Price: 100 lei"), "Claude didn't get the creator's info")
+    await dm(bizId, user, "where is it?")
+    const a2 = await waitFor("second AI answer", () => to(user)[2])
+    assert(a2.text === "It's at Studio X, Main Street 1.", `second answer should have no AI intro again: ${a2.text}`)
+    const t = await aiThreadFor(ids.ai, user)
+    assert(t?.replies_count === 2 && t.status === "open", `thread ${t?.status} ${t?.replies_count}`)
+    return "2 answers, disclosure on the first only"
+  })
+
+  await scenario("AI assistant: after the limit it says the creator will get back, then goes quiet", async () => {
+    const user = `u_ai_${runId}`
+    await dm(bizId, user, "and can I pay at the door?")
+    const h = await waitFor("handoff", () => to(user)[3])
+    assert(/get back to you/.test(h.text), `unexpected handoff: ${h.text}`)
+    let t = await aiThreadFor(ids.ai, user)
+    assert(t?.status === "handed_off" && t.handoff_reason === "limit" && t.needs_attention, `thread ${JSON.stringify(t)}`)
+    await dm(bizId, user, "anyone there??")
+    await sleep(2000)
+    assert(to(user).length === 4, `the assistant kept talking: ${JSON.stringify(to(user).map((x) => x.text))}`)
+    t = await aiThreadFor(ids.ai, user)
+    assert(t?.needs_attention === true, "should still need the creator")
+    return "handed off once, then silent, flagged Needs you"
+  })
+
+  await scenario("AI assistant: a question that isn't in the info is handed to the creator", async () => {
+    const user = `u_ai_nc_${runId}`
+    await dm(bizId, user, "ASK")
+    await waitFor("automation DM", () => to(user)[0])
+    await sleep(300)
+    await dm(bizId, user, "is there parking?")
+    const m = await waitFor("handoff answer", () => to(user)[1])
+    assert(/AI assistant/.test(m.text) && /get back to you/.test(m.text), `unexpected: ${m.text}`)
+    const t = await aiThreadFor(ids.ai, user)
+    assert(t?.status === "handed_off" && t.handoff_reason === "not_covered", `thread ${t?.status} ${t?.handoff_reason}`)
+    return "not covered → handed off"
+  })
+
+  await supabase.from("dm_automations").update({ is_active: true }).eq("id", ids.welcome)
+  await scenario("AI assistant on a comment automation: a quick reply to the DM gets the AI, not the welcome", async () => {
+    const user = `u_ai_c_${runId}`
+    const commentId = await comment(bizId, user, "ASKC")
+    await waitFor("private reply", () => replyTo(commentId))
+    await sleep(300)
+    await dm(bizId, user, "what's the price?")
+    const m = await waitFor("AI answer", () => to(user)[0])
+    assert(m.text.includes("100 lei") && !m.text.startsWith("Welcome"), `unexpected: ${m.text}`)
+    await sleep(1000)
+    assert(to(user).length === 1, `got ${to(user).map((x) => x.text).join(" | ")}`)
+    return "AI answered, no welcome"
+  })
+  await supabase.from("dm_automations").update({ is_active: false }).eq("id", ids.welcome)
+
+  await scenario("AI assistant off: a question after the DM gets no automatic answer", async () => {
+    const user = `u_noai_${runId}`
+    await dm(bizId, user, "FU")
+    await waitFor("automation DM", () => to(user)[0])
+    await sleep(300)
+    await dm(bizId, user, "how much is it?")
+    await sleep(2000)
+    assert(to(user).length === 1, `got an answer from an automation without AI: ${to(user)[1]?.text}`)
+    return "no answer"
   })
 
   await scenario("Follow-gate (comment): opener → not following → follow ask → follows → link", async () => {

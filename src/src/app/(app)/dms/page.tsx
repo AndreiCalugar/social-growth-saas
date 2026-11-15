@@ -10,6 +10,7 @@ import {
   type DmAutomation,
   type DmLogRow,
   type FollowupStats,
+  type AiThreadStats,
 } from "@/components/dms-client"
 
 export const dynamic = "force-dynamic"
@@ -58,7 +59,11 @@ export default async function DmsPage() {
     })
   )
 
-  const [clickStats, followupStats] = await Promise.all([loadClickStats(userId), loadFollowupStats(userId)])
+  const [clickStats, followupStats, aiStats] = await Promise.all([
+    loadClickStats(userId),
+    loadFollowupStats(userId),
+    loadAiStats(userId),
+  ])
 
   return (
     <DmsClient
@@ -69,6 +74,7 @@ export default async function DmsPage() {
       statsByAutomation={statsByAutomation}
       clickStats={clickStats}
       followupStats={followupStats}
+      aiStats={aiStats}
     />
   )
 }
@@ -143,6 +149,30 @@ async function loadFollowupStats(userId: string): Promise<FollowupStats> {
     const a = (stats.byAutomation[f.automation_id] ??= { sent: 0, clickedAfter: 0 })
     a.sent++
     if (f.sent_at && (lastClick.get(f.dm_log_id) ?? 0) > new Date(f.sent_at).getTime()) a.clickedAfter++
+  }
+  return stats
+}
+
+// AI assistant conversations per DM, and how many need the creator.
+// Empty before schema/029.
+async function loadAiStats(userId: string): Promise<AiThreadStats> {
+  const { data, error } = await supabase
+    .from("dm_ai_threads")
+    .select("id, dm_log_id, status, replies_count, needs_attention, handoff_reason")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(5000)
+  if (error || !data) return { byLog: {}, needsAttention: 0 }
+  const stats: AiThreadStats = { byLog: {}, needsAttention: 0 }
+  for (const t of data) {
+    stats.byLog[t.dm_log_id] = {
+      id: t.id,
+      status: t.status,
+      replies: t.replies_count,
+      needsAttention: t.needs_attention,
+      reason: t.handoff_reason,
+    }
+    if (t.needs_attention) stats.needsAttention++
   }
   return stats
 }

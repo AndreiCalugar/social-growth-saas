@@ -52,6 +52,26 @@ export function startFakeInstagram(username: string): Promise<Server> {
       return reply(200, { ok: true })
     }
 
+    // Fake Claude (ANTHROPIC_BASE_URL points here): answers from the
+    // system prompt's info, hands off on "parking".
+    if (req.method === "POST" && url.pathname === "/v1/messages") {
+      const body = JSON.parse(await readBody(req))
+      const question = String(body.messages?.at(-1)?.content ?? "").toLowerCase()
+      const answer = question.includes("parking")
+        ? { reply: "I'll pass that to the creator, who'll get back to you.", needs_human: true }
+        : { reply: String(body.system ?? "").includes("250 lei") ? "It's 250 lei, materials included." : "I don't know.", needs_human: false }
+      return reply(200, {
+        id: `msg_e2e_${randomUUID()}`,
+        type: "message",
+        role: "assistant",
+        model: "claude-haiku-5-5",
+        content: [{ type: "text", text: JSON.stringify(answer) }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 10 },
+      })
+    }
+
     // Graph API
     if (req.method === "GET" && parts[1] === "me" && parts.length === 2) {
       return reply(200, { id: "sim_e2e", user_id: "sim_e2e", username, name: "E2E creator", followers_count: 1234 })

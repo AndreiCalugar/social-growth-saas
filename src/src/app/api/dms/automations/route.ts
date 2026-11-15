@@ -5,12 +5,13 @@ import { supabase } from "@/lib/supabase"
 import { getAccountForUser } from "@/lib/meta/accounts"
 import { needsKeywords, normalizeTriggers, primaryTrigger, type TriggerType } from "@/lib/dm-triggers"
 import { followupColumns, isMissingFollowupColumn, type FollowupInput } from "@/lib/followup-settings"
+import { assistantColumns, isMissingAssistantColumn, type AssistantInputBody } from "@/lib/assistant-settings"
 
 const MAX_KEYWORDS = 20
 const MAX_MESSAGE_LENGTH = 1000
 const MAX_AUTOMATIONS = 20
 
-interface AutomationBody extends FollowupInput {
+interface AutomationBody extends FollowupInput, AssistantInputBody {
   name?: string
   post_id?: string | null
   post_url?: string | null
@@ -146,6 +147,12 @@ export async function POST(req: NextRequest) {
     if ("error" in followup) return NextResponse.json({ error: followup.error }, { status: 400 })
     Object.assign(values, followup.values)
   }
+  // AI assistant: only written when turned on (schema/029).
+  if (body.ai_enabled) {
+    const assistant = assistantColumns(body)
+    if ("error" in assistant) return NextResponse.json({ error: assistant.error }, { status: 400 })
+    Object.assign(values, assistant.values)
+  }
 
   // Comment-only automations leave both trigger columns to their defaults,
   // so they work the same before schema/025 and 027. Without comments
@@ -168,6 +175,12 @@ export async function POST(req: NextRequest) {
     supabase.from("dm_automations").insert(row).select().maybeSingle()
 
   let { data: automation, error } = await insert(values)
+  if (error && isMissingAssistantColumn(error.message)) {
+    return NextResponse.json(
+      { error: "The AI assistant needs a database update (schema/029) first." },
+      { status: 503 }
+    )
+  }
   if (error && isMissingFollowupColumn(error.message)) {
     return NextResponse.json(
       { error: "Follow-ups need a database update (schema/028) first." },

@@ -4,11 +4,12 @@ import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { needsKeywords, normalizeTriggers, primaryTrigger } from "@/lib/dm-triggers"
 import { followupColumns, isMissingFollowupColumn, type FollowupInput } from "@/lib/followup-settings"
+import { assistantColumns, isMissingAssistantColumn, type AssistantInputBody } from "@/lib/assistant-settings"
 
 const MAX_KEYWORDS = 20
 const MAX_MESSAGE_LENGTH = 1000
 
-interface AutomationPatch extends FollowupInput {
+interface AutomationPatch extends FollowupInput, AssistantInputBody {
   name?: string
   post_id?: string | null
   post_url?: string | null
@@ -109,6 +110,9 @@ export async function PATCH(
   const followup = followupColumns(body)
   if ("error" in followup) return NextResponse.json({ error: followup.error }, { status: 400 })
   Object.assign(patch, followup.values)
+  const assistant = assistantColumns(body)
+  if ("error" in assistant) return NextResponse.json({ error: assistant.error }, { status: 400 })
+  Object.assign(patch, assistant.values)
   const triggerInput = body.triggers ?? (body.trigger_type !== undefined ? [body.trigger_type] : undefined)
   if (triggerInput !== undefined) {
     const triggers = normalizeTriggers(triggerInput)
@@ -139,6 +143,18 @@ export async function PATCH(
       .maybeSingle()
 
   let { data: automation, error } = await update(patch)
+  // Before schema/029: saving with the assistant off needs no column;
+  // turning it on must not be half-saved.
+  if (error && isMissingAssistantColumn(error.message)) {
+    if (patch.ai_enabled) {
+      return NextResponse.json(
+        { error: "The AI assistant needs a database update (schema/029) first." },
+        { status: 503 }
+      )
+    }
+    for (const key of Object.keys(patch)) if (key.startsWith("ai_")) delete patch[key]
+    ;({ data: automation, error } = await update(patch))
+  }
   // Before schema/028: saving with the follow-up off needs no column;
   // turning it on must not be half-saved.
   if (error && isMissingFollowupColumn(error.message)) {

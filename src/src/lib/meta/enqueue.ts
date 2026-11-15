@@ -193,6 +193,14 @@ export async function queueMatchingMessage(
   // No keyword automation answered: welcome a brand-new conversation.
   const welcome = all.find((a) => a.triggers.includes("new_conversation"))
   if (!welcome || opts.knownContact !== false) return false
+  // Anyone an automation already answered (e.g. a commenter replying to our
+  // private reply) isn't new, even if they never messaged before.
+  const { count: answeredBefore } = await supabase
+    .from("dm_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("instagram_account_id", account.id)
+    .eq("commenter_id", event.senderId)
+  if ((answeredBefore ?? 0) > 0) return false
   if (!(await isNewConversation(account.access_token, event.senderId))) return false
 
   const { error: insertError } = await supabase.from("dm_logs").insert({
