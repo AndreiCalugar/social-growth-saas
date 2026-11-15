@@ -9,6 +9,7 @@ import {
 import { queueMatchingComment, queueMatchingMessage } from "@/lib/meta/enqueue"
 import { drainDmQueue } from "@/lib/meta/process-queue"
 import { findOpenGate, handleGateReply, type OpenGate } from "@/lib/meta/follow-gate"
+import { recordInboundMessage } from "@/lib/meta/contacts"
 
 /**
  * Meta Instagram webhook receiver. Public route (excluded from the auth
@@ -86,6 +87,15 @@ export async function POST(request: NextRequest) {
     // stop the comment automations above.
     try {
       for (const message of parseMessageEvents(payload)) {
+        // Remember they wrote (opens Instagram's 24h window for follow-ups)
+        // and whether we'd seen them before (welcome message).
+        const { data: account } = await supabase
+          .from("instagram_accounts")
+          .select("id")
+          .eq("instagram_id", message.instagramAccountId)
+          .maybeSingle()
+        const contact = account ? await recordInboundMessage(account.id, message.senderId) : { known: true }
+
         // A tap on a follow-gate button (or any reply while a gate is
         // open) answers that gate instead of starting a new automation.
         const gate = await findOpenGate(message)
@@ -93,7 +103,7 @@ export async function POST(request: NextRequest) {
           gateReplies.push({ gate, senderId: message.senderId })
           continue
         }
-        if (await queueMatchingMessage(message)) queued++
+        if (await queueMatchingMessage(message, { knownContact: contact.known })) queued++
       }
     } catch (err) {
       console.error("[Instagram Webhook] message trigger error:", err)

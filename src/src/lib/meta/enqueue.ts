@@ -2,6 +2,8 @@ import { supabase } from "@/lib/supabase"
 import { matchKeywords } from "@/lib/meta/keyword-matcher"
 import type { WebhookCommentEvent, WebhookMessageEvent } from "@/lib/meta/webhook"
 import { automationTriggers, messageTrigger, type TriggerType } from "@/lib/dm-triggers"
+import { decryptToken } from "@/lib/meta/oauth"
+import { getConversationMessageTimes } from "@/lib/meta/client"
 
 export type { TriggerType }
 
@@ -126,14 +128,18 @@ export async function queueMatchingComment(
  * too); a plain DM only against DM automations. The message id goes in
  * dm_logs.comment_id, so a webhook delivered twice is queued once.
  *
+ * If no keyword matches, a first-ever message from this person starts the
+ * account's welcome automation ("new_conversation" trigger), if any.
+ *
  * Returns true if a new row was queued.
  */
 export async function queueMatchingMessage(
-  event: WebhookMessageEvent
+  event: WebhookMessageEvent,
+  opts: { knownContact?: boolean } = {}
 ): Promise<boolean> {
   const { data: account } = await supabase
     .from("instagram_accounts")
-    .select("id")
+    .select("id, access_token")
     .eq("instagram_id", event.instagramAccountId)
     .maybeSingle()
   if (!account) return false
@@ -184,5 +190,45 @@ export async function queueMatchingMessage(
     return !insertError
   }
 
-  return false
+  // No keyword automation answered: welcome a brand-new conversation.
+  const welcome = all.find((a) => a.triggers.includes("new_conversation"))
+  if (!welcome || opts.knownContact !== false) return false
+  if (!(await isNewConversation(account.access_token, event.senderId))) return false
+
+  const { error: insertError } = await supabase.from("dm_logs").insert({
+    user_id: welcome.user_id,
+    automation_id: welcome.id,
+    instagram_account_id: account.id,
+    commenter_id: event.senderId,
+    comment_id: event.messageId,
+    comment_text: event.text,
+    matched_keyword: null,
+    trigger_type: "new_conversation",
+    status: "pending",
+  })
+  if (insertError && insertError.code !== "23505") {
+    throw new Error(`dm_logs insert failed: ${insertError.message}`)
+  }
+  return !insertError
+}
+
+// Messages older than this mean the conversation existed before. A short
+// grace lets "Hi" + "I want the guide" sent back to back still count as new.
+const NEW_CONVERSATION_GRACE_MS = 2 * 60 * 1000
+
+/**
+ * Is this the person's first conversation with the account? We haven't
+ * seen them (checked by the caller), but the app may have been connected
+ * after they last talked: ask Instagram. If Instagram can't tell us, say
+ * no — a "Welcome!" to an existing customer is worse than none.
+ */
+async function isNewConversation(encryptedToken: string, igsid: string): Promise<boolean> {
+  try {
+    const times = await getConversationMessageTimes(decryptToken(encryptedToken), igsid)
+    const cutoff = Date.now() - NEW_CONVERSATION_GRACE_MS
+    return !times.some((t) => new Date(t).getTime() < cutoff)
+  } catch (err) {
+    console.warn("[enqueue] conversation lookup failed, no welcome:", err instanceof Error ? err.message : err)
+    return false
+  }
 }

@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { joinReplyVariants, parseReplyVariants } from "@/lib/meta/reply-variants"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
-import { normalizeTriggers, primaryTrigger } from "@/lib/dm-triggers"
+import { needsKeywords, normalizeTriggers, primaryTrigger } from "@/lib/dm-triggers"
+import { followupColumns, isMissingFollowupColumn, type FollowupInput } from "@/lib/followup-settings"
 
 const MAX_KEYWORDS = 20
 const MAX_MESSAGE_LENGTH = 1000
 
-interface AutomationPatch {
+interface AutomationPatch extends FollowupInput {
   name?: string
   post_id?: string | null
   post_url?: string | null
@@ -58,9 +59,12 @@ export async function PATCH(
     patch.name = body.name.trim()
   }
   if (body.keywords !== undefined) {
+    // A welcome-only automation (new_conversation) may have no keywords.
+    const welcomeOnly =
+      body.triggers !== undefined && !needsKeywords(normalizeTriggers(body.triggers) ?? ["comment"])
     if (
       !Array.isArray(body.keywords) ||
-      body.keywords.length === 0 ||
+      (body.keywords.length === 0 && !welcomeOnly) ||
       body.keywords.length > MAX_KEYWORDS ||
       body.keywords.some((k) => typeof k !== "string" || !k.trim())
     ) {
@@ -102,11 +106,14 @@ export async function PATCH(
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active)
   if (body.track_clicks !== undefined) patch.track_clicks = Boolean(body.track_clicks)
   if (body.follow_gate !== undefined) patch.follow_gate = Boolean(body.follow_gate)
+  const followup = followupColumns(body)
+  if ("error" in followup) return NextResponse.json({ error: followup.error }, { status: 400 })
+  Object.assign(patch, followup.values)
   const triggerInput = body.triggers ?? (body.trigger_type !== undefined ? [body.trigger_type] : undefined)
   if (triggerInput !== undefined) {
     const triggers = normalizeTriggers(triggerInput)
     if (!triggers) {
-      return NextResponse.json({ error: "triggers must be one or more of comment, dm, story_reply" }, { status: 400 })
+      return NextResponse.json({ error: "triggers must be one or more of comment, dm, story_reply, new_conversation" }, { status: 400 })
     }
     patch.triggers = triggers
     patch.trigger_type = primaryTrigger(triggers)
@@ -132,6 +139,18 @@ export async function PATCH(
       .maybeSingle()
 
   let { data: automation, error } = await update(patch)
+  // Before schema/028: saving with the follow-up off needs no column;
+  // turning it on must not be half-saved.
+  if (error && isMissingFollowupColumn(error.message)) {
+    if (patch.followup_enabled) {
+      return NextResponse.json(
+        { error: "Follow-ups need a database update (schema/028) first." },
+        { status: 503 }
+      )
+    }
+    for (const key of Object.keys(patch)) if (key.startsWith("followup_")) delete patch[key]
+    ;({ data: automation, error } = await update(patch))
+  }
   // Before schema/026 nothing is gated, so "off" needs no column.
   if (error && patch.follow_gate === false && error.message.includes("follow_gate")) {
     delete patch.follow_gate

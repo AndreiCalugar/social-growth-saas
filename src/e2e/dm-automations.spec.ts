@@ -179,6 +179,65 @@ test("one automation answers both comments and DMs", async () => {
   await waitForMessage((m) => m.to.id === "fan_both_d" && m.text.startsWith("Both ways"), "reply to the DM")
 })
 
+test("the event template comes with a reminder follow-up", async () => {
+  await page.getByRole("button", { name: /New automation/ }).first().click()
+  await page.getByRole("button", { name: /Event sign-ups/ }).click()
+  await page.getByRole("button", { name: "English", exact: false }).first().click()
+  await page.getByPlaceholder("https://").fill("example.com/event")
+  await page.getByRole("button", { name: /Continue/ }).click()
+
+  const followup = page.getByRole("switch", { name: "Send a follow-up" })
+  await expect(followup).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByRole("radio", { name: "Didn't open the link" })).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByLabel("Hours until the follow-up")).toHaveValue("20")
+  await expect(page.getByLabel("Follow-up message")).toHaveValue(/Did you see the link\?[\s\S]*example\.com\/event/)
+  // Comments alone can't be followed up: the editor says so.
+  await expect(page.getByText(/Only people who message you can get a follow-up/)).toBeVisible()
+
+  // Switching to "opened the link" swaps the ready-made text only if it's untouched.
+  await page.getByLabel("Follow-up message").fill("My own reminder https://example.com/event")
+  await page.getByRole("radio", { name: "Opened the link" }).click()
+  await expect(page.getByLabel("Follow-up message")).toHaveValue("My own reminder https://example.com/event")
+  await page.getByRole("radio", { name: "Didn't open the link" }).click()
+
+  await page.getByRole("checkbox", { name: /^DM/ }).click()
+  await expect(page.getByText(/Only people who message you can get a follow-up/)).toHaveCount(0)
+  await page.getByRole("button", { name: "Any post", exact: true }).click()
+  await page.getByRole("button", { name: "Go live" }).click()
+
+  await expect(row("Event sign-ups").getByText("Follow-up after 20h")).toBeVisible()
+  const { data } = await db()
+    .from("dm_automations")
+    .select("followup_enabled, followup_delay_hours, followup_audience, followup_message, track_clicks")
+    .eq("name", "Event sign-ups")
+    .single()
+  expect(data).toEqual({
+    followup_enabled: true,
+    followup_delay_hours: 20,
+    followup_audience: "not_clicked",
+    followup_message: "My own reminder https://example.com/event",
+    track_clicks: true,
+  })
+})
+
+test("a welcome message needs no keyword", async () => {
+  await page.getByRole("button", { name: /New automation/ }).first().click()
+  await page.getByRole("button", { name: /Welcome \+ free resource/ }).click()
+  await page.getByRole("button", { name: "English", exact: false }).first().click()
+  await page.getByPlaceholder("https://").fill("example.com/gift")
+  await page.getByRole("button", { name: /Continue/ }).click()
+
+  await expect(page.getByRole("checkbox", { name: /^New conversation/ })).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByRole("checkbox", { name: /^Comment/ })).toHaveAttribute("aria-checked", "false")
+  await expect(page.getByPlaceholder("LINK, GUIDE, PRICE…")).toHaveCount(0)
+  await expect(page.getByText(/Anyone who messages you for the very first time/)).toBeVisible()
+  await page.getByRole("button", { name: "Go live" }).click()
+
+  await expect(row("Welcome message").getByText("New conversations", { exact: true })).toBeVisible()
+  const { data } = await db().from("dm_automations").select("triggers, keywords").eq("name", "Welcome message").single()
+  expect(data).toEqual({ triggers: ["new_conversation"], keywords: [] })
+})
+
 test("pausing an automation stops its DMs", async () => {
   const r = row("Link in DM")
   await r.getByTitle("Pause").click()
