@@ -18,6 +18,13 @@ test.afterAll(async () => {
   await page.close()
 })
 
+/** The DB write can land just after Instagram got the message: reload until it shows. */
+const expectAfterReload = (text: string) =>
+  expect(async () => {
+    await page.reload()
+    await expect(page.locator("#activity").getByText(text).first()).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 15_000 })
+
 const row = (name: string) => page.locator("div.grid").filter({ has: page.getByText(name, { exact: true }) }).first()
 
 test("logs in and sees the connected Instagram account", async () => {
@@ -96,7 +103,7 @@ test("creates a follower-only DM automation from scratch", async () => {
   await page.getByRole("button", { name: /Start from scratch/ }).click()
 
   await page.getByPlaceholder(/Name your automation/).fill("VIP list")
-  await page.getByRole("button", { name: "DM A message to you" }).click()
+  await page.getByRole("radio", { name: /^DM/ }).click()
   // Comment-only steps disappear for DM automations.
   await expect(page.getByText("When someone comments on")).toHaveCount(0)
   const keyword = page.getByPlaceholder("LINK, GUIDE, PRICE…")
@@ -123,15 +130,13 @@ test("follow gate: asks to follow, then delivers once they follow", async () => 
     "follow request"
   )
   expect(ask.text).not.toContain("/r/")
-  await page.reload()
-  await expect(page.locator("#activity").getByText("Asked to follow").first()).toBeVisible()
+  await expectAfterReload("Asked to follow")
 
   // Follows, taps again → gets the (tracked) link.
   await addFollower("fan_vip")
   await sendDm("fan_vip", ask.buttons[0]?.title ?? "Done", ask.buttons[0]?.payload ?? payload)
   await waitForMessage((m) => m.to.id === "fan_vip" && m.text.includes("VIP list") && m.text.includes("/r/"), "gated link")
-  await page.reload()
-  await expect(page.locator("#activity").getByText("Link sent").first()).toBeVisible()
+  await expectAfterReload("Link sent")
 })
 
 test("pausing an automation stops its DMs", async () => {

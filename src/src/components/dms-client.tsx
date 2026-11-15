@@ -64,8 +64,8 @@ export type TriggerType = "comment" | "dm" | "story_reply"
 
 const TRIGGERS: { value: TriggerType; label: string; hint: string }[] = [
   { value: "comment", label: "Comment", hint: "On a post or reel" },
-  { value: "dm", label: "DM", hint: "A message to you" },
-  { value: "story_reply", label: "Story reply", hint: "A reply to your story" },
+  { value: "dm", label: "DM", hint: "Messages and story replies" },
+  { value: "story_reply", label: "Story reply", hint: "Story replies only" },
 ]
 
 // "Comments on any post containing", shown on each automation row.
@@ -1207,12 +1207,14 @@ function AutomationForm({
               )}
 
               {/* Step 1: what starts it */}
-              <Step n={1} title="What starts it">
-                <div className="grid grid-cols-3 gap-2">
+              <Step n={1} title="What starts it" note="Pick one">
+                <div role="radiogroup" aria-label="What starts it" className="grid grid-cols-3 gap-2">
                   {TRIGGERS.map((t) => (
                     <button
                       key={t.value}
                       type="button"
+                      role="radio"
+                      aria-checked={form.trigger === t.value}
                       onClick={() => {
                         setForm((f) => ({ ...f, trigger: t.value }))
                         setPreviewMode(t.value === "comment" ? "comment" : "dm")
@@ -1224,7 +1226,16 @@ function AutomationForm({
                           : "border-slate-200 bg-white hover:border-slate-300"
                       )}
                     >
-                      <span className={cn("block text-xs font-semibold", form.trigger === t.value ? "text-purple-700" : "text-slate-700")}>
+                      <span className={cn("flex items-center gap-1.5 text-xs font-semibold", form.trigger === t.value ? "text-purple-700" : "text-slate-700")}>
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border",
+                            form.trigger === t.value ? "border-purple-600" : "border-slate-300 bg-white"
+                          )}
+                        >
+                          {form.trigger === t.value && <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />}
+                        </span>
                         {t.label}
                       </span>
                       <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">{t.hint}</span>
@@ -1232,10 +1243,10 @@ function AutomationForm({
                   ))}
                 </div>
                 {!isComment && (
-                  <p className="text-[11px] leading-snug text-slate-500">
+                  <p className="mt-2 text-[11px] leading-snug text-slate-500">
                     {form.trigger === "dm"
-                      ? "When someone sends you a message with your keyword, they get your DM right back."
-                      : "When someone replies to any of your stories with your keyword, they get your DM right back."}{" "}
+                      ? "When someone sends you a message with your keyword, or replies to one of your stories with it, they get your DM right back."
+                      : "When someone replies to one of your stories with your keyword, they get your DM right back. Normal messages are ignored — pick DM to catch both."}{" "}
                     Each person gets it at most once a day.
                   </p>
                 )}
@@ -1613,11 +1624,13 @@ function Step({
   n,
   title,
   optional,
+  note,
   children,
 }: {
   n: number
   title: string
   optional?: boolean
+  note?: string
   children: React.ReactNode
 }) {
   return (
@@ -1630,6 +1643,7 @@ function Step({
         {optional && (
           <span className="text-[11px] font-medium text-slate-400">optional</span>
         )}
+        {note && <span className="text-[11px] font-medium text-slate-400">{note}</span>}
       </div>
       <div className="rounded-xl bg-slate-50 p-3">{children}</div>
     </section>
