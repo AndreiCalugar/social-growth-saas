@@ -103,7 +103,9 @@ test("creates a follower-only DM automation from scratch", async () => {
   await page.getByRole("button", { name: /Start from scratch/ }).click()
 
   await page.getByPlaceholder(/Name your automation/).fill("VIP list")
-  await page.getByRole("radio", { name: /^DM/ }).click()
+  // Comment is ticked by default: add DM, then untick Comment.
+  await page.getByRole("checkbox", { name: /^DM/ }).click()
+  await page.getByRole("checkbox", { name: /^Comment/ }).click()
   // Comment-only steps disappear for DM automations.
   await expect(page.getByText("When someone comments on")).toHaveCount(0)
   const keyword = page.getByPlaceholder("LINK, GUIDE, PRICE…")
@@ -137,6 +139,44 @@ test("follow gate: asks to follow, then delivers once they follow", async () => 
   await sendDm("fan_vip", ask.buttons[0]?.title ?? "Done", ask.buttons[0]?.payload ?? payload)
   await waitForMessage((m) => m.to.id === "fan_vip" && m.text.includes("VIP list") && m.text.includes("/r/"), "gated link")
   await expectAfterReload("Link sent")
+})
+
+test("one automation answers both comments and DMs", async () => {
+  await page.getByRole("button", { name: /New automation/ }).first().click()
+  await page.getByRole("button", { name: /Start from scratch/ }).click()
+
+  await page.getByPlaceholder(/Name your automation/).fill("Both ways")
+  const comment = page.getByRole("checkbox", { name: /^Comment/ })
+  const dm = page.getByRole("checkbox", { name: /^DM/ })
+  const story = page.getByRole("checkbox", { name: /^Story reply/ })
+  await expect(comment).toHaveAttribute("aria-checked", "true")
+  await dm.click()
+  await expect(dm).toHaveAttribute("aria-checked", "true")
+  // DM already covers story replies.
+  await expect(story).toHaveAttribute("aria-checked", "true")
+  await expect(story).toBeDisabled()
+  // The last trigger can't be unticked.
+  await comment.click()
+  await dm.click()
+  await expect(dm).toHaveAttribute("aria-checked", "true")
+  await comment.click()
+
+  await expect(page.getByText("And the comment or message contains")).toBeVisible()
+  await page.getByRole("button", { name: "Any post", exact: true }).click()
+  const keyword = page.getByPlaceholder("LINK, GUIDE, PRICE…")
+  await keyword.fill("BOTH")
+  await keyword.press("Enter")
+  await page.getByPlaceholder(/Here's the link you asked for/).fill("Both ways: https://example.com/both")
+  await page.getByRole("button", { name: "Go live" }).click()
+
+  await expect(row("Both ways").getByText("Comments on any post or DMs containing")).toBeVisible()
+  const { data } = await db().from("dm_automations").select("triggers, trigger_type").eq("name", "Both ways").single()
+  expect(data).toEqual({ triggers: ["comment", "dm"], trigger_type: "comment" })
+
+  const commentId = await sendComment("fan_both_c", "BOTH")
+  await waitForMessage((m) => m.to.comment_id === commentId && m.text.startsWith("Both ways"), "reply to the comment")
+  await sendDm("fan_both_d", "BOTH")
+  await waitForMessage((m) => m.to.id === "fan_both_d" && m.text.startsWith("Both ways"), "reply to the DM")
 })
 
 test("pausing an automation stops its DMs", async () => {

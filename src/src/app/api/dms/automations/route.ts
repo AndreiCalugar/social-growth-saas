@@ -3,6 +3,7 @@ import { joinReplyVariants, parseReplyVariants } from "@/lib/meta/reply-variants
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getAccountForUser } from "@/lib/meta/accounts"
+import { normalizeTriggers, primaryTrigger, type TriggerType } from "@/lib/dm-triggers"
 
 const MAX_KEYWORDS = 20
 const MAX_MESSAGE_LENGTH = 1000
@@ -20,16 +21,14 @@ interface AutomationBody {
   public_reply_message?: string | null
   is_active?: boolean
   track_clicks?: boolean
+  /** What starts it (schema/027). Older clients send trigger_type instead. */
+  triggers?: string[]
   trigger_type?: string
   follow_gate?: boolean
 }
 
-const TRIGGER_TYPES = ["comment", "dm", "story_reply"] as const
-type TriggerType = (typeof TRIGGER_TYPES)[number]
-
-function triggerOf(body: { trigger_type?: string }): TriggerType | null {
-  const t = body.trigger_type ?? "comment"
-  return (TRIGGER_TYPES as readonly string[]).includes(t) ? (t as TriggerType) : null
+function triggersOf(body: { triggers?: string[]; trigger_type?: string }): TriggerType[] | null {
+  return normalizeTriggers(body.triggers ?? [body.trigger_type ?? "comment"])
 }
 
 function validateAutomationBody(body: AutomationBody): string | null {
@@ -52,10 +51,10 @@ function validateAutomationBody(body: AutomationBody): string | null {
   if (body.dm_message.length > MAX_MESSAGE_LENGTH) {
     return `dm_message must be at most ${MAX_MESSAGE_LENGTH} characters`
   }
-  const trigger = triggerOf(body)
-  if (!trigger) return "trigger_type must be comment, dm or story_reply"
-  // DM and story-reply automations aren't tied to a post.
-  if (trigger === "comment" && !body.match_any_post && !body.post_id) {
+  const triggers = triggersOf(body)
+  if (!triggers) return "triggers must be one or more of comment, dm, story_reply"
+  // Only comments are tied to a post.
+  if (triggers.includes("comment") && !body.match_any_post && !body.post_id) {
     return "Pick a post or enable match_any_post"
   }
   if (
@@ -139,12 +138,16 @@ export async function POST(req: NextRequest) {
   // Only written when on, so creating without it works before schema/026.
   if (body.follow_gate) values.follow_gate = true
 
-  // Comment automations leave trigger_type to its default, so they work
-  // the same before and after schema/025. DM and story ones have no post
-  // and nothing to reply to publicly.
-  const trigger = triggerOf(body)!
-  if (trigger !== "comment") {
-    values.trigger_type = trigger
+  // Comment-only automations leave both trigger columns to their defaults,
+  // so they work the same before schema/025 and 027. Without comments
+  // there's no post and nothing to reply to publicly.
+  const triggers = triggersOf(body)!
+  const commentOnly = triggers.length === 1 && triggers[0] === "comment"
+  if (!commentOnly) {
+    values.triggers = triggers
+    values.trigger_type = primaryTrigger(triggers)
+  }
+  if (!triggers.includes("comment")) {
     values.match_any_post = false
     values.post_id = null
     values.post_url = null
@@ -156,6 +159,17 @@ export async function POST(req: NextRequest) {
     supabase.from("dm_automations").insert(row).select().maybeSingle()
 
   let { data: automation, error } = await insert(values)
+  // Before schema/027 a single trigger still fits in trigger_type alone.
+  if (error && triggers.length === 1 && error.message.includes("triggers")) {
+    const { triggers: _single, ...rest } = values
+    ;({ data: automation, error } = await insert(rest))
+  }
+  if (error && error.message.includes("triggers")) {
+    return NextResponse.json(
+      { error: "Several triggers in one automation need a database update (schema/027) first." },
+      { status: 503 }
+    )
+  }
   if (error && error.message.includes("follow_gate")) {
     return NextResponse.json(
       { error: "The follow-gate needs a database update (schema/026) first." },

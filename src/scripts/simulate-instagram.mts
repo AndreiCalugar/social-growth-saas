@@ -196,6 +196,8 @@ async function setup() {
     { key: "gate", name: "SIM gate", trigger_type: "comment", match_any_post: true, keywords: ["GATE"], dm_message: "Gated link: https://example.com/gated", follow_gate: true },
     { key: "gateDm", name: "SIM gate dm", trigger_type: "dm", match_any_post: false, keywords: ["GATEDM"], dm_message: "Gated DM link: https://example.com/gated-dm", follow_gate: true },
     { key: "load", name: "SIM load", trigger_type: "comment", match_any_post: true, keywords: ["LOAD"], dm_message: "Load test: https://example.com/load" },
+    // schema/027: one automation answering both comments and DMs.
+    { key: "multi", name: "SIM multi", trigger_type: "comment", triggers: ["comment", "dm"], match_any_post: true, keywords: ["BOTH"], dm_message: "Both ways: https://example.com/both", public_reply_enabled: true, public_reply_message: "Sent!" },
   ]
   const ids: Record<string, string> = {}
   for (const { key, ...a } of automations) {
@@ -276,6 +278,41 @@ try {
     await sleep(2500)
     assert(to(user).length === 0, "story automation fired on a plain DM")
     return "not triggered"
+  })
+
+  await scenario("Comment + DM automation answers a keyword comment", async () => {
+    const user = `u_multi_c_${runId}`
+    const commentId = await comment(bizId, user, "BOTH please")
+    const m = await waitFor("private reply", () => replyTo(commentId))
+    assert(m.text.startsWith("Both ways"), `unexpected text: ${m.text}`)
+    await waitFor("public reply", () => publicReplies.find((p) => p.commentId === commentId))
+    return "private + public reply"
+  })
+
+  await scenario("Comment + DM automation answers a keyword DM in the conversation", async () => {
+    const user = `u_multi_d_${runId}`
+    await dm(bizId, user, "BOTH")
+    const m = await waitFor("DM answer", () => to(user)[0])
+    assert(m.text.startsWith("Both ways"), `unexpected text: ${m.text}`)
+    const [log] = await logFor(ids.multi, user)
+    assert(log?.trigger_type === "dm", `log trigger_type ${log?.trigger_type}`)
+    return "answered by DM, logged as dm"
+  })
+
+  await scenario("Comment + DM automation also catches story replies", async () => {
+    const user = `u_multi_s_${runId}`
+    await dm(bizId, user, "BOTH", { story: true })
+    const m = await waitFor("DM answer", () => to(user)[0])
+    assert(m.text.startsWith("Both ways"), `unexpected text: ${m.text}`)
+    return "story reply answered"
+  })
+
+  await scenario("Someone who commented and then DMs the keyword gets it once", async () => {
+    const user = `u_multi_c_${runId}`
+    await dm(bizId, user, "BOTH")
+    await sleep(2500)
+    assert(to(user).length === 0, `expected no second DM, got ${to(user).length}`)
+    return "no duplicate across triggers"
   })
 
   await scenario("Follow-gate (comment): opener → not following → follow ask → follows → link", async () => {
