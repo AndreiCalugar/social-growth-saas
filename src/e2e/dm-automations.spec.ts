@@ -250,6 +250,62 @@ test("a welcome message needs no keyword", async () => {
   expect(data).toEqual({ triggers: ["new_conversation"], keywords: [], followup_enabled: true, followup_audience: "not_replied" })
 })
 
+test("an AI assistant answers questions, and can be tried before going live", async () => {
+  await page.getByRole("button", { name: /New automation/ }).first().click()
+  await page.getByRole("button", { name: /Start from scratch/ }).click()
+  await page.getByPlaceholder(/Name your automation/).fill("Workshop Q&A")
+  await page.getByRole("checkbox", { name: /^DM/ }).click()
+  await page.getByRole("checkbox", { name: /^Comment/ }).click()
+  const keyword = page.getByPlaceholder("LINK, GUIDE, PRICE…")
+  await keyword.fill("WORKSHOP")
+  await keyword.press("Enter")
+  await page.getByPlaceholder(/Here's the link you asked for/).fill("Here are the details: https://example.com/workshop")
+
+  await page.getByRole("switch", { name: "AI assistant" }).click()
+  await page.getByLabel("What the AI assistant should know").fill("Painting workshop. Price: 250 lei, materials included.")
+  await page.getByRole("radio", { name: "Professional" }).click()
+  await expect(page.getByLabel("Questions the assistant answers per person")).toHaveValue("3")
+  await page.getByLabel("Questions the assistant answers per person").fill("2")
+
+  // Try it: the first answer introduces itself as the AI assistant.
+  await page.getByLabel("Test question").fill("How much is it?")
+  await page.getByRole("button", { name: "Ask" }).click()
+  const convo = page.getByLabel("Test conversation")
+  await expect(convo).toContainText("AI assistant")
+  await expect(convo).toContainText("250 lei")
+  // Not in the info → handed over.
+  await page.getByLabel("Test question").fill("Is there parking?")
+  await page.getByRole("button", { name: "Ask" }).click()
+  await expect(convo).toContainText("Handed to you")
+  await expect(page.getByLabel("Test question")).toBeDisabled()
+
+  await page.getByRole("button", { name: "Go live" }).click()
+  await expect(row("Workshop Q&A").getByText("Live")).toBeVisible()
+  const { data } = await db()
+    .from("dm_automations")
+    .select("ai_enabled, ai_knowledge, ai_tone, ai_max_replies")
+    .eq("name", "Workshop Q&A")
+    .single()
+  expect(data).toEqual({
+    ai_enabled: true,
+    ai_knowledge: "Painting workshop. Price: 250 lei, materials included.",
+    ai_tone: "professional",
+    ai_max_replies: 2,
+  })
+
+  // A real conversation: the DM, then a question answered by the assistant.
+  await sendDm("fan_ai", "WORKSHOP")
+  await waitForMessage((m) => m.to.id === "fan_ai" && m.text.startsWith("Here are the details"), "automation DM")
+  await sendDm("fan_ai", "how much?")
+  await waitForMessage((m) => m.to.id === "fan_ai" && m.text.includes("250 lei"), "AI answer")
+  await expectAfterReload("AI answered 1")
+  // Then something it can't answer → "Needs you".
+  await sendDm("fan_ai", "parking?")
+  await waitForMessage((m) => m.to.id === "fan_ai" && m.text.includes("get back to you"), "handoff")
+  await expectAfterReload("Needs you")
+  await expect(page.getByText("1 conversation needs you")).toBeVisible()
+})
+
 test("pausing an automation stops its DMs", async () => {
   const r = row("Link in DM")
   await r.getByTitle("Pause").click()

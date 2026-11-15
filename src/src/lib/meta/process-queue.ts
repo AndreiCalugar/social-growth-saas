@@ -14,6 +14,7 @@ import { withTrackedLinks } from "@/lib/link-tracking"
 import { sendGateOpener } from "@/lib/meta/follow-gate"
 import { simulatorAccountIds } from "@/lib/meta/simulator"
 import { processDueFollowups, scheduleFollowup, type FollowupResult } from "@/lib/meta/followups"
+import { openAiThread } from "@/lib/meta/ai-threads"
 
 /**
  * Drain the DM send queue (dm_logs rows with status='pending'). Called by the
@@ -398,7 +399,10 @@ export async function drainDmQueue(): Promise<DrainResult> {
       .update({ status: "sent", updated_at: nowIso() })
       .eq("id", row.id)
     results.sent++
-    if (realDmSent) await scheduleFollowup(row.id)
+    if (realDmSent) {
+      await scheduleFollowup(row.id)
+      await openAiThread(row.id)
+    }
   }
 
   // Follow-ups that are due (schema/028). Never lets a problem there

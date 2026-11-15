@@ -23,6 +23,8 @@ import {
   Zap,
   Check,
   BellRing,
+  Bot,
+  Send,
 } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
 import { InstagramAccountAvatar } from "@/components/instagram-account-avatar"
@@ -40,6 +42,7 @@ import { DmTemplatePicker } from "@/components/dm-template-picker"
 import type { TemplateDraft } from "@/lib/dm-templates"
 import { automationTriggers, needsKeywords, normalizeTriggers, type TriggerType } from "@/lib/dm-triggers"
 import { audienceNeedsClicks, type FollowupAudience } from "@/lib/followup-settings"
+import type { AssistantTone } from "@/lib/ai/assistant"
 
 export type DmAccount = ConnectedInstagramAccount
 
@@ -66,6 +69,11 @@ export interface DmAutomation {
   followup_delay_hours?: number
   followup_audience?: FollowupAudience
   followup_message?: string | null
+  // Missing until schema/029 has run.
+  ai_enabled?: boolean
+  ai_knowledge?: string | null
+  ai_tone?: AssistantTone
+  ai_max_replies?: number
   // Missing until schema/026 has run.
   follow_gate?: boolean
   created_at: string
@@ -87,6 +95,27 @@ export interface FollowupStats {
 }
 
 const EMPTY_FOLLOWUP_STATS: FollowupStats = { byAutomation: {}, byLog: {} }
+
+/** AI assistant conversation per DM (schema/029). */
+export interface AiThreadStats {
+  byLog: Record<string, { id: string; status: "open" | "handed_off"; replies: number; needsAttention: boolean; reason: string | null }>
+  needsAttention: number
+}
+
+const EMPTY_AI_STATS: AiThreadStats = { byLog: {}, needsAttention: 0 }
+
+const AI_TONES: { value: AssistantTone; label: string; hint: string }[] = [
+  { value: "warm", label: "Warm", hint: "Kind, like a friendly host" },
+  { value: "friendly", label: "Casual", hint: "Upbeat, like texting a friend" },
+  { value: "professional", label: "Professional", hint: "Polite and to the point" },
+]
+
+const AI_KNOWLEDGE_PLACEHOLDER = `Everything it may answer from, e.g.:
+Painting workshop with Ana — Saturday 6 December, 11:00–14:00
+Where: Studio Lumina, Str. Eminescu 12, Bucharest (1st floor)
+Price: 250 lei, all materials + tea/coffee included
+Sign up: https://…
+No experience needed. Max 12 people.`
 
 const FOLLOWUP_AUDIENCES: { value: FollowupAudience; label: string }[] = [
   { value: "not_clicked", label: "Didn't open the link" },
@@ -199,6 +228,10 @@ interface FormState {
   followupDelayHours: number
   followupAudience: FollowupAudience
   followupMessage: string
+  aiEnabled: boolean
+  aiKnowledge: string
+  aiTone: AssistantTone
+  aiMaxReplies: number
 }
 
 const EMPTY_FORM: FormState = {
@@ -219,6 +252,10 @@ const EMPTY_FORM: FormState = {
   followupDelayHours: 20,
   followupAudience: "not_clicked",
   followupMessage: "",
+  aiEnabled: false,
+  aiKnowledge: "",
+  aiTone: "warm",
+  aiMaxReplies: 3,
 }
 
 export function DmsClient({
@@ -228,6 +265,7 @@ export function DmsClient({
   statsByAutomation,
   clickStats,
   followupStats = EMPTY_FOLLOWUP_STATS,
+  aiStats = EMPTY_AI_STATS,
   beta,
 }: {
   beta: BetaRequest
@@ -237,6 +275,7 @@ export function DmsClient({
   statsByAutomation: Record<string, AutomationSendStats>
   clickStats: ClickStats
   followupStats?: FollowupStats
+  aiStats?: AiThreadStats
 }) {
   const clickedLogs = useMemo(() => new Set(clickStats.clickedLogIds), [clickStats.clickedLogIds])
   // Activity list: "all" or one automation's id, shown a page at a time.
@@ -625,7 +664,18 @@ export function DmsClient({
       {/* Recent activity: a few rows at a time, filterable per automation */}
       <section id="activity" className="space-y-3 scroll-mt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">Recent activity</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            Recent activity
+            {aiStats.needsAttention > 0 && (
+              <span
+                title="The AI assistant handed these conversations to you: answer them in Instagram"
+                className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600"
+              >
+                <Bot className="h-3 w-3" />
+                {aiStats.needsAttention} {aiStats.needsAttention === 1 ? "conversation needs" : "conversations need"} you
+              </span>
+            )}
+          </h2>
           <div className="flex items-center gap-2">
             <select
               value={activityFilter}
@@ -731,6 +781,7 @@ export function DmsClient({
                         </span>
                       )}
                       <FollowupChip followup={followupStats.byLog[log.id]} />
+                      <AiChip thread={aiStats.byLog[log.id]} />
                       {clickedLogs.has(log.id) && (
                         <span
                           title="Opened the link in your DM"
@@ -1113,6 +1164,10 @@ function AutomationForm({
           followupDelayHours: editing.followup_delay_hours ?? 20,
           followupAudience: editing.followup_audience ?? "not_clicked",
           followupMessage: editing.followup_message ?? "",
+          aiEnabled: Boolean(editing.ai_enabled),
+          aiKnowledge: editing.ai_knowledge ?? "",
+          aiTone: editing.ai_tone ?? "warm",
+          aiMaxReplies: editing.ai_max_replies ?? 3,
         }
       : draft
         ? {
@@ -1147,6 +1202,7 @@ function AutomationForm({
   const stepPost = isComment ? ++stepCounter : 0
   const stepKeywords = showKeywords ? ++stepCounter : 0
   const stepDm = ++stepCounter
+  const stepAi = ++stepCounter
   const stepPublicReply = isComment ? ++stepCounter : 0
   const stepFollowup = ++stepCounter
   // Follow-ups only reach people who messaged (Instagram's 24h window).
@@ -1219,6 +1275,8 @@ function AutomationForm({
       return setFormError("Write the public reply, or turn it off.")
     if (form.followupEnabled && !form.followupMessage.trim())
       return setFormError("Write the follow-up message, or turn it off.")
+    if (form.aiEnabled && !form.aiKnowledge.trim())
+      return setFormError("Write what the AI assistant should know, or turn it off.")
 
     setSaving(true)
     try {
@@ -1242,6 +1300,10 @@ function AutomationForm({
         followup_delay_hours: form.followupDelayHours,
         followup_audience: form.followupAudience,
         followup_message: form.followupMessage,
+        ai_enabled: form.aiEnabled,
+        ai_knowledge: form.aiKnowledge,
+        ai_tone: form.aiTone,
+        ai_max_replies: form.aiMaxReplies,
       }
       const res = await fetch(
         editing ? `/api/dms/automations/${editing.id}` : "/api/dms/automations",
@@ -1627,6 +1689,107 @@ function AutomationForm({
                 </label>
               </Step>
 
+              {/* AI assistant (schema/029) */}
+              <Step n={stepAi} title="Answer their questions with AI" optional>
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <Bot className="h-3.5 w-3.5 text-purple-600" />
+                    If they write back with a question, an AI assistant answers
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="AI assistant"
+                    aria-checked={form.aiEnabled}
+                    onClick={() => setForm((f) => ({ ...f, aiEnabled: !f.aiEnabled }))}
+                    className={cn(
+                      "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+                      form.aiEnabled ? "bg-purple-600" : "bg-slate-300"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                        form.aiEnabled && "translate-x-4"
+                      )}
+                    />
+                  </button>
+                </label>
+
+                {form.aiEnabled && (
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-semibold text-slate-700">What should it know?</p>
+                      <textarea
+                        value={form.aiKnowledge}
+                        onChange={(e) => setForm((f) => ({ ...f, aiKnowledge: e.target.value }))}
+                        rows={6}
+                        maxLength={4000}
+                        aria-label="What the AI assistant should know"
+                        placeholder={AI_KNOWLEDGE_PLACEHOLDER}
+                        className={cn(inputCls, "py-2 resize-y")}
+                      />
+                      <p className="text-[11px] text-slate-400">
+                        It only answers from this. Add the details people usually ask about, and common questions with
+                        their answers. {form.aiKnowledge.length}/4000
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-semibold text-slate-700">Tone</p>
+                      <div role="radiogroup" aria-label="Assistant tone" className="grid grid-cols-3 gap-1.5">
+                        {AI_TONES.map((t) => (
+                          <button
+                            key={t.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={form.aiTone === t.value}
+                            title={t.hint}
+                            onClick={() => setForm((f) => ({ ...f, aiTone: t.value }))}
+                            className={cn(
+                              "rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                              form.aiTone === t.value
+                                ? "border-purple-500 bg-purple-50 text-purple-700"
+                                : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                            )}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs text-slate-600">
+                      Answer up to
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={form.aiMaxReplies}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            aiMaxReplies: Math.min(10, Math.max(1, Math.round(Number(e.target.value) || 1))),
+                          }))
+                        }
+                        aria-label="Questions the assistant answers per person"
+                        className="h-8 w-14 rounded-lg border border-slate-200 bg-white px-2 text-center text-sm text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      />
+                      questions per person
+                    </label>
+
+                    <p className="text-[11px] leading-snug text-slate-500">
+                      Its first answer says it&rsquo;s your AI assistant (that&rsquo;s the law in the EU). After{" "}
+                      {form.aiMaxReplies} {form.aiMaxReplies === 1 ? "answer" : "answers"}, or when the answer isn&rsquo;t in
+                      your info, it says you&rsquo;ll get back to them, stops, and marks the conversation{" "}
+                      <span className="font-semibold text-red-600">Needs you</span>.
+                    </p>
+
+                    <AssistantTryIt knowledge={form.aiKnowledge} tone={form.aiTone} maxReplies={form.aiMaxReplies} />
+                  </div>
+                )}
+              </Step>
+
               {/* Public reply (comments only) */}
               {isComment && (
               <Step n={stepPublicReply} title="And a public reply" optional>
@@ -1983,5 +2146,148 @@ function FollowupChip({ followup }: { followup?: FollowupStats["byLog"][string] 
       <BellRing className="h-3 w-3" />
       {label}
     </span>
+  )
+}
+
+/** The AI assistant's state on an activity row. */
+function AiChip({ thread }: { thread?: AiThreadStats["byLog"][string] }) {
+  const router = useRouter()
+  const [clearing, setClearing] = useState(false)
+  if (!thread || (thread.replies === 0 && !thread.needsAttention && thread.status === "open")) return null
+  if (thread.needsAttention) {
+    const why =
+      thread.reason === "limit"
+        ? "They asked more questions than the assistant answers"
+        : thread.reason === "not_covered"
+          ? "They asked something that isn't in the assistant's info"
+          : "They're waiting for your reply"
+    return (
+      <button
+        type="button"
+        disabled={clearing}
+        onClick={async () => {
+          if (!window.confirm(`${why}.\n\nAnswer them in Instagram, then mark this as handled?`)) return
+          setClearing(true)
+          const res = await fetch(`/api/dms/ai-threads/${thread.id}`, { method: "PATCH" })
+          setClearing(false)
+          if (res.ok) router.refresh()
+        }}
+        title={`${why} — answer them in Instagram, then click to mark as handled`}
+        className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-60"
+      >
+        <Bot className="h-3 w-3" />
+        Needs you
+      </button>
+    )
+  }
+  return (
+    <span title="Questions the AI assistant answered" className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+      <Bot className="h-3 w-3" />
+      AI answered {thread.replies}
+    </span>
+  )
+}
+
+/** Ask the assistant test questions in the editor, like a follower would. */
+function AssistantTryIt({ knowledge, tone, maxReplies }: { knowledge: string; tone: AssistantTone; maxReplies: number }) {
+  const [question, setQuestion] = useState("")
+  const [turns, setTurns] = useState<{ role: "user" | "assistant"; text: string; handoff?: boolean }[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const answered = turns.filter((t) => t.role === "assistant" && !t.handoff).length
+  const stopped = turns.some((t) => t.handoff)
+
+  async function ask() {
+    const q = question.trim()
+    if (!q || loading) return
+    setError(null)
+    setQuestion("")
+    if (stopped) return
+    if (answered >= maxReplies) {
+      setTurns((t) => [...t, { role: "user", text: q }, { role: "assistant", text: "(Limit reached: they get your \"I'll get back to you\" message and the conversation is marked Needs you.)", handoff: true }])
+      return
+    }
+    setTurns((t) => [...t, { role: "user", text: q }])
+    setLoading(true)
+    try {
+      const res = await fetch("/api/dms/assistant/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ knowledge, tone, question: q, history: turns.map(({ role, text }) => ({ role, text })) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Couldn't get an answer")
+      setTurns((t) => [...t, { role: "assistant", text: data.reply, handoff: data.handoff }])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't get an answer")
+      setTurns((t) => t.slice(0, -1))
+      setQuestion(q)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+      <p className="text-[11px] font-semibold text-slate-700">Try it</p>
+      {turns.length > 0 && (
+        <div className="mt-2 max-h-64 space-y-1.5 overflow-y-auto" aria-label="Test conversation">
+          {turns.map((t, i) => (
+            <div key={i} className={cn("flex", t.role === "user" ? "justify-end" : "justify-start")}>
+              <p
+                className={cn(
+                  "max-w-[85%] whitespace-pre-line rounded-2xl px-3 py-1.5 text-xs leading-relaxed",
+                  t.role === "user" ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-800"
+                )}
+              >
+                {t.text}
+                {t.handoff && t.role === "assistant" && (
+                  <span className="mt-1 block text-[10px] font-semibold text-red-600">Handed to you · Needs you</span>
+                )}
+              </p>
+            </div>
+          ))}
+          {loading && <p className="text-[11px] text-slate-400">Thinking…</p>}
+        </div>
+      )}
+      {error && <p className="mt-1.5 text-[11px] text-red-600">{error}</p>}
+      <div className="mt-2 flex gap-1.5">
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              void ask()
+            }
+          }}
+          disabled={!knowledge.trim() || stopped}
+          aria-label="Test question"
+          placeholder={stopped ? "The assistant stopped — it handed this one to you" : knowledge.trim() ? "Ask what a follower would ask…" : "Write the info above first"}
+          className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+        />
+        <button
+          type="button"
+          onClick={() => void ask()}
+          disabled={!question.trim() || loading || stopped}
+          aria-label="Ask"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-600 text-white disabled:opacity-40"
+        >
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+        </button>
+        {turns.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setTurns([])
+              setError(null)
+            }}
+            className="shrink-0 rounded-lg px-2 text-[11px] font-medium text-slate-500 hover:bg-slate-100"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+    </div>
   )
 }

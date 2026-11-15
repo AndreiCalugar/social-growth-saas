@@ -11,6 +11,7 @@ import {
 import { decryptToken } from "@/lib/meta/oauth"
 import { withTrackedLinks } from "@/lib/link-tracking"
 import { scheduleFollowup } from "@/lib/meta/followups"
+import { openAiThread } from "@/lib/meta/ai-threads"
 import type { WebhookMessageEvent } from "@/lib/meta/webhook"
 
 // Follow-gate: the link only goes to people who follow the account.
@@ -235,7 +236,10 @@ export async function handleGateReply(gate: OpenGate, senderId: string): Promise
     )
     await restore(status)
     // The link went out: schedule the automation's follow-up, if any.
-    if (status === "delivered") await scheduleFollowup(gate.dmLogId)
+    if (status === "delivered") {
+      await scheduleFollowup(gate.dmLogId)
+      await openAiThread(gate.dmLogId)
+    }
     return status
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"

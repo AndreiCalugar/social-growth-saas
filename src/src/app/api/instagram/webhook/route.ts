@@ -10,6 +10,7 @@ import { queueMatchingComment, queueMatchingMessage } from "@/lib/meta/enqueue"
 import { drainDmQueue } from "@/lib/meta/process-queue"
 import { findOpenGate, handleGateReply, type OpenGate } from "@/lib/meta/follow-gate"
 import { recordInboundMessage } from "@/lib/meta/contacts"
+import { findAiThread, handleAiMessage } from "@/lib/meta/ai-threads"
 
 /**
  * Meta Instagram webhook receiver. Public route (excluded from the auth
@@ -75,6 +76,7 @@ export async function POST(request: NextRequest) {
   let queued = 0
   let errorMessage: string | null = null
   const gateReplies: { gate: OpenGate; senderId: string }[] = []
+  const aiMessages: { threadId: string; text: string }[] = []
 
   try {
     const events = parseCommentEvents(payload)
@@ -103,7 +105,11 @@ export async function POST(request: NextRequest) {
           gateReplies.push({ gate, senderId: message.senderId })
           continue
         }
-        if (await queueMatchingMessage(message, { knownContact: contact.known })) queued++
+        // A keyword for an automation (new conversation) wins; otherwise a
+        // reply in an AI assistant conversation goes to the assistant.
+        const aiThread = account ? await findAiThread(account.id, message.senderId) : null
+        if (await queueMatchingMessage(message, { knownContact: contact.known || Boolean(aiThread) })) queued++
+        else if (aiThread) aiMessages.push({ threadId: aiThread.id, text: message.text })
       }
     } catch (err) {
       console.error("[Instagram Webhook] message trigger error:", err)
@@ -113,7 +119,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from("webhook_events")
         .update({
-          status: queued > 0 || gateReplies.length > 0 ? "processed" : "ignored",
+          status: queued > 0 || gateReplies.length > 0 || aiMessages.length > 0 ? "processed" : "ignored",
           processed_at: new Date().toISOString(),
         })
         .eq("id", eventRow.id)
@@ -148,6 +154,15 @@ export async function POST(request: NextRequest) {
     after(async () => {
       for (const { gate, senderId } of gateReplies) {
         await handleGateReply(gate, senderId)
+      }
+    })
+  }
+
+  // AI assistant answers (Claude takes a second or two): after responding.
+  if (aiMessages.length > 0) {
+    after(async () => {
+      for (const { threadId, text } of aiMessages) {
+        await handleAiMessage(threadId, text)
       }
     })
   }
