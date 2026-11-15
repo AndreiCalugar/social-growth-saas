@@ -21,6 +21,7 @@ import {
   MousePointerClick,
   UserPlus,
   Zap,
+  Check,
 } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
 import { InstagramAccountAvatar } from "@/components/instagram-account-avatar"
@@ -36,6 +37,7 @@ import { cn } from "@/lib/utils"
 import { trackEvent } from "@/lib/analytics"
 import { DmTemplatePicker } from "@/components/dm-template-picker"
 import type { TemplateDraft } from "@/lib/dm-templates"
+import { automationTriggers, normalizeTriggers, type TriggerType } from "@/lib/dm-triggers"
 
 export type DmAccount = ConnectedInstagramAccount
 
@@ -55,12 +57,14 @@ export interface DmAutomation {
   track_clicks?: boolean
   // Missing until schema/025 has run (then everything is "comment").
   trigger_type?: TriggerType
+  // Missing until schema/027 has run (then trigger_type is the only one).
+  triggers?: TriggerType[]
   // Missing until schema/026 has run.
   follow_gate?: boolean
   created_at: string
 }
 
-export type TriggerType = "comment" | "dm" | "story_reply"
+export type { TriggerType }
 
 const TRIGGERS: { value: TriggerType; label: string; hint: string }[] = [
   { value: "comment", label: "Comment", hint: "On a post or reel" },
@@ -68,16 +72,17 @@ const TRIGGERS: { value: TriggerType; label: string; hint: string }[] = [
   { value: "story_reply", label: "Story reply", hint: "Story replies only" },
 ]
 
-// "Comments on any post containing", shown on each automation row.
+// "Comments on any post or DMs containing", shown on each automation row.
 function triggerSummary(automation: DmAutomation): string {
-  switch (automation.trigger_type ?? "comment") {
-    case "dm":
-      return "DMs containing"
-    case "story_reply":
-      return "Story replies containing"
-    default:
-      return `Comments on ${automation.match_any_post ? "any post" : "a post"} containing`
-  }
+  const parts = automationTriggers(automation).map((t) =>
+    t === "comment"
+      ? `comments on ${automation.match_any_post ? "any post" : "a post"}`
+      : t === "dm"
+        ? "DMs"
+        : "story replies"
+  )
+  const text = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts.at(-1)}` : parts[0]
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)} containing`
 }
 
 export interface AutomationSendStats {
@@ -124,7 +129,8 @@ interface InstagramPost {
 }
 
 interface FormState {
-  trigger: TriggerType
+  // At least one; "dm" also covers story replies (see normalizeTriggers).
+  triggers: TriggerType[]
   name: string
   matchAnyPost: boolean
   postId: string | null
@@ -140,7 +146,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  trigger: "comment",
+  triggers: ["comment"],
   name: "",
   matchAnyPost: false,
   postId: null,
@@ -1015,7 +1021,7 @@ function AutomationForm({
   const [form, setForm] = useState<FormState>(
     editing
       ? {
-          trigger: editing.trigger_type ?? "comment",
+          triggers: automationTriggers(editing),
           name: editing.name,
           matchAnyPost: editing.match_any_post,
           postId: editing.post_id,
@@ -1047,8 +1053,11 @@ function AutomationForm({
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState<PreviewMode>("comment")
-  const isComment = form.trigger === "comment"
-  // Step numbers shift: DM and story automations skip "post" and "public reply".
+  const isComment = form.triggers.includes("comment")
+  const hasDm = form.triggers.includes("dm")
+  const hasStory = form.triggers.includes("story_reply")
+  const hasMessage = hasDm || hasStory
+  // Step numbers shift: without comments there's no "post" or "public reply" step.
   const stepKeywords = isComment ? 3 : 2
   const [previewReplyIndex, setPreviewReplyIndex] = useState(0)
 
@@ -1119,9 +1128,9 @@ function AutomationForm({
 
     setSaving(true)
     try {
-      // DM and story-reply automations have no post and no public reply.
+      // Without comments there's no post and no public reply.
       const payload = {
-        trigger_type: form.trigger,
+        triggers: form.triggers,
         name: form.name,
         match_any_post: isComment && form.matchAnyPost,
         post_id: isComment && !form.matchAnyPost ? form.postId : null,
@@ -1207,47 +1216,63 @@ function AutomationForm({
               )}
 
               {/* Step 1: what starts it */}
-              <Step n={1} title="What starts it" note="Pick one">
-                <div role="radiogroup" aria-label="What starts it" className="grid grid-cols-3 gap-2">
-                  {TRIGGERS.map((t) => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={form.trigger === t.value}
-                      onClick={() => {
-                        setForm((f) => ({ ...f, trigger: t.value }))
-                        setPreviewMode(t.value === "comment" ? "comment" : "dm")
-                      }}
-                      className={cn(
-                        "rounded-lg border px-2 py-2 text-left transition-colors",
-                        form.trigger === t.value
-                          ? "border-purple-500 bg-purple-50"
-                          : "border-slate-200 bg-white hover:border-slate-300"
-                      )}
-                    >
-                      <span className={cn("flex items-center gap-1.5 text-xs font-semibold", form.trigger === t.value ? "text-purple-700" : "text-slate-700")}>
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border",
-                            form.trigger === t.value ? "border-purple-600" : "border-slate-300 bg-white"
-                          )}
-                        >
-                          {form.trigger === t.value && <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />}
+              <Step n={1} title="What starts it" note="Pick one or more">
+                <div role="group" aria-label="What starts it" className="grid grid-cols-3 gap-2">
+                  {TRIGGERS.map((t) => {
+                    // DM already catches story replies, so Story reply shows as included.
+                    const included = t.value === "story_reply" && hasDm
+                    const checked = form.triggers.includes(t.value) || included
+                    return (
+                      <button
+                        key={t.value}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={checked}
+                        disabled={included}
+                        onClick={() => {
+                          const next = checked
+                            ? form.triggers.filter((x) => x !== t.value)
+                            : [...form.triggers, t.value]
+                          // Keep at least one trigger.
+                          const triggers = normalizeTriggers(next)
+                          if (!triggers) return
+                          setForm((f) => ({ ...f, triggers }))
+                          // Preview what was just ticked, or what's left after unticking.
+                          const show = checked ? triggers[0] : t.value
+                          setPreviewMode(show === "comment" ? "comment" : "dm")
+                        }}
+                        className={cn(
+                          "rounded-lg border px-2 py-2 text-left transition-colors",
+                          checked ? "border-purple-500 bg-purple-50" : "border-slate-200 bg-white hover:border-slate-300",
+                          included && "cursor-default opacity-70"
+                        )}
+                      >
+                        <span className={cn("flex items-center gap-1.5 text-xs font-semibold", checked ? "text-purple-700" : "text-slate-700")}>
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
+                              checked ? "border-purple-600 bg-purple-600 text-white" : "border-slate-300 bg-white"
+                            )}
+                          >
+                            {checked && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                          </span>
+                          {t.label}
                         </span>
-                        {t.label}
-                      </span>
-                      <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">{t.hint}</span>
-                    </button>
-                  ))}
+                        <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">
+                          {included ? "Included in DM" : t.hint}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
-                {!isComment && (
+                {hasMessage && (
                   <p className="mt-2 text-[11px] leading-snug text-slate-500">
-                    {form.trigger === "dm"
+                    {hasDm
                       ? "When someone sends you a message with your keyword, or replies to one of your stories with it, they get your DM right back."
-                      : "When someone replies to one of your stories with your keyword, they get your DM right back. Normal messages are ignored — pick DM to catch both."}{" "}
-                    Each person gets it at most once a day.
+                      : "When someone replies to one of your stories with your keyword, they get your DM right back. Normal messages are ignored — tick DM to catch both."}{" "}
+                    Each person gets it at most once a day
+                    {isComment ? ", even if they also comment." : "."}
                   </p>
                 )}
               </Step>
@@ -1347,13 +1372,13 @@ function AutomationForm({
               {/* Keywords */}
               <Step
                 n={stepKeywords}
-                title={
-                  form.trigger === "dm"
-                    ? "And the message contains"
-                    : form.trigger === "story_reply"
-                      ? "And the story reply contains"
-                      : "And the comment contains"
-                }
+                title={`And the ${[
+                  isComment && "comment",
+                  hasDm && "message",
+                  hasStory && "story reply",
+                ]
+                  .filter(Boolean)
+                  .join(" or ")} contains`}
               >
                 <div
                   onFocus={() => setPreviewMode(isComment ? "comment" : "dm")}
@@ -1468,9 +1493,11 @@ function AutomationForm({
                       Ask them to follow first
                     </span>
                     <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
-                      {isComment
-                        ? "They first get a short message with a “Send me the link” button. Tapping it sends your DM if they follow you, or asks them to follow first."
-                        : "Followers get your DM right away. Everyone else is asked to follow first, then tap a button to get it."}
+                      {isComment && hasMessage
+                        ? "Commenters first get a short message with a “Send me the link” button. People who message you: followers get your DM right away, everyone else is asked to follow first."
+                        : isComment
+                          ? "They first get a short message with a “Send me the link” button. Tapping it sends your DM if they follow you, or asks them to follow first."
+                          : "Followers get your DM right away. Everyone else is asked to follow first, then tap a button to get it."}
                     </span>
                   </span>
                   <button

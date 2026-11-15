@@ -1,8 +1,9 @@
 import { supabase } from "@/lib/supabase"
 import { matchKeywords } from "@/lib/meta/keyword-matcher"
 import type { WebhookCommentEvent, WebhookMessageEvent } from "@/lib/meta/webhook"
+import { automationTriggers, messageTrigger, type TriggerType } from "@/lib/dm-triggers"
 
-export type TriggerType = "comment" | "dm" | "story_reply"
+export type { TriggerType }
 
 interface AutomationRow {
   id: string
@@ -12,7 +13,7 @@ interface AutomationRow {
   match_any_post: boolean
   keywords: string[]
   whole_word_match: boolean
-  trigger_type: TriggerType
+  triggers: TriggerType[]
 }
 
 const AUTOMATION_COLUMNS =
@@ -23,27 +24,24 @@ const AUTOMATION_COLUMNS =
 const MESSAGE_TRIGGER_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
 /**
- * The account's active automations. Before schema/025 runs there is no
- * trigger_type column: then every automation is a comment automation, so
- * the comment flow behaves exactly as it did.
+ * The account's active automations with their triggers. Falls back step by
+ * step for databases without schema/027 (single trigger_type) or without
+ * schema/025 (every automation is a comment automation), so the comment
+ * flow behaves exactly as before either way.
  */
 async function loadActiveAutomations(accountId: string): Promise<AutomationRow[]> {
-  const { data, error } = await supabase
-    .from("dm_automations")
-    .select(`${AUTOMATION_COLUMNS}, trigger_type`)
-    .eq("instagram_account_id", accountId)
-    .eq("is_active", true)
-  if (!error) return (data ?? []) as AutomationRow[]
-
-  const { data: legacy } = await supabase
-    .from("dm_automations")
-    .select(AUTOMATION_COLUMNS)
-    .eq("instagram_account_id", accountId)
-    .eq("is_active", true)
-  return ((legacy ?? []) as Omit<AutomationRow, "trigger_type">[]).map((a) => ({
-    ...a,
-    trigger_type: "comment",
-  }))
+  for (const extra of [", triggers, trigger_type", ", trigger_type", ""]) {
+    const { data, error } = await supabase
+      .from("dm_automations")
+      .select(AUTOMATION_COLUMNS + extra)
+      .eq("instagram_account_id", accountId)
+      .eq("is_active", true)
+    if (error) continue
+    return ((data ?? []) as unknown as (Omit<AutomationRow, "triggers"> & { triggers?: string[]; trigger_type?: string })[]).map(
+      ({ triggers, trigger_type, ...a }) => ({ ...a, triggers: automationTriggers({ triggers, trigger_type }) })
+    )
+  }
+  return []
 }
 
 /**
@@ -77,8 +75,8 @@ export async function queueMatchingComment(
     .maybeSingle()
   if (!account) return false
 
-  const automations = (await loadActiveAutomations(account.id)).filter(
-    (a) => (a.trigger_type ?? "comment") === "comment"
+  const automations = (await loadActiveAutomations(account.id)).filter((a) =>
+    a.triggers.includes("comment")
   )
 
   for (const automation of automations) {
@@ -122,10 +120,10 @@ export async function queueMatchingComment(
 }
 
 /**
- * Match an incoming DM against the account's DM and story-reply
- * automations and queue the answer. A story reply is checked against
- * story-reply automations first, then DM automations (it is a DM too); a
- * plain DM only against DM automations. The message id goes in
+ * Match an incoming DM against the account's automations that listen to
+ * DMs or story replies, and queue the answer. A story reply is checked
+ * against story-reply automations first, then DM automations (it is a DM
+ * too); a plain DM only against DM automations. The message id goes in
  * dm_logs.comment_id, so a webhook delivered twice is queued once.
  *
  * Returns true if a new row was queued.
@@ -142,9 +140,13 @@ export async function queueMatchingMessage(
 
   const all = await loadActiveAutomations(account.id)
   const order: TriggerType[] = event.isStoryReply ? ["story_reply", "dm"] : ["dm"]
-  const candidates = order.flatMap((type) => all.filter((a) => a.trigger_type === type))
+  const candidates = order.flatMap((type) =>
+    all
+      .filter((a) => messageTrigger(a.triggers, event.isStoryReply) === type)
+      .map((automation) => ({ automation, trigger: type }))
+  )
 
-  for (const automation of candidates) {
+  for (const { automation, trigger } of candidates) {
     const match = matchKeywords(
       event.text,
       Array.isArray(automation.keywords) ? automation.keywords : [],
@@ -152,8 +154,10 @@ export async function queueMatchingMessage(
     )
     if (!match.matched) continue
 
-    // Already answered this person recently → do nothing (no other
-    // automation either: they're mid-conversation about this one).
+    // Already answered this person recently by this automation — through
+    // any trigger, so someone who comments and then also DMs the keyword
+    // gets the link once → do nothing (no other automation either: they're
+    // mid-conversation about this one).
     const since = new Date(Date.now() - MESSAGE_TRIGGER_COOLDOWN_MS).toISOString()
     const { count } = await supabase
       .from("dm_logs")
@@ -171,7 +175,7 @@ export async function queueMatchingMessage(
       comment_id: event.messageId,
       comment_text: event.text,
       matched_keyword: match.matchedKeyword,
-      trigger_type: automation.trigger_type,
+      trigger_type: trigger,
       status: "pending",
     })
     if (insertError && insertError.code !== "23505") {

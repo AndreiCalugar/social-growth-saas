@@ -16,7 +16,7 @@ test("creates an automation on a phone without sideways scrolling", async ({ pag
   await page.getByRole("button", { name: /Free guide/ }).click()
   await page.getByPlaceholder("https://").fill("https://example.com/ebook")
   await page.getByRole("button", { name: /Continue/ }).click()
-  await page.getByRole("button", { name: "Any post" }).click()
+  await page.getByRole("button", { name: "Any post", exact: true }).click()
   expect(await page.evaluate(noHorizontalScroll), "editor fits the screen").toBe(true)
   await page.getByRole("button", { name: "Go live" }).click()
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { joinReplyVariants, parseReplyVariants } from "@/lib/meta/reply-variants"
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
+import { normalizeTriggers, primaryTrigger } from "@/lib/dm-triggers"
 
 const MAX_KEYWORDS = 20
 const MAX_MESSAGE_LENGTH = 1000
@@ -18,6 +19,8 @@ interface AutomationPatch {
   public_reply_message?: string | null
   is_active?: boolean
   track_clicks?: boolean
+  /** What starts it (schema/027). Older clients send trigger_type instead. */
+  triggers?: string[]
   trigger_type?: string
   follow_gate?: boolean
 }
@@ -99,13 +102,16 @@ export async function PATCH(
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active)
   if (body.track_clicks !== undefined) patch.track_clicks = Boolean(body.track_clicks)
   if (body.follow_gate !== undefined) patch.follow_gate = Boolean(body.follow_gate)
-  if (body.trigger_type !== undefined) {
-    if (!["comment", "dm", "story_reply"].includes(body.trigger_type)) {
-      return NextResponse.json({ error: "trigger_type must be comment, dm or story_reply" }, { status: 400 })
+  const triggerInput = body.triggers ?? (body.trigger_type !== undefined ? [body.trigger_type] : undefined)
+  if (triggerInput !== undefined) {
+    const triggers = normalizeTriggers(triggerInput)
+    if (!triggers) {
+      return NextResponse.json({ error: "triggers must be one or more of comment, dm, story_reply" }, { status: 400 })
     }
-    patch.trigger_type = body.trigger_type
-    if (body.trigger_type !== "comment") {
-      // DM and story-reply automations have no post and no public reply.
+    patch.triggers = triggers
+    patch.trigger_type = primaryTrigger(triggers)
+    if (!triggers.includes("comment")) {
+      // Without comments there's no post and no public reply.
       patch.match_any_post = false
       patch.post_id = null
       patch.post_url = null
@@ -136,6 +142,18 @@ export async function PATCH(
       { error: "The follow-gate needs a database update (schema/026) first." },
       { status: 503 }
     )
+  }
+  // Before schema/027 a single trigger still fits in trigger_type alone;
+  // several must not be half-saved.
+  if (error && Array.isArray(patch.triggers) && error.message.includes("triggers")) {
+    if (patch.triggers.length > 1) {
+      return NextResponse.json(
+        { error: "Several triggers in one automation need a database update (schema/027) first." },
+        { status: 503 }
+      )
+    }
+    delete patch.triggers
+    ;({ data: automation, error } = await update(patch))
   }
   // Before schema/025 every automation is a comment one, so "comment"
   // needs no column. Anything else must not be half-saved.
