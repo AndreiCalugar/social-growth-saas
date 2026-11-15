@@ -6,7 +6,29 @@
 import { getMetaGraphApiVersion, requireEnv } from "@/lib/meta/env"
 
 function instagramGraphBase() {
-  return `https://graph.instagram.com/${getMetaGraphApiVersion()}`
+  // META_GRAPH_BASE_URL points the app at a simulated Instagram for local
+  // end-to-end tests (scripts/meta-simulator). Never set it in production.
+  const base = process.env.META_GRAPH_BASE_URL ?? "https://graph.instagram.com"
+  return `${base.replace(/\/$/, "")}/${getMetaGraphApiVersion()}`
+}
+
+/** A tap-to-answer button under a DM. The payload comes back in the webhook. */
+export interface QuickReply {
+  title: string
+  payload: string
+}
+
+function messageBody(text: string, quickReplies?: QuickReply[]) {
+  return quickReplies?.length
+    ? {
+        text,
+        quick_replies: quickReplies.map((q) => ({
+          content_type: "text",
+          title: q.title,
+          payload: q.payload,
+        })),
+      }
+    : { text }
 }
 
 export class MetaApiError extends Error {
@@ -122,7 +144,8 @@ export async function sendPrivateReply(
   accessToken: string,
   instagramAccountId: string,
   commentId: string,
-  message: string
+  message: string,
+  quickReplies?: QuickReply[]
 ): Promise<{ recipient_id: string; message_id: string }> {
   const response = await fetch(
     `${instagramGraphBase()}/${instagramAccountId}/messages`,
@@ -134,12 +157,59 @@ export async function sendPrivateReply(
       },
       body: JSON.stringify({
         recipient: { comment_id: commentId },
-        message: { text: message },
+        message: messageBody(message, quickReplies),
       }),
     }
   )
 
   return handleResponse(response)
+}
+
+/**
+ * A normal DM to someone who messaged the account (Send API). Allowed for
+ * 24 hours after their last message, which is the window DM and
+ * story-reply automations answer in.
+ */
+export async function sendDirectMessage(
+  accessToken: string,
+  instagramAccountId: string,
+  recipientId: string,
+  message: string,
+  quickReplies?: QuickReply[]
+): Promise<{ recipient_id: string; message_id: string }> {
+  const response = await fetch(
+    `${instagramGraphBase()}/${instagramAccountId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        recipient: { id: recipientId },
+        message: messageBody(message, quickReplies),
+      }),
+    }
+  )
+
+  return handleResponse(response)
+}
+
+/**
+ * Whether this person follows the connected account. Instagram only
+ * answers for people who have messaged the account ("User consent is
+ * required" otherwise), so call it after they wrote or tapped a button.
+ */
+export async function getFollowStatus(
+  accessToken: string,
+  igsid: string
+): Promise<boolean> {
+  const response = await fetch(
+    `${instagramGraphBase()}/${encodeURIComponent(igsid)}?fields=is_user_follow_business`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  )
+  const data = await handleResponse<{ is_user_follow_business?: boolean }>(response)
+  return Boolean(data.is_user_follow_business)
 }
 
 export async function sendCommentReply(

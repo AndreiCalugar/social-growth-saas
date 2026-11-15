@@ -75,6 +75,29 @@ interface WebhookEntry {
       media_id?: string
     }
   }>
+  messaging?: Array<{
+    sender?: { id?: string }
+    recipient?: { id?: string }
+    timestamp?: number
+    message?: {
+      mid?: string
+      text?: string
+      // Our own outgoing messages (including the automation's DMs) come
+      // back as echoes and must never trigger anything.
+      is_echo?: boolean
+      is_deleted?: boolean
+      reply_to?: { story?: { id?: string; url?: string }; mid?: string }
+    }
+  }>
+}
+
+/** A DM to the connected account: a plain message or a reply to a story. */
+export interface WebhookMessageEvent {
+  instagramAccountId: string
+  messageId: string
+  senderId: string
+  text: string
+  isStoryReply: boolean
 }
 
 export interface WebhookPayload {
@@ -124,6 +147,37 @@ export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent
         commenterName: value.from?.username,
         mediaId,
         originalMediaId,
+      })
+    }
+  }
+
+  return events
+}
+
+/**
+ * Incoming DMs with text, for DM-keyword and story-reply automations.
+ * Skips echoes of our own messages, messages the account sent itself,
+ * deleted messages and messages without text (stickers, shared reels).
+ */
+export function parseMessageEvents(payload: WebhookPayload): WebhookMessageEvent[] {
+  const events: WebhookMessageEvent[] = []
+  if (payload.object !== "instagram") return events
+
+  for (const entry of payload.entry ?? []) {
+    for (const item of entry.messaging ?? []) {
+      const message = item.message
+      const senderId = item.sender?.id
+      const text = message?.text?.trim()
+      if (!entry.id || !message?.mid || !senderId || !text) continue
+      if (message.is_echo || message.is_deleted) continue
+      if (senderId === entry.id) continue
+
+      events.push({
+        instagramAccountId: entry.id,
+        messageId: message.mid,
+        senderId,
+        text,
+        isStoryReply: Boolean(message.reply_to?.story),
       })
     }
   }

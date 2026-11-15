@@ -55,6 +55,10 @@ export async function pollAutomationComments(): Promise<{
 }> {
   const result = { queued: 0, errors: 0 }
 
+  // Against the Instagram simulator (local tests) polling would query real
+  // accounts' posts on the fake API. Webhooks cover the simulated flows.
+  if (process.env.META_GRAPH_BASE_URL) return result
+
   const { data: automations } = await supabase
     .from("dm_automations")
     .select("instagram_account_id, post_id, match_any_post, created_at")

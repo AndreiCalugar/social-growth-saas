@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  MessageCircle,
+  Sparkles,
   Plus,
   Trash2,
   Pencil,
@@ -14,11 +14,12 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Send,
   Grid3X3,
   Settings,
   MessageSquareReply,
   ExternalLink,
+  MousePointerClick,
+  UserPlus,
   Zap,
 } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
@@ -33,6 +34,8 @@ import {
 } from "@/lib/meta/reply-variants"
 import { cn } from "@/lib/utils"
 import { trackEvent } from "@/lib/analytics"
+import { DmTemplatePicker } from "@/components/dm-template-picker"
+import type { TemplateDraft } from "@/lib/dm-templates"
 
 export type DmAccount = ConnectedInstagramAccount
 
@@ -48,7 +51,49 @@ export interface DmAutomation {
   public_reply_enabled: boolean
   public_reply_message: string | null
   is_active: boolean
+  // Missing until schema/024 has run.
+  track_clicks?: boolean
+  // Missing until schema/025 has run (then everything is "comment").
+  trigger_type?: TriggerType
+  // Missing until schema/026 has run.
+  follow_gate?: boolean
   created_at: string
+}
+
+export type TriggerType = "comment" | "dm" | "story_reply"
+
+const TRIGGERS: { value: TriggerType; label: string; hint: string }[] = [
+  { value: "comment", label: "Comment", hint: "On a post or reel" },
+  { value: "dm", label: "DM", hint: "Messages and story replies" },
+  { value: "story_reply", label: "Story reply", hint: "Story replies only" },
+]
+
+// "Comments on any post containing", shown on each automation row.
+function triggerSummary(automation: DmAutomation): string {
+  switch (automation.trigger_type ?? "comment") {
+    case "dm":
+      return "DMs containing"
+    case "story_reply":
+      return "Story replies containing"
+    default:
+      return `Comments on ${automation.match_any_post ? "any post" : "a post"} containing`
+  }
+}
+
+export interface AutomationSendStats {
+  sent: number
+  pending: number
+  failed: number
+}
+
+// Rows of recent activity shown per "page".
+const ACTIVITY_PAGE = 8
+
+/** Per-automation link click numbers (only DMs sent with tracking count). */
+export interface ClickStats {
+  byAutomation: Record<string, { trackedDms: number; clickedDms: number; clicks: number }>
+  clickedLogIds: string[]
+  totalClickedDms: number
 }
 
 export interface DmLogRow {
@@ -62,6 +107,8 @@ export interface DmLogRow {
   error_message: string | null
   dm_sent_at: string | null
   public_reply_sent_at: string | null
+  // Follow-gate progress (schema/026); null when the automation isn't gated.
+  gate_status?: "awaiting_tap" | "awaiting_follow" | "delivered" | null
   created_at: string
 }
 
@@ -77,6 +124,7 @@ interface InstagramPost {
 }
 
 interface FormState {
+  trigger: TriggerType
   name: string
   matchAnyPost: boolean
   postId: string | null
@@ -87,9 +135,12 @@ interface FormState {
   publicReplyEnabled: boolean
   // Reply variations; one is picked at random per comment.
   publicReplyMessages: string[]
+  trackClicks: boolean
+  followGate: boolean
 }
 
 const EMPTY_FORM: FormState = {
+  trigger: "comment",
   name: "",
   matchAnyPost: false,
   postId: null,
@@ -99,27 +150,52 @@ const EMPTY_FORM: FormState = {
   dmMessage: "",
   publicReplyEnabled: false,
   publicReplyMessages: [""],
+  // On for new automations; existing ones keep whatever they had.
+  trackClicks: true,
+  followGate: false,
 }
 
 export function DmsClient({
   account,
   initialAutomations,
   initialLogs,
-  stats,
-  sentByAutomation,
+  statsByAutomation,
+  clickStats,
   beta,
 }: {
   beta: BetaRequest
   account: DmAccount | null
   initialAutomations: DmAutomation[]
   initialLogs: DmLogRow[]
-  stats: { sent: number; pending: number; failed: number }
-  sentByAutomation: Record<string, number>
+  statsByAutomation: Record<string, AutomationSendStats>
+  clickStats: ClickStats
 }) {
+  const clickedLogs = useMemo(() => new Set(clickStats.clickedLogIds), [clickStats.clickedLogIds])
+  // Activity list: "all" or one automation's id, shown a page at a time.
+  const [activityFilter, setActivityFilter] = useState<string>("all")
+  const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE)
+  const filteredLogs = useMemo(
+    () =>
+      activityFilter === "all"
+        ? initialLogs
+        : initialLogs.filter((log) => log.automation_id === activityFilter),
+    [initialLogs, activityFilter]
+  )
+
+  // Clicking an automation row toggles the activity filter to it.
+  function showActivityFor(automationId: string) {
+    const next = activityFilter === automationId ? "all" : automationId
+    setActivityFilter(next)
+    setActivityLimit(ACTIVITY_PAGE)
+    if (next !== "all") document.getElementById("activity")?.scrollIntoView({ behavior: "smooth" })
+  }
   const router = useRouter()
   const [automations, setAutomations] = useState(initialAutomations)
   const [showForm, setShowForm] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
   const [editing, setEditing] = useState<DmAutomation | null>(null)
+  // Prefill from a template for a new automation; null = blank form.
+  const [draft, setDraft] = useState<TemplateDraft | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -131,6 +207,14 @@ export function DmsClient({
 
   if (!account) {
     return <NotConnectedState beta={beta} />
+  }
+
+  function openNew(fromDraft: TemplateDraft | null) {
+    setEditing(null)
+    setDraft(fromDraft)
+    setShowPicker(false)
+    setShowForm(true)
+    if (fromDraft) trackEvent("dm_template_picked", { template: fromDraft.templateId })
   }
 
   async function toggleActive(automation: DmAutomation) {
@@ -199,10 +283,7 @@ export function DmsClient({
           </p>
         </div>
         <button
-          onClick={() => {
-            setEditing(null)
-            setShowForm(true)
-          }}
+          onClick={() => setShowPicker(true)}
           className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -296,14 +377,7 @@ export function DmsClient({
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard icon={Send} label="DMs sent" value={stats.sent} tone="purple" />
-        <StatCard icon={Clock} label="Queued" value={stats.pending} tone="slate" />
-        <StatCard icon={XCircle} label="Failed" value={stats.failed} tone="red" />
-      </div>
-
-      {/* Automations */}
+      {/* Automations: one row each, with its own numbers (like ManyChat) */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-900">
           Automations{" "}
@@ -313,179 +387,196 @@ export function DmsClient({
         </h2>
 
         {automations.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 sm:p-8">
-            <div className="text-center">
-              <MessageCircle className="h-8 w-8 text-slate-300 mx-auto" />
-              <p className="text-sm font-medium text-slate-700 mt-3">
-                No automations yet
-              </p>
+          // First automation: lead with templates so new creators don't
+          // stall on a blank form.
+          <div className="rounded-xl border border-slate-200/60 bg-gradient-to-br from-purple-50/80 via-white to-indigo-50/60 p-4 sm:p-6">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              <p className="text-sm font-semibold text-slate-900">Create your first automation in a minute</p>
             </div>
-            <ol className="mt-5 grid gap-3 sm:grid-cols-3">
-              {[
-                { icon: Grid3X3, title: "Pick a post", text: "Choose a post or reel — or let it run on any post." },
-                { icon: Zap, title: "Choose a keyword", text: "Like “LINK” — the word people comment to get your message." },
-                { icon: Send, title: "Write the DM", text: "It's sent automatically, seconds after they comment." },
-              ].map((step, i) => (
-                <li key={step.title} className="rounded-lg bg-slate-50 p-3">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-[11px] font-bold text-white">
-                      {i + 1}
-                    </span>
-                    <step.icon className="h-4 w-4 text-purple-600" />
-                    <span className="text-xs font-semibold text-slate-800">{step.title}</span>
-                  </div>
-                  <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">{step.text}</p>
-                </li>
-              ))}
-            </ol>
-            <div className="mt-5 text-center">
-              <button
-                onClick={() => {
-                  setEditing(null)
-                  setShowForm(true)
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Create your first automation
-              </button>
+            <p className="mt-1 text-xs text-slate-500">
+              Pick what you want to send. People comment a keyword on your post and get your DM seconds later.
+            </p>
+            <div className="mt-4">
+              <DmTemplatePicker variant="inline" onPick={openNew} onScratch={() => openNew(null)} />
             </div>
           </div>
         )}
 
-        {automations.map((automation) => (
-          <div
-            key={automation.id}
-            className={cn(
-              "rounded-xl border bg-white p-4 shadow-sm transition-opacity",
-              automation.is_active
-                ? "border-slate-200/60"
-                : "border-slate-200/60 opacity-60"
-            )}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900 truncate">
-                    {automation.name}
-                  </h3>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                      automation.is_active
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-slate-100 text-slate-500"
-                    )}
-                  >
-                    {automation.is_active ? "Active" : "Paused"}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                  <span className="inline-flex items-center gap-1 font-semibold text-purple-700">
-                    <Send className="h-3.5 w-3.5" />
-                    {sentByAutomation[automation.id] ?? 0} DMs sent
-                  </span>
-                  {automation.match_any_post ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Grid3X3 className="h-3.5 w-3.5" />
-                      Any post
-                    </span>
-                  ) : automation.post_url ? (
-                    <a
-                      href={automation.post_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-purple-600 hover:underline"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      View post
-                    </a>
-                  ) : (
-                    <span>Specific post</span>
-                  )}
-                  <span>{automation.whole_word_match ? "Whole word" : "Partial match"}</span>
-                  {automation.public_reply_enabled && (
-                    <span className="inline-flex items-center gap-1">
-                      <MessageSquareReply className="h-3.5 w-3.5" />
-                      Public reply
-                      {parseReplyVariants(automation.public_reply_message).length > 1 &&
-                        ` · ${parseReplyVariants(automation.public_reply_message).length} variations`}
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {automation.keywords.map((kw) => (
-                    <span
-                      key={kw}
-                      className="inline-flex items-center rounded-md bg-purple-50 border border-purple-200/60 px-2 py-0.5 text-xs font-medium text-purple-700"
-                    >
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-2.5 max-w-md text-xs text-white line-clamp-3 whitespace-pre-line rounded-2xl rounded-bl-md bg-gradient-to-br from-purple-600 to-indigo-600 px-3 py-2">
-                  {automation.dm_message}
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={() => toggleActive(automation)}
-                  disabled={busyId === automation.id}
-                  title={automation.is_active ? "Pause" : "Activate"}
-                  className={cn(
-                    "relative h-6 w-11 rounded-full transition-colors",
-                    automation.is_active ? "bg-purple-600" : "bg-slate-300"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-                      automation.is_active ? "translate-x-5" : "translate-x-0"
-                    )}
-                  />
-                </button>
-                <button
-                  onClick={() => {
-                    setEditing(automation)
-                    setShowForm(true)
-                  }}
-                  title="Edit"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => deleteAutomation(automation)}
-                  disabled={busyId === automation.id}
-                  title="Delete"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+        {automations.length > 0 && (
+          <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm">
+            {/* Column headers (desktop) */}
+            <div className="hidden md:grid grid-cols-[minmax(0,1fr)_64px_64px_64px_96px_112px] items-center gap-4 border-b border-slate-100 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <span>Name</span>
+              <span className="text-right">DMs</span>
+              <span className="text-right" title="People who opened the link in your DM">Clicks</span>
+              <span className="text-right" title="Clicks ÷ DMs sent with click tracking on">CTR</span>
+              <span className="text-right">Created</span>
+              <span />
             </div>
+
+            {automations.map((automation) => {
+              const send = statsByAutomation[automation.id] ?? { sent: 0, pending: 0, failed: 0 }
+              const clicks = clickStats.byAutomation[automation.id]
+              const ctr = clicks && clicks.trackedDms > 0 ? Math.round((clicks.clickedDms / clicks.trackedDms) * 100) : null
+              const selected = activityFilter === automation.id
+              return (
+                <div
+                  key={automation.id}
+                  className={cn(
+                    "grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_64px_64px_64px_96px_112px] items-center gap-x-4 gap-y-2 border-b border-slate-100 px-4 py-3.5 last:border-0 transition-colors",
+                    selected ? "bg-purple-50/60" : "hover:bg-slate-50/70"
+                  )}
+                >
+                  {/* Name + trigger */}
+                  <button
+                    onClick={() => showActivityFor(automation.id)}
+                    title="Show this automation's activity"
+                    className="min-w-0 text-left"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                          automation.is_active ? "bg-red-600 text-white" : "bg-slate-100 text-slate-500"
+                        )}
+                      >
+                        {automation.is_active ? "Live" : "Paused"}
+                      </span>
+                      <span className="truncate text-sm font-semibold text-slate-900">{automation.name}</span>
+                    </span>
+                    <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
+                      <InstagramIcon className="h-3.5 w-3.5 shrink-0" />
+                      {triggerSummary(automation)}
+                      {automation.keywords.slice(0, 3).map((kw) => (
+                        <span
+                          key={kw}
+                          className="rounded-md border border-purple-200/60 bg-purple-50 px-1.5 py-px font-medium text-purple-700"
+                        >
+                          {kw}
+                        </span>
+                      ))}
+                      {automation.keywords.length > 3 && <span>+{automation.keywords.length - 3}</span>}
+                      {automation.follow_gate && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-px font-medium text-slate-600">
+                          <UserPlus className="h-3 w-3" /> Followers only
+                        </span>
+                      )}
+                    </span>
+                    {(send.failed > 0 || send.pending > 0) && (
+                      <span className="mt-1.5 flex flex-wrap gap-1.5">
+                        {send.failed > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+                            <XCircle className="h-3 w-3" /> {send.failed} failed
+                          </span>
+                        )}
+                        {send.pending > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                            <Clock className="h-3 w-3" /> {send.pending} queued
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Numbers: columns on desktop, a compact line on mobile */}
+                  <span className="hidden md:block text-right text-sm font-semibold tabular-nums text-slate-900">{send.sent}</span>
+                  <span className="hidden md:block text-right text-sm tabular-nums text-slate-700">
+                    {clicks ? clicks.clickedDms : "—"}
+                  </span>
+                  <span
+                    className={cn("hidden md:block text-right text-sm font-semibold tabular-nums", ctr === null ? "text-slate-300" : "text-emerald-700")}
+                    title={ctr === null ? (automation.track_clicks ? "Shows after the first tracked DMs go out" : "Turn on click tracking to see this") : undefined}
+                  >
+                    {ctr === null ? "—" : `${ctr}%`}
+                  </span>
+                  <span className="hidden md:block text-right text-xs text-slate-400">{formatRelative(automation.created_at)}</span>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => toggleActive(automation)}
+                      disabled={busyId === automation.id}
+                      title={automation.is_active ? "Pause" : "Activate"}
+                      className={cn(
+                        "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+                        automation.is_active ? "bg-purple-600" : "bg-slate-300"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                          automation.is_active && "translate-x-4"
+                        )}
+                      />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditing(automation)
+                        setDraft(null)
+                        setShowForm(true)
+                      }}
+                      title="Edit"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteAutomation(automation)}
+                      disabled={busyId === automation.id}
+                      title="Delete"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <span className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 md:hidden">
+                    <span><span className="font-semibold text-slate-900 tabular-nums">{send.sent}</span> DMs</span>
+                    <span><span className="font-semibold text-slate-900 tabular-nums">{clicks ? clicks.clickedDms : "—"}</span> clicks</span>
+                    <span><span className="font-semibold text-emerald-700 tabular-nums">{ctr === null ? "—" : `${ctr}%`}</span> CTR</span>
+                  </span>
+                </div>
+              )
+            })}
           </div>
-        ))}
+        )}
       </section>
 
-      {/* Recent activity */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
+      {/* Recent activity: a few rows at a time, filterable per automation */}
+      <section id="activity" className="space-y-3 scroll-mt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-900">Recent activity</h2>
-          <button
-            onClick={() => router.refresh()}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <select
+              value={activityFilter}
+              onChange={(e) => {
+                setActivityFilter(e.target.value)
+                setActivityLimit(ACTIVITY_PAGE)
+              }}
+              className="h-8 max-w-[200px] rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            >
+              <option value="all">All automations</option>
+              {automations.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => router.refresh()}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+          </div>
         </div>
 
-        {initialLogs.length === 0 ? (
+        {filteredLogs.length === 0 ? (
           <div className="rounded-xl border border-slate-200/60 bg-white p-6 text-center">
             <p className="text-xs text-slate-500">
-              No activity yet. When someone comments a trigger keyword, the send
-              shows up here.
+              {activityFilter === "all"
+                ? "No activity yet. When someone comments a trigger keyword, the send shows up here."
+                : "No activity for this automation yet."}
             </p>
           </div>
         ) : (
@@ -495,13 +586,13 @@ export function DmsClient({
                 <tr className="border-b border-slate-100 text-[11px] uppercase tracking-wider text-slate-400">
                   <th className="px-4 py-2.5 font-semibold">Commenter</th>
                   <th className="px-4 py-2.5 font-semibold">Comment</th>
-                  <th className="px-4 py-2.5 font-semibold">Automation</th>
+                  {activityFilter === "all" && <th className="px-4 py-2.5 font-semibold">Automation</th>}
                   <th className="px-4 py-2.5 font-semibold">Status</th>
                   <th className="px-4 py-2.5 font-semibold">When</th>
                 </tr>
               </thead>
               <tbody>
-                {initialLogs.map((log) => (
+                {filteredLogs.slice(0, activityLimit).map((log) => (
                   <tr key={log.id} className="border-b border-slate-50 last:border-0">
                     <td className="px-4 py-2.5 font-medium text-slate-700 whitespace-nowrap">
                       {log.commenter_name ? (
@@ -522,9 +613,11 @@ export function DmsClient({
                         {log.comment_text || "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
-                      {automationNames.get(log.automation_id) ?? "—"}
-                    </td>
+                    {activityFilter === "all" && (
+                      <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                        {automationNames.get(log.automation_id) ?? "—"}
+                      </td>
+                    )}
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       <StatusChip status={log.status} error={log.error_message} />
                       {log.public_reply_sent_at && (
@@ -536,6 +629,37 @@ export function DmsClient({
                           Replied
                         </span>
                       )}
+                      {log.gate_status && log.gate_status !== "delivered" && (
+                        <span
+                          title={
+                            log.gate_status === "awaiting_tap"
+                              ? "Got the opener, hasn't tapped the button yet"
+                              : "Tapped, but doesn't follow you yet"
+                          }
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
+                        >
+                          <UserPlus className="h-3 w-3" />
+                          {log.gate_status === "awaiting_tap" ? "Waiting for tap" : "Asked to follow"}
+                        </span>
+                      )}
+                      {log.gate_status === "delivered" && (
+                        <span
+                          title="Follows you and got your DM"
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700"
+                        >
+                          <UserPlus className="h-3 w-3" />
+                          Link sent
+                        </span>
+                      )}
+                      {clickedLogs.has(log.id) && (
+                        <span
+                          title="Opened the link in your DM"
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+                        >
+                          <MousePointerClick className="h-3 w-3" />
+                          Clicked
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">
                       {formatRelative(log.created_at)}
@@ -544,22 +668,55 @@ export function DmsClient({
                 ))}
               </tbody>
             </table>
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500">
+              <span>
+                Showing {Math.min(activityLimit, filteredLogs.length)} of {filteredLogs.length}
+              </span>
+              <span className="flex gap-3">
+                {activityLimit > ACTIVITY_PAGE && (
+                  <button onClick={() => setActivityLimit(ACTIVITY_PAGE)} className="font-medium hover:text-slate-800">
+                    Show less
+                  </button>
+                )}
+                {activityLimit < filteredLogs.length && (
+                  <button
+                    onClick={() => setActivityLimit((n) => n + ACTIVITY_PAGE)}
+                    className="font-semibold text-purple-600 hover:text-purple-800"
+                  >
+                    Show more
+                  </button>
+                )}
+              </span>
+            </div>
           </div>
         )}
       </section>
 
+      {showPicker && (
+        <DmTemplatePicker
+          variant="modal"
+          onPick={openNew}
+          onScratch={() => openNew(null)}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+
       {showForm && (
         <AutomationForm
-          key={editing?.id ?? "new"}
+          key={editing?.id ?? draft?.templateId ?? "new"}
           account={account}
           editing={editing}
+          draft={draft}
           onClose={() => setShowForm(false)}
           onSaved={(saved, isNew) => {
             setAutomations((prev) =>
               isNew ? [saved, ...prev] : prev.map((a) => (a.id === saved.id ? saved : a))
             )
             setShowForm(false)
-            trackEvent(isNew ? "dm_automation_created" : "dm_automation_updated")
+            trackEvent(
+              isNew ? "dm_automation_created" : "dm_automation_updated",
+              isNew ? { template: draft?.templateId ?? "scratch" } : undefined
+            )
           }}
         />
       )}
@@ -845,17 +1002,20 @@ function ApprovedConnect() {
 function AutomationForm({
   account,
   editing,
+  draft,
   onClose,
   onSaved,
 }: {
   account: DmAccount
   editing: DmAutomation | null
+  draft: TemplateDraft | null
   onClose: () => void
   onSaved: (automation: DmAutomation, isNew: boolean) => void
 }) {
   const [form, setForm] = useState<FormState>(
     editing
       ? {
+          trigger: editing.trigger_type ?? "comment",
           name: editing.name,
           matchAnyPost: editing.match_any_post,
           postId: editing.post_id,
@@ -867,8 +1027,19 @@ function AutomationForm({
           publicReplyMessages: parseReplyVariants(editing.public_reply_message).length
             ? parseReplyVariants(editing.public_reply_message)
             : [""],
+          trackClicks: Boolean(editing.track_clicks),
+          followGate: Boolean(editing.follow_gate),
         }
-      : EMPTY_FORM
+      : draft
+        ? {
+            ...EMPTY_FORM,
+            name: draft.name,
+            keywords: draft.keywords,
+            dmMessage: draft.dmMessage,
+            publicReplyEnabled: draft.publicReplyEnabled,
+            publicReplyMessages: draft.publicReplyMessages,
+          }
+        : EMPTY_FORM
   )
   const [keywordInput, setKeywordInput] = useState("")
   const [posts, setPosts] = useState<InstagramPost[] | null>(null)
@@ -876,6 +1047,9 @@ function AutomationForm({
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState<PreviewMode>("comment")
+  const isComment = form.trigger === "comment"
+  // Step numbers shift: DM and story automations skip "post" and "public reply".
+  const stepKeywords = isComment ? 3 : 2
   const [previewReplyIndex, setPreviewReplyIndex] = useState(0)
 
   useEffect(() => {
@@ -936,27 +1110,31 @@ function AutomationForm({
     if (!form.name.trim()) return setFormError("Give the automation a name.")
     if (keywords.length === 0)
       return setFormError("Add at least one trigger keyword.")
-    if (!form.matchAnyPost && !form.postId)
+    if (isComment && !form.matchAnyPost && !form.postId)
       return setFormError("Pick a post, or switch to “Any post”.")
     if (!form.dmMessage.trim()) return setFormError("Write the DM message.")
     const publicReplies = joinReplyVariants(form.publicReplyMessages)
-    if (form.publicReplyEnabled && !publicReplies)
+    if (isComment && form.publicReplyEnabled && !publicReplies)
       return setFormError("Write the public reply, or turn it off.")
 
     setSaving(true)
     try {
+      // DM and story-reply automations have no post and no public reply.
       const payload = {
+        trigger_type: form.trigger,
         name: form.name,
-        match_any_post: form.matchAnyPost,
-        post_id: form.matchAnyPost ? null : form.postId,
-        post_url: form.matchAnyPost ? null : form.postUrl,
+        match_any_post: isComment && form.matchAnyPost,
+        post_id: isComment && !form.matchAnyPost ? form.postId : null,
+        post_url: isComment && !form.matchAnyPost ? form.postUrl : null,
         keywords,
         whole_word_match: form.wholeWordMatch,
         dm_message: form.dmMessage,
-        public_reply_enabled: form.publicReplyEnabled,
-        public_reply_message: form.publicReplyEnabled
+        public_reply_enabled: isComment && form.publicReplyEnabled,
+        public_reply_message: isComment && form.publicReplyEnabled
           ? publicReplies
           : null,
+        track_clicks: form.trackClicks,
+        follow_gate: form.followGate,
       }
       const res = await fetch(
         editing ? `/api/dms/automations/${editing.id}` : "/api/dms/automations",
@@ -1028,8 +1206,55 @@ function AutomationForm({
                 </div>
               )}
 
-              {/* Step 1: post */}
-              <Step n={1} title="When someone comments on">
+              {/* Step 1: what starts it */}
+              <Step n={1} title="What starts it" note="Pick one">
+                <div role="radiogroup" aria-label="What starts it" className="grid grid-cols-3 gap-2">
+                  {TRIGGERS.map((t) => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={form.trigger === t.value}
+                      onClick={() => {
+                        setForm((f) => ({ ...f, trigger: t.value }))
+                        setPreviewMode(t.value === "comment" ? "comment" : "dm")
+                      }}
+                      className={cn(
+                        "rounded-lg border px-2 py-2 text-left transition-colors",
+                        form.trigger === t.value
+                          ? "border-purple-500 bg-purple-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      )}
+                    >
+                      <span className={cn("flex items-center gap-1.5 text-xs font-semibold", form.trigger === t.value ? "text-purple-700" : "text-slate-700")}>
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border",
+                            form.trigger === t.value ? "border-purple-600" : "border-slate-300 bg-white"
+                          )}
+                        >
+                          {form.trigger === t.value && <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />}
+                        </span>
+                        {t.label}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] leading-tight text-slate-500">{t.hint}</span>
+                    </button>
+                  ))}
+                </div>
+                {!isComment && (
+                  <p className="mt-2 text-[11px] leading-snug text-slate-500">
+                    {form.trigger === "dm"
+                      ? "When someone sends you a message with your keyword, or replies to one of your stories with it, they get your DM right back."
+                      : "When someone replies to one of your stories with your keyword, they get your DM right back. Normal messages are ignored — pick DM to catch both."}{" "}
+                    Each person gets it at most once a day.
+                  </p>
+                )}
+              </Step>
+
+              {/* Step 2: post (comments only) */}
+              {isComment && (
+              <Step n={2} title="When someone comments on">
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1117,11 +1342,21 @@ function AutomationForm({
                   </div>
                 )}
               </Step>
+              )}
 
-              {/* Step 2: keywords */}
-              <Step n={2} title="And the comment contains">
+              {/* Keywords */}
+              <Step
+                n={stepKeywords}
+                title={
+                  form.trigger === "dm"
+                    ? "And the message contains"
+                    : form.trigger === "story_reply"
+                      ? "And the story reply contains"
+                      : "And the comment contains"
+                }
+              >
                 <div
-                  onFocus={() => setPreviewMode("comment")}
+                  onFocus={() => setPreviewMode(isComment ? "comment" : "dm")}
                   className="flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white p-2 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/20 transition-all"
                 >
                   {form.keywords.map((kw) => (
@@ -1182,8 +1417,8 @@ function AutomationForm({
                 </label>
               </Step>
 
-              {/* Step 3: DM */}
-              <Step n={3} title="They will get a DM">
+              {/* DM */}
+              <Step n={stepKeywords + 1} title="They will get a DM">
                 <textarea
                   value={form.dmMessage}
                   onChange={(e) =>
@@ -1198,10 +1433,69 @@ function AutomationForm({
                 <p className="text-[11px] text-slate-400 text-right">
                   {form.dmMessage.length}/1000
                 </p>
+                <label className="flex items-start justify-between gap-3 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                      <MousePointerClick className="h-3.5 w-3.5 text-purple-600" />
+                      Track link clicks
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+                      Links are sent as a short link so you can see who clicked. They still open your page.
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.trackClicks}
+                    onClick={() => setForm((f) => ({ ...f, trackClicks: !f.trackClicks }))}
+                    className={cn(
+                      "relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors",
+                      form.trackClicks ? "bg-purple-600" : "bg-slate-300"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                        form.trackClicks && "translate-x-4"
+                      )}
+                    />
+                  </button>
+                </label>
+                <label className="flex items-start justify-between gap-3 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                      <UserPlus className="h-3.5 w-3.5 text-purple-600" />
+                      Ask them to follow first
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+                      {isComment
+                        ? "They first get a short message with a “Send me the link” button. Tapping it sends your DM if they follow you, or asks them to follow first."
+                        : "Followers get your DM right away. Everyone else is asked to follow first, then tap a button to get it."}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.followGate}
+                    onClick={() => setForm((f) => ({ ...f, followGate: !f.followGate }))}
+                    className={cn(
+                      "relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors",
+                      form.followGate ? "bg-purple-600" : "bg-slate-300"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                        form.followGate && "translate-x-4"
+                      )}
+                    />
+                  </button>
+                </label>
               </Step>
 
-              {/* Step 4: public reply */}
-              <Step n={4} title="And a public reply" optional>
+              {/* Public reply (comments only) */}
+              {isComment && (
+              <Step n={5} title="And a public reply" optional>
                 <label className="flex items-center justify-between gap-3 cursor-pointer">
                   <span className="text-xs text-slate-600">
                     Reply under their comment so others see it works
@@ -1289,6 +1583,7 @@ function AutomationForm({
                   </div>
                 )}
               </Step>
+              )}
             </div>
           </div>
 
@@ -1329,11 +1624,13 @@ function Step({
   n,
   title,
   optional,
+  note,
   children,
 }: {
   n: number
   title: string
   optional?: boolean
+  note?: string
   children: React.ReactNode
 }) {
   return (
@@ -1346,47 +1643,10 @@ function Step({
         {optional && (
           <span className="text-[11px] font-medium text-slate-400">optional</span>
         )}
+        {note && <span className="text-[11px] font-medium text-slate-400">{note}</span>}
       </div>
       <div className="rounded-xl bg-slate-50 p-3">{children}</div>
     </section>
-  )
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: number
-  tone: "purple" | "slate" | "red"
-}) {
-  const tones = {
-    purple: "bg-purple-50 text-purple-600",
-    slate: "bg-slate-100 text-slate-500",
-    red: "bg-red-50 text-red-500",
-  }
-  return (
-    <div className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div
-          className={cn(
-            "h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
-            tones[tone]
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-lg font-bold text-slate-900 leading-tight tabular-nums">
-            {value}
-          </p>
-          <p className="text-[11px] text-slate-500 truncate">{label}</p>
-        </div>
-      </div>
-    </div>
   )
 }
 

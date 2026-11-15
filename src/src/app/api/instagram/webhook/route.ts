@@ -2,11 +2,13 @@ import { NextRequest, NextResponse, after } from "next/server"
 import { supabase } from "@/lib/supabase"
 import {
   parseCommentEvents,
+  parseMessageEvents,
   verifyWebhookSignature,
   type WebhookPayload,
 } from "@/lib/meta/webhook"
-import { queueMatchingComment } from "@/lib/meta/enqueue"
+import { queueMatchingComment, queueMatchingMessage } from "@/lib/meta/enqueue"
 import { drainDmQueue } from "@/lib/meta/process-queue"
+import { findOpenGate, handleGateReply, type OpenGate } from "@/lib/meta/follow-gate"
 
 /**
  * Meta Instagram webhook receiver. Public route (excluded from the auth
@@ -71,6 +73,7 @@ export async function POST(request: NextRequest) {
 
   let queued = 0
   let errorMessage: string | null = null
+  const gateReplies: { gate: OpenGate; senderId: string }[] = []
 
   try {
     const events = parseCommentEvents(payload)
@@ -79,11 +82,28 @@ export async function POST(request: NextRequest) {
       if (await queueMatchingComment(event)) queued++
     }
 
+    // DM and story-reply triggers. Kept apart so a problem here can never
+    // stop the comment automations above.
+    try {
+      for (const message of parseMessageEvents(payload)) {
+        // A tap on a follow-gate button (or any reply while a gate is
+        // open) answers that gate instead of starting a new automation.
+        const gate = await findOpenGate(message)
+        if (gate) {
+          gateReplies.push({ gate, senderId: message.senderId })
+          continue
+        }
+        if (await queueMatchingMessage(message)) queued++
+      }
+    } catch (err) {
+      console.error("[Instagram Webhook] message trigger error:", err)
+    }
+
     if (eventRow?.id) {
       await supabase
         .from("webhook_events")
         .update({
-          status: queued > 0 ? "processed" : "ignored",
+          status: queued > 0 || gateReplies.length > 0 ? "processed" : "ignored",
           processed_at: new Date().toISOString(),
         })
         .eq("id", eventRow.id)
@@ -109,6 +129,15 @@ export async function POST(request: NextRequest) {
         await drainDmQueue()
       } catch (err) {
         console.error("[Instagram Webhook] immediate send failed:", err)
+      }
+    })
+  }
+
+  // Follow-gate answers: check follow status and reply, after responding.
+  if (gateReplies.length > 0) {
+    after(async () => {
+      for (const { gate, senderId } of gateReplies) {
+        await handleGateReply(gate, senderId)
       }
     })
   }
