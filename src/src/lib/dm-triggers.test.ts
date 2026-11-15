@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { automationTriggers, messageTrigger, normalizeTriggers, primaryTrigger } from "./dm-triggers"
+import { automationTriggers, messageTrigger, needsKeywords, normalizeTriggers, primaryTrigger } from "./dm-triggers"
 
 describe("normalizeTriggers", () => {
   it("keeps valid triggers in a fixed order without duplicates", () => {
@@ -48,5 +48,23 @@ describe("messageTrigger", () => {
     expect(messageTrigger(["story_reply"], false)).toBeNull()
     expect(messageTrigger(["comment"], false)).toBeNull()
     expect(messageTrigger(["comment"], true)).toBeNull()
+  })
+})
+
+describe("new_conversation", () => {
+  it("is a valid trigger, alone or with others", () => {
+    expect(normalizeTriggers(["new_conversation"])).toEqual(["new_conversation"])
+    expect(normalizeTriggers(["new_conversation", "comment"])).toEqual(["comment", "new_conversation"])
+  })
+
+  it("never answers a keyword message by itself", () => {
+    expect(messageTrigger(["new_conversation"], false)).toBeNull()
+    expect(messageTrigger(["new_conversation"], true)).toBeNull()
+  })
+
+  it("is the only trigger that works without keywords", () => {
+    expect(needsKeywords(["new_conversation"])).toBe(false)
+    expect(needsKeywords(["new_conversation", "dm"])).toBe(true)
+    expect(needsKeywords(["comment"])).toBe(true)
   })
 })

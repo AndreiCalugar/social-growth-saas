@@ -4,18 +4,26 @@
 // creators write to their audience in Romanian, so every template's
 // message text exists in both languages.
 
+import type { TriggerType } from "@/lib/dm-triggers"
+import type { FollowupAudience } from "@/lib/followup-settings"
+
 export type TemplateLanguage = "ro" | "en"
 
-export type TemplateId = "link" | "event" | "freebie" | "discount"
+export type TemplateId = "link" | "event" | "freebie" | "discount" | "welcome"
 
 /** Where the creator's link goes in the DM text. */
 export const LINK_PLACEHOLDER = "{link}"
 
 type Copy = {
   name: string
+  /** Empty for a welcome message: any first message starts it. */
   keyword: string
   dm: string
+  /** The DM when the creator leaves the (optional) link out. */
+  dmNoLink?: string
   publicReplies: string[]
+  /** A ready-made follow-up (see the template's followupAudience). */
+  followup?: string
 }
 
 export type DmTemplate = {
@@ -25,6 +33,12 @@ export type DmTemplate = {
   /** Label for the link field in the picker, e.g. "Sign-up link". */
   linkLabel: string
   copy: Record<TemplateLanguage, Copy>
+  /** What starts it; comments when not set. */
+  triggers?: TriggerType[]
+  /** The link can be left out (the DM is then just a message). */
+  linkOptional?: boolean
+  /** Who the ready-made follow-up goes to; people who didn't click by default. */
+  followupAudience?: FollowupAudience
 }
 
 export const DM_TEMPLATES: DmTemplate[] = [
@@ -59,12 +73,14 @@ export const DM_TEMPLATES: DmTemplate[] = [
         keyword: "VREAU",
         dm: `Mă bucur că vrei să vii! 🎉 Aici găsești toate detaliile și înscrierea:\n${LINK_PLACEHOLDER}\n\nLocurile sunt limitate, așa că nu amâna. Dacă ai întrebări, scrie-mi aici.`,
         publicReplies: ["Ți-am trimis detaliile în DM 📩", "Verifică-ți mesajele, ai acolo înscrierea 🎉", "Gata, ai toate detaliile în privat ✨"],
+        followup: `Hei! 👋 Ai apucat să te uiți pe link? Locurile se ocupă repede și evenimentul se apropie:\n${LINK_PLACEHOLDER}\n\nScrie-mi dacă ai întrebări!`,
       },
       en: {
         name: "Event sign-ups",
         keyword: "IN",
         dm: `So glad you want to join! 🎉 Here are all the details and the sign-up link:\n${LINK_PLACEHOLDER}\n\nSpots are limited, so don't wait too long. Any questions, just reply here.`,
         publicReplies: ["Sent you the details in DM 📩", "Check your messages for the sign-up link 🎉", "All the details are in your DMs ✨"],
+        followup: `Hey! 👋 Did you see the link? Spots are filling up and the event is coming soon:\n${LINK_PLACEHOLDER}\n\nAny questions, just reply here!`,
       },
     },
   },
@@ -108,6 +124,33 @@ export const DM_TEMPLATES: DmTemplate[] = [
       },
     },
   },
+  {
+    id: "welcome",
+    title: "Welcome message",
+    description: "Greet everyone who messages you for the first time — with a free resource if you like.",
+    linkLabel: "Link to a free resource (optional)",
+    triggers: ["new_conversation"],
+    linkOptional: true,
+    followupAudience: "not_replied",
+    copy: {
+      ro: {
+        name: "Mesaj de bun venit",
+        keyword: "",
+        dm: `Bine ai venit! 👋 Mă bucur că mi-ai scris. Ca mulțumire, uite un cadou pentru tine:\n${LINK_PLACEHOLDER}\n\nSpune-mi cu ce te pot ajuta, îți răspund cât de repede pot.`,
+        dmNoLink: "Bine ai venit! 👋 Mă bucur că mi-ai scris. Spune-mi cu ce te pot ajuta și îți răspund cât de repede pot.",
+        publicReplies: [],
+        followup: "Hei! 👋 Voiam doar să mă asigur că ai văzut mesajul meu. Cu ce te pot ajuta?",
+      },
+      en: {
+        name: "Welcome message",
+        keyword: "",
+        dm: `Welcome! 👋 So glad you reached out. As a thank-you, here's a little gift for you:\n${LINK_PLACEHOLDER}\n\nTell me how I can help, I'll get back to you as soon as I can.`,
+        dmNoLink: "Welcome! 👋 So glad you reached out. Tell me what I can help you with and I'll get back to you as soon as I can.",
+        publicReplies: [],
+        followup: "Hey! 👋 Just making sure you saw my message. What can I help you with?",
+      },
+    },
+  },
 ]
 
 export type TemplateDraft = {
@@ -117,6 +160,9 @@ export type TemplateDraft = {
   dmMessage: string
   publicReplyEnabled: boolean
   publicReplyMessages: string[]
+  triggers?: TriggerType[]
+  followupMessage?: string
+  followupAudience?: FollowupAudience
 }
 
 /** The link as a full http(s) URL (adds https:// if missing), or null if it isn't one. */
@@ -133,18 +179,27 @@ export function normalizeLink(raw: string): string | null {
   }
 }
 
+/** `link` may be null only for templates with linkOptional. */
 export function buildTemplateDraft(
   template: DmTemplate,
   language: TemplateLanguage,
-  link: string
+  link: string | null
 ): TemplateDraft {
   const copy = template.copy[language]
+  const onComments = !template.triggers || template.triggers.includes("comment")
   return {
     templateId: template.id,
     name: copy.name,
-    keywords: [copy.keyword],
-    dmMessage: copy.dm.replace(LINK_PLACEHOLDER, link),
-    publicReplyEnabled: true,
-    publicReplyMessages: [...copy.publicReplies],
+    keywords: copy.keyword ? [copy.keyword] : [],
+    dmMessage: link ? copy.dm.replace(LINK_PLACEHOLDER, link) : (copy.dmNoLink ?? copy.dm.replace(LINK_PLACEHOLDER, "")),
+    publicReplyEnabled: onComments && copy.publicReplies.length > 0,
+    publicReplyMessages: copy.publicReplies.length > 0 ? [...copy.publicReplies] : [""],
+    ...(template.triggers ? { triggers: template.triggers } : {}),
+    ...(copy.followup
+      ? {
+          followupMessage: copy.followup.replace(LINK_PLACEHOLDER, link ?? ""),
+          followupAudience: template.followupAudience ?? "not_clicked",
+        }
+      : {}),
   }
 }

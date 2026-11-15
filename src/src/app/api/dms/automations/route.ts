@@ -3,13 +3,14 @@ import { joinReplyVariants, parseReplyVariants } from "@/lib/meta/reply-variants
 import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getAccountForUser } from "@/lib/meta/accounts"
-import { normalizeTriggers, primaryTrigger, type TriggerType } from "@/lib/dm-triggers"
+import { needsKeywords, normalizeTriggers, primaryTrigger, type TriggerType } from "@/lib/dm-triggers"
+import { followupColumns, isMissingFollowupColumn, type FollowupInput } from "@/lib/followup-settings"
 
 const MAX_KEYWORDS = 20
 const MAX_MESSAGE_LENGTH = 1000
 const MAX_AUTOMATIONS = 20
 
-interface AutomationBody {
+interface AutomationBody extends FollowupInput {
   name?: string
   post_id?: string | null
   post_url?: string | null
@@ -35,14 +36,18 @@ function validateAutomationBody(body: AutomationBody): string | null {
   if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
     return "name is required"
   }
+  const triggers = triggersOf(body)
+  if (!triggers) return "triggers must be one or more of comment, dm, story_reply, new_conversation"
+  // A welcome message (new_conversation alone) needs no keyword.
+  const keywords = Array.isArray(body.keywords) ? body.keywords : null
   if (
-    !Array.isArray(body.keywords) ||
-    body.keywords.length === 0 ||
-    body.keywords.some((k) => typeof k !== "string" || !k.trim())
+    !keywords ||
+    (keywords.length === 0 && needsKeywords(triggers)) ||
+    keywords.some((k) => typeof k !== "string" || !k.trim())
   ) {
     return "keywords must be a non-empty array of strings"
   }
-  if (body.keywords.length > MAX_KEYWORDS) {
+  if (keywords.length > MAX_KEYWORDS) {
     return `At most ${MAX_KEYWORDS} keywords`
   }
   if (!body.dm_message || typeof body.dm_message !== "string" || !body.dm_message.trim()) {
@@ -51,8 +56,6 @@ function validateAutomationBody(body: AutomationBody): string | null {
   if (body.dm_message.length > MAX_MESSAGE_LENGTH) {
     return `dm_message must be at most ${MAX_MESSAGE_LENGTH} characters`
   }
-  const triggers = triggersOf(body)
-  if (!triggers) return "triggers must be one or more of comment, dm, story_reply"
   // Only comments are tied to a post.
   if (triggers.includes("comment") && !body.match_any_post && !body.post_id) {
     return "Pick a post or enable match_any_post"
@@ -137,6 +140,12 @@ export async function POST(req: NextRequest) {
   if (body.track_clicks !== undefined) values.track_clicks = Boolean(body.track_clicks)
   // Only written when on, so creating without it works before schema/026.
   if (body.follow_gate) values.follow_gate = true
+  // Follow-up: same idea, only written when turned on (schema/028).
+  if (body.followup_enabled) {
+    const followup = followupColumns(body)
+    if ("error" in followup) return NextResponse.json({ error: followup.error }, { status: 400 })
+    Object.assign(values, followup.values)
+  }
 
   // Comment-only automations leave both trigger columns to their defaults,
   // so they work the same before schema/025 and 027. Without comments
@@ -159,14 +168,20 @@ export async function POST(req: NextRequest) {
     supabase.from("dm_automations").insert(row).select().maybeSingle()
 
   let { data: automation, error } = await insert(values)
+  if (error && isMissingFollowupColumn(error.message)) {
+    return NextResponse.json(
+      { error: "Follow-ups need a database update (schema/028) first." },
+      { status: 503 }
+    )
+  }
   // Before schema/027 a single trigger still fits in trigger_type alone.
   if (error && triggers.length === 1 && error.message.includes("triggers")) {
     const { triggers: _single, ...rest } = values
     ;({ data: automation, error } = await insert(rest))
   }
-  if (error && error.message.includes("triggers")) {
+  if (error && (error.message.includes("triggers") || error.message.includes("trigger_type_check"))) {
     return NextResponse.json(
-      { error: "Several triggers in one automation need a database update (schema/027) first." },
+      { error: "These triggers need a database update (schema/027/028) first." },
       { status: 503 }
     )
   }

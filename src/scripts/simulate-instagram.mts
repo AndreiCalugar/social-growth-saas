@@ -37,6 +37,9 @@ type SentMessage = {
 const sent: SentMessage[] = []
 const publicReplies: { commentId: string; text: string }[] = []
 const followers = new Set<string>()
+// People who already had a conversation with the creator before the app
+// was connected: their history has a message from a month ago.
+const oldConversations = new Set<string>()
 let refuseButtonsOnPrivateReply = false
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -71,6 +74,16 @@ const simServer = createServer(async (req, res) => {
     const body = new URLSearchParams(await readBody(req))
     publicReplies.push({ commentId: parts[1], text: body.get("message") ?? "" })
     return reply(200, { id: `sim_reply_${randomUUID()}` })
+  }
+  if (req.method === "GET" && parts[1] === "me" && parts[2] === "conversations") {
+    const user = url.searchParams.get("user_id") ?? ""
+    return reply(200, { data: [{ id: `conv_${user}` }] })
+  }
+  if (req.method === "GET" && parts[1]?.startsWith("conv_") && url.searchParams.get("fields") === "messages") {
+    const user = parts[1].slice("conv_".length)
+    const times = [new Date().toISOString()]
+    if (oldConversations.has(user)) times.push(new Date(Date.now() - 30 * 86400_000).toISOString())
+    return reply(200, { id: parts[1], messages: { data: times.map((t, i) => ({ id: `m${i}`, created_time: t })) } })
   }
   if (req.method === "GET" && url.searchParams.get("fields")?.includes("is_user_follow_business")) {
     return reply(200, { id: parts[1], is_user_follow_business: followers.has(parts[1]) })
@@ -193,9 +206,15 @@ async function setup() {
     { key: "comment", name: "SIM comment", trigger_type: "comment", match_any_post: true, keywords: ["LINK"], dm_message: "Here is your link: https://example.com/a", public_reply_enabled: true, public_reply_message: "Check your DMs!" },
     { key: "dm", name: "SIM dm", trigger_type: "dm", match_any_post: false, keywords: ["INFO"], dm_message: "Info: https://example.com/info" },
     { key: "story", name: "SIM story", trigger_type: "story_reply", match_any_post: false, keywords: ["STORY"], dm_message: "Story link: https://example.com/story" },
-    { key: "gate", name: "SIM gate", trigger_type: "comment", match_any_post: true, keywords: ["GATE"], dm_message: "Gated link: https://example.com/gated", follow_gate: true },
+    { key: "gate", name: "SIM gate", trigger_type: "comment", match_any_post: true, keywords: ["GATE"], dm_message: "Gated link: https://example.com/gated", follow_gate: true, followup_enabled: true, followup_message: "Gate reminder" },
     { key: "gateDm", name: "SIM gate dm", trigger_type: "dm", match_any_post: false, keywords: ["GATEDM"], dm_message: "Gated DM link: https://example.com/gated-dm", follow_gate: true },
     { key: "load", name: "SIM load", trigger_type: "comment", match_any_post: true, keywords: ["LOAD"], dm_message: "Load test: https://example.com/load" },
+    // schema/028: welcome message (switched on only for its scenarios, so
+    // it doesn't answer the other scenarios' first messages) and follow-ups.
+    { key: "welcome", name: "SIM welcome", trigger_type: "new_conversation", triggers: ["new_conversation"], match_any_post: false, keywords: [], dm_message: "Welcome! Here's a gift: https://example.com/gift", is_active: false },
+    { key: "fu", name: "SIM follow-up", trigger_type: "dm", triggers: ["dm"], match_any_post: false, keywords: ["FU"], dm_message: "Event link: https://example.com/event", track_clicks: true, followup_enabled: true, followup_delay_hours: 20, followup_audience: "not_clicked", followup_message: "Did you see the link? Seats are filling up: https://example.com/event" },
+    { key: "fuReply", name: "SIM follow-up no reply", trigger_type: "dm", triggers: ["dm"], match_any_post: false, keywords: ["HELLO"], dm_message: "What can I help you with?", followup_enabled: true, followup_audience: "not_replied", followup_message: "Just making sure you saw my message!" },
+    { key: "fuComment", name: "SIM follow-up comment", trigger_type: "comment", match_any_post: true, keywords: ["FUC"], dm_message: "Comment link: https://example.com/c", followup_enabled: true, followup_message: "Reminder!" },
     // schema/027: one automation answering both comments and DMs.
     { key: "multi", name: "SIM multi", trigger_type: "comment", triggers: ["comment", "dm"], match_any_post: true, keywords: ["BOTH"], dm_message: "Both ways: https://example.com/both", public_reply_enabled: true, public_reply_message: "Sent!" },
   ]
@@ -315,6 +334,147 @@ try {
     return "no duplicate across triggers"
   })
 
+  // ── Welcome message (new_conversation) ──
+  await supabase.from("dm_automations").update({ is_active: true }).eq("id", ids.welcome)
+
+  await scenario("Welcome: someone's first message ever gets the welcome DM", async () => {
+    const user = `u_welcome_${runId}`
+    await dm(bizId, user, "hi! love your content")
+    const m = await waitFor("welcome", () => to(user)[0])
+    assert(m.text.startsWith("Welcome!"), `unexpected text: ${m.text}`)
+    const [log] = await logFor(ids.welcome, user)
+    assert(log?.trigger_type === "new_conversation", `log trigger_type ${log?.trigger_type}`)
+    return "welcomed"
+  })
+
+  await scenario("Welcome: their second message doesn't get it again", async () => {
+    const user = `u_welcome_${runId}`
+    await dm(bizId, user, "another question")
+    await sleep(2500)
+    assert(to(user).length === 1, `expected 1 message, got ${to(user).length}`)
+    return "welcomed once"
+  })
+
+  await scenario("Welcome: an existing customer (conversation from before the app) never gets it", async () => {
+    const user = `u_old_${runId}`
+    oldConversations.add(user)
+    await dm(bizId, user, "hey, me again")
+    await sleep(2500)
+    assert(to(user).length === 0, `an existing customer got a welcome: ${to(user)[0]?.text}`)
+    return "not welcomed"
+  })
+
+  await scenario("Welcome: a first message with a keyword gets only that automation's DM", async () => {
+    const user = `u_welcome_kw_${runId}`
+    await dm(bizId, user, "INFO please")
+    await waitFor("info answer", () => to(user)[0])
+    await sleep(2000)
+    assert(to(user).length === 1 && to(user)[0].text.startsWith("Info:"), `got ${to(user).map((m) => m.text).join(" | ")}`)
+    return "keyword wins, one message"
+  })
+
+  await supabase.from("dm_automations").update({ is_active: false }).eq("id", ids.welcome)
+
+  // ── Follow-ups ──
+  const cronSecret = process.env.CRON_SECRET || process.env.NEXTAUTH_SECRET
+  /** Make this person's follow-up due now and run the queue like the cron does. */
+  async function runFollowupNow(automationId: string, user: string) {
+    const [log] = await logFor(automationId, user)
+    assert(log, "no DM log")
+    const { data: f } = await supabase.from("dm_followups").select("id, send_after, status").eq("dm_log_id", log.id).maybeSingle()
+    assert(f, "no follow-up was scheduled")
+    await supabase.from("dm_followups").update({ send_after: new Date().toISOString() }).eq("id", f.id)
+    const res = await fetch(`${APP_URL}/api/cron/process-dms`, { headers: { authorization: `Bearer ${cronSecret}` } })
+    assert(res.ok, `cron answered ${res.status}`)
+    const { data: after } = await supabase.from("dm_followups").select("status, skip_reason").eq("id", f.id).single()
+    return { scheduledFor: f.send_after as string, ...after! }
+  }
+
+  await scenario("Follow-up: scheduled ~20h out, sent to someone who didn't open the link", async () => {
+    const user = `u_fu_${runId}`
+    await dm(bizId, user, "FU")
+    await waitFor("first DM", () => to(user)[0])
+    await sleep(500)
+    const [log] = await logFor(ids.fu, user)
+    const { data: f } = await supabase.from("dm_followups").select("send_after").eq("dm_log_id", log.id).single()
+    const hours = (new Date(f!.send_after).getTime() - Date.now()) / 3600_000
+    assert(hours > 19.9 && hours <= 20, `scheduled ${hours.toFixed(2)}h out`)
+    const r = await runFollowupNow(ids.fu, user)
+    assert(r.status === "sent", `status ${r.status} ${r.skip_reason ?? ""}`)
+    const m = await waitFor("follow-up", () => to(user)[1])
+    assert(m.text.startsWith("Did you see the link?") && /\/r\/[A-Za-z0-9]+/.test(m.text), `unexpected follow-up: ${m.text}`)
+    const first = to(user)[0].text.match(/\/r\/[A-Za-z0-9]+/)?.[0]
+    assert(m.text.includes(first!), "follow-up should reuse the first DM's tracked link")
+    return `scheduled ${hours.toFixed(1)}h out, sent with the same tracked link`
+  })
+
+  await scenario("Follow-up: skipped for someone who already opened the link", async () => {
+    const user = `u_fu_click_${runId}`
+    await dm(bizId, user, "FU")
+    const first = await waitFor("first DM", () => to(user)[0])
+    const link = first.text.match(/https?:\/\/\S+\/r\/[A-Za-z0-9]+/)?.[0]
+    assert(link, "no tracked link")
+    await fetch(link, { redirect: "manual" })
+    await sleep(500)
+    const r = await runFollowupNow(ids.fu, user)
+    assert(r.status === "skipped" && r.skip_reason === "clicked", `status ${r.status} ${r.skip_reason}`)
+    assert(to(user).length === 1, "a follow-up was sent anyway")
+    return "skipped: clicked"
+  })
+
+  await scenario("Follow-up: never sent outside Instagram's 24h window", async () => {
+    const user = `u_fu_late_${runId}`
+    await dm(bizId, user, "FU")
+    await waitFor("first DM", () => to(user)[0])
+    await sleep(500)
+    const { data: account } = await supabase.from("instagram_accounts").select("id").eq("instagram_id", bizId).single()
+    await supabase
+      .from("instagram_contacts")
+      .update({ last_inbound_at: new Date(Date.now() - 23.9 * 3600_000).toISOString() })
+      .eq("instagram_account_id", account!.id)
+      .eq("igsid", user)
+    const r = await runFollowupNow(ids.fu, user)
+    assert(r.status === "skipped" && r.skip_reason === "window_closed", `status ${r.status} ${r.skip_reason}`)
+    assert(to(user).length === 1, "a late follow-up was sent")
+    return "skipped: window closed"
+  })
+
+  await scenario("Follow-up \"didn't reply\": sent when they stayed silent", async () => {
+    const user = `u_fu_silent_${runId}`
+    await dm(bizId, user, "HELLO")
+    await waitFor("first DM", () => to(user)[0])
+    await sleep(500)
+    const r = await runFollowupNow(ids.fuReply, user)
+    assert(r.status === "sent", `status ${r.status} ${r.skip_reason ?? ""}`)
+    const m = await waitFor("follow-up", () => to(user)[1])
+    assert(m.text === "Just making sure you saw my message!", `unexpected: ${m.text}`)
+    return "nudge sent"
+  })
+
+  await scenario("Follow-up \"didn't reply\": skipped once they wrote back", async () => {
+    const user = `u_fu_replied_${runId}`
+    await dm(bizId, user, "HELLO")
+    await waitFor("first DM", () => to(user)[0])
+    await sleep(500)
+    await dm(bizId, user, "I'd like to know the prices")
+    await sleep(500)
+    const r = await runFollowupNow(ids.fuReply, user)
+    assert(r.status === "skipped" && r.skip_reason === "replied", `status ${r.status} ${r.skip_reason}`)
+    assert(to(user).length === 1, "a nudge was sent to someone who replied")
+    return "skipped: replied"
+  })
+
+  await scenario("Follow-up: not scheduled for a plain comment (no conversation, Instagram wouldn't allow it)", async () => {
+    const user = `u_fu_comment_${runId}`
+    const commentId = await comment(bizId, user, "FUC")
+    await waitFor("private reply", () => replyTo(commentId))
+    await sleep(1000)
+    const [log] = await logFor(ids.fuComment, user)
+    const { count } = await supabase.from("dm_followups").select("id", { count: "exact", head: true }).eq("dm_log_id", log.id)
+    assert(count === 0, `${count} follow-ups scheduled`)
+    return "none scheduled"
+  })
+
   await scenario("Follow-gate (comment): opener → not following → follow ask → follows → link", async () => {
     const user = `u_gate_${runId}`
     const commentId = await comment(bizId, user, "GATE")
@@ -338,6 +498,14 @@ try {
     for (let i = 0; i < 20 && row.gate_status !== "delivered"; i++) { await sleep(150); row = (await logFor(ids.gate, user))[0] }
     assert(row.gate_status === "delivered", `gate_status ${row.gate_status}`)
     return "opener, follow ask and link all sent; status delivered"
+  })
+
+  await scenario("Follow-gate + follow-up: the tap opens the conversation, so the follow-up is scheduled", async () => {
+    const user = `u_gate_${runId}`
+    const [log] = await logFor(ids.gate, user)
+    const { data: f } = await supabase.from("dm_followups").select("send_after, status").eq("dm_log_id", log.id).maybeSingle()
+    assert(f?.status === "scheduled", `follow-up ${f ? f.status : "missing"}`)
+    return "scheduled after the link was delivered"
   })
 
   await scenario("Follow-gate: a double tap sends the link only once", async () => {

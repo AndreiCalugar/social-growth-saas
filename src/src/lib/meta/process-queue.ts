@@ -12,6 +12,8 @@ import { markTokenError } from "@/lib/meta/accounts"
 import { pickReplyVariant } from "@/lib/meta/reply-variants"
 import { withTrackedLinks } from "@/lib/link-tracking"
 import { sendGateOpener } from "@/lib/meta/follow-gate"
+import { simulatorAccountIds } from "@/lib/meta/simulator"
+import { processDueFollowups, scheduleFollowup, type FollowupResult } from "@/lib/meta/followups"
 
 /**
  * Drain the DM send queue (dm_logs rows with status='pending'). Called by the
@@ -101,20 +103,6 @@ async function selectWithFallback<T>(
   return { data: null, error: { message: "unreachable" } }
 }
 
-/**
- * With META_GRAPH_BASE_URL set the app talks to the Instagram simulator,
- * so it must only touch simulated accounts (instagram_id "sim_…"): real
- * people's queued DMs would otherwise be "sent" to the simulator and lost.
- */
-async function simulatorAccountIds(): Promise<string[] | null> {
-  if (!process.env.META_GRAPH_BASE_URL) return null
-  const { data } = await supabase
-    .from("instagram_accounts")
-    .select("id")
-    .like("instagram_id", "sim\\_%")
-  return (data ?? []).map((a) => a.id)
-}
-
 /** Due rows, oldest first. */
 async function loadPendingRows(now: string): Promise<QueueRow[]> {
   const onlyAccounts = await simulatorAccountIds()
@@ -161,6 +149,7 @@ export interface DrainResult {
   failed: number
   requeued: number
   skipped: number
+  followups?: FollowupResult
 }
 
 export async function drainDmQueue(): Promise<DrainResult> {
@@ -181,7 +170,7 @@ export async function drainDmQueue(): Promise<DrainResult> {
 
   const candidates = await loadPendingRows(nowIso())
 
-  const results = { sent: 0, failed: 0, requeued: 0, skipped: 0 }
+  const results: DrainResult = { sent: 0, failed: 0, requeued: 0, skipped: 0 }
   // Caches per invocation: hourly counts and decrypted tokens per account.
   const hourlyCount = new Map<string, number>()
   const accountCache = new Map<
@@ -279,6 +268,9 @@ export async function drainDmQueue(): Promise<DrainResult> {
     // --- Send the DM (skip if a previous partial run already sent it) ---
     let dmOk = Boolean(row.dm_sent_at)
     let terminalFailure = false
+    // The automation's own DM (not a follow-gate opener) went out: that's
+    // what a follow-up follows.
+    let realDmSent = false
     if (!dmOk) {
       try {
         if (automation.follow_gate && !row.gate_status) {
@@ -292,6 +284,7 @@ export async function drainDmQueue(): Promise<DrainResult> {
               ...(gateStatus === "delivered" ? { gate_delivered_at: nowIso() } : {}),
             })
             .eq("id", row.id)
+          realDmSent = gateStatus === "delivered"
         } else {
         // Short links per recipient when click tracking is on; falls back to
         // the original text on any tracking error.
@@ -310,6 +303,7 @@ export async function drainDmQueue(): Promise<DrainResult> {
           // They messaged us (DM or story reply): answer in the conversation.
           await sendDirectMessage(account.token, account.instagram_id, row.commenter_id, message)
         }
+        realDmSent = true
         }
         dmOk = true
         hourlyCount.set(
@@ -404,6 +398,15 @@ export async function drainDmQueue(): Promise<DrainResult> {
       .update({ status: "sent", updated_at: nowIso() })
       .eq("id", row.id)
     results.sent++
+    if (realDmSent) await scheduleFollowup(row.id)
+  }
+
+  // Follow-ups that are due (schema/028). Never lets a problem there
+  // affect the DM results above.
+  try {
+    results.followups = await processDueFollowups()
+  } catch (err) {
+    console.error("[process-queue] follow-ups failed:", err)
   }
 
   return results

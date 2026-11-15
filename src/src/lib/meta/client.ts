@@ -212,6 +212,28 @@ export async function getFollowStatus(
   return Boolean(data.is_user_follow_business)
 }
 
+/**
+ * When each message in our conversation with this person was sent (only
+ * ids and times, so it's one cheap call per conversation). Empty if there
+ * is no conversation. Used to tell a brand-new conversation from an old
+ * one that started before the app was connected.
+ */
+export async function getConversationMessageTimes(
+  accessToken: string,
+  igsid: string
+): Promise<string[]> {
+  const headers = { Authorization: `Bearer ${accessToken}` }
+  const list = await handleResponse<{ data?: { id: string }[] }>(
+    await fetch(`${instagramGraphBase()}/me/conversations?user_id=${encodeURIComponent(igsid)}`, { headers })
+  )
+  const conversationId = list.data?.[0]?.id
+  if (!conversationId) return []
+  const conversation = await handleResponse<{ messages?: { data?: { created_time: string }[] } }>(
+    await fetch(`${instagramGraphBase()}/${encodeURIComponent(conversationId)}?fields=messages`, { headers })
+  )
+  return (conversation.messages?.data ?? []).map((m) => m.created_time)
+}
+
 export async function sendCommentReply(
   accessToken: string,
   commentId: string,

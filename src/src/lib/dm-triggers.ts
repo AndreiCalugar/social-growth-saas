@@ -1,8 +1,10 @@
 // What starts a DM automation. One automation can listen to several
 // triggers (schema/027): e.g. "comment LINK on the post OR DM me LINK".
+// "new_conversation" (schema/028) fires on someone's very first message to
+// the account, with or without a keyword: a welcome message.
 // Shared by the API, the queue and the editor, so the rules live here once.
 
-export const TRIGGER_TYPES = ["comment", "dm", "story_reply"] as const
+export const TRIGGER_TYPES = ["comment", "dm", "story_reply", "new_conversation"] as const
 export type TriggerType = (typeof TRIGGER_TYPES)[number]
 
 /**
@@ -45,4 +47,9 @@ export function messageTrigger(triggers: TriggerType[], isStoryReply: boolean): 
   if (isStoryReply && triggers.includes("story_reply")) return "story_reply"
   if (triggers.includes("dm")) return "dm"
   return null
+}
+
+/** Keyword triggers need keywords; a welcome message alone doesn't. */
+export function needsKeywords(triggers: TriggerType[]): boolean {
+  return triggers.some((t) => t !== "new_conversation")
 }

@@ -22,6 +22,7 @@ import {
   UserPlus,
   Zap,
   Check,
+  BellRing,
 } from "lucide-react"
 import { InstagramIcon } from "@/components/instagram-icon"
 import { InstagramAccountAvatar } from "@/components/instagram-account-avatar"
@@ -37,7 +38,8 @@ import { cn } from "@/lib/utils"
 import { trackEvent } from "@/lib/analytics"
 import { DmTemplatePicker } from "@/components/dm-template-picker"
 import type { TemplateDraft } from "@/lib/dm-templates"
-import { automationTriggers, normalizeTriggers, type TriggerType } from "@/lib/dm-triggers"
+import { automationTriggers, needsKeywords, normalizeTriggers, type TriggerType } from "@/lib/dm-triggers"
+import { audienceNeedsClicks, type FollowupAudience } from "@/lib/followup-settings"
 
 export type DmAccount = ConnectedInstagramAccount
 
@@ -59,6 +61,11 @@ export interface DmAutomation {
   trigger_type?: TriggerType
   // Missing until schema/027 has run (then trigger_type is the only one).
   triggers?: TriggerType[]
+  // Missing until schema/028 has run.
+  followup_enabled?: boolean
+  followup_delay_hours?: number
+  followup_audience?: FollowupAudience
+  followup_message?: string | null
   // Missing until schema/026 has run.
   follow_gate?: boolean
   created_at: string
@@ -70,7 +77,48 @@ const TRIGGERS: { value: TriggerType; label: string; hint: string }[] = [
   { value: "comment", label: "Comment", hint: "On a post or reel" },
   { value: "dm", label: "DM", hint: "Messages and story replies" },
   { value: "story_reply", label: "Story reply", hint: "Story replies only" },
+  { value: "new_conversation", label: "New conversation", hint: "Their first message ever" },
 ]
+
+/** Follow-up numbers per automation and status per DM (schema/028). */
+export interface FollowupStats {
+  byAutomation: Record<string, { sent: number; clickedAfter: number }>
+  byLog: Record<string, { status: "scheduled" | "processing" | "sent" | "skipped" | "failed"; sendAfter: string; skipReason: string | null }>
+}
+
+const EMPTY_FOLLOWUP_STATS: FollowupStats = { byAutomation: {}, byLog: {} }
+
+const FOLLOWUP_AUDIENCES: { value: FollowupAudience; label: string }[] = [
+  { value: "not_clicked", label: "Didn't open the link" },
+  { value: "clicked", label: "Opened the link" },
+  { value: "not_replied", label: "Didn't reply" },
+  { value: "all", label: "Everyone" },
+]
+
+// Ready-made follow-ups, in the DM's language (Romanian if it has diacritics).
+const FOLLOWUP_SUGGESTIONS: Record<"ro" | "en", Record<FollowupAudience, string>> = {
+  en: {
+    not_clicked: "Hey! 👋 Did you get a chance to look at the link I sent you? Spots are filling up — let me know if you have any questions.",
+    clicked: "Hey! Did it help? Reply with a number from 1 to 5 ⭐ — I read every answer.",
+    not_replied: "Hey! 👋 Just making sure you saw my message. What can I help you with?",
+    all: "Hey! 👋 Just checking in — any questions about what I sent you?",
+  },
+  ro: {
+    not_clicked: "Hei! 👋 Ai apucat să te uiți pe link-ul pe care ți l-am trimis? Locurile se ocupă repede — scrie-mi dacă ai întrebări.",
+    clicked: "Hei! Ți-a fost de folos? Răspunde cu o notă de la 1 la 5 ⭐ — citesc fiecare răspuns.",
+    not_replied: "Hei! 👋 Voiam doar să mă asigur că ai văzut mesajul meu. Cu ce te pot ajuta?",
+    all: "Hei! 👋 Ai vreo întrebare despre ce ți-am trimis?",
+  },
+}
+
+function followupSuggestion(dmMessage: string, audience: FollowupAudience): string {
+  const lang = /[ăâîșşțţ]/i.test(dmMessage) ? "ro" : "en"
+  return FOLLOWUP_SUGGESTIONS[lang][audience]
+}
+
+const ALL_SUGGESTIONS = new Set(
+  Object.values(FOLLOWUP_SUGGESTIONS).flatMap((byAudience) => Object.values(byAudience))
+)
 
 // "Comments on any post or DMs containing", shown on each automation row.
 function triggerSummary(automation: DmAutomation): string {
@@ -79,10 +127,14 @@ function triggerSummary(automation: DmAutomation): string {
       ? `comments on ${automation.match_any_post ? "any post" : "a post"}`
       : t === "dm"
         ? "DMs"
-        : "story replies"
+        : t === "story_reply"
+          ? "story replies"
+          : "new conversations"
   )
   const text = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts.at(-1)}` : parts[0]
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)} containing`
+  const sentence = `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+  // A welcome message alone has no keywords.
+  return automation.keywords.length > 0 ? `${sentence} containing` : sentence
 }
 
 export interface AutomationSendStats {
@@ -143,6 +195,10 @@ interface FormState {
   publicReplyMessages: string[]
   trackClicks: boolean
   followGate: boolean
+  followupEnabled: boolean
+  followupDelayHours: number
+  followupAudience: FollowupAudience
+  followupMessage: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -159,6 +215,10 @@ const EMPTY_FORM: FormState = {
   // On for new automations; existing ones keep whatever they had.
   trackClicks: true,
   followGate: false,
+  followupEnabled: false,
+  followupDelayHours: 20,
+  followupAudience: "not_clicked",
+  followupMessage: "",
 }
 
 export function DmsClient({
@@ -167,6 +227,7 @@ export function DmsClient({
   initialLogs,
   statsByAutomation,
   clickStats,
+  followupStats = EMPTY_FOLLOWUP_STATS,
   beta,
 }: {
   beta: BetaRequest
@@ -175,6 +236,7 @@ export function DmsClient({
   initialLogs: DmLogRow[]
   statsByAutomation: Record<string, AutomationSendStats>
   clickStats: ClickStats
+  followupStats?: FollowupStats
 }) {
   const clickedLogs = useMemo(() => new Set(clickStats.clickedLogIds), [clickStats.clickedLogIds])
   // Activity list: "all" or one automation's id, shown a page at a time.
@@ -468,6 +530,17 @@ export function DmsClient({
                           <UserPlus className="h-3 w-3" /> Followers only
                         </span>
                       )}
+                      {(automation.followup_enabled || followupStats.byAutomation[automation.id]) && (
+                        <span
+                          title="Follow-ups sent, and how many of those people opened the link afterwards"
+                          className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-px font-medium text-slate-600"
+                        >
+                          <BellRing className="h-3 w-3" />
+                          {followupStats.byAutomation[automation.id]
+                            ? `${followupStats.byAutomation[automation.id].sent} follow-ups · ${followupStats.byAutomation[automation.id].clickedAfter} clicked after`
+                            : `Follow-up after ${automation.followup_delay_hours ?? 20}h`}
+                        </span>
+                      )}
                     </span>
                     {(send.failed > 0 || send.pending > 0) && (
                       <span className="mt-1.5 flex flex-wrap gap-1.5">
@@ -657,6 +730,7 @@ export function DmsClient({
                           Link sent
                         </span>
                       )}
+                      <FollowupChip followup={followupStats.byLog[log.id]} />
                       {clickedLogs.has(log.id) && (
                         <span
                           title="Opened the link in your DM"
@@ -1035,6 +1109,10 @@ function AutomationForm({
             : [""],
           trackClicks: Boolean(editing.track_clicks),
           followGate: Boolean(editing.follow_gate),
+          followupEnabled: Boolean(editing.followup_enabled),
+          followupDelayHours: editing.followup_delay_hours ?? 20,
+          followupAudience: editing.followup_audience ?? "not_clicked",
+          followupMessage: editing.followup_message ?? "",
         }
       : draft
         ? {
@@ -1044,6 +1122,10 @@ function AutomationForm({
             dmMessage: draft.dmMessage,
             publicReplyEnabled: draft.publicReplyEnabled,
             publicReplyMessages: draft.publicReplyMessages,
+            ...(draft.triggers ? { triggers: draft.triggers } : {}),
+            ...(draft.followupMessage
+              ? { followupEnabled: true, followupAudience: draft.followupAudience ?? "not_clicked", followupMessage: draft.followupMessage }
+              : {}),
           }
         : EMPTY_FORM
   )
@@ -1056,9 +1138,19 @@ function AutomationForm({
   const isComment = form.triggers.includes("comment")
   const hasDm = form.triggers.includes("dm")
   const hasStory = form.triggers.includes("story_reply")
+  const hasWelcome = form.triggers.includes("new_conversation")
   const hasMessage = hasDm || hasStory
-  // Step numbers shift: without comments there's no "post" or "public reply" step.
-  const stepKeywords = isComment ? 3 : 2
+  const showKeywords = needsKeywords(form.triggers)
+  // Step numbers shift: without comments there's no "post" or "public
+  // reply" step, and a welcome message alone has no keywords.
+  let stepCounter = 1
+  const stepPost = isComment ? ++stepCounter : 0
+  const stepKeywords = showKeywords ? ++stepCounter : 0
+  const stepDm = ++stepCounter
+  const stepPublicReply = isComment ? ++stepCounter : 0
+  const stepFollowup = ++stepCounter
+  // Follow-ups only reach people who messaged (Instagram's 24h window).
+  const followupReachesEveryone = hasMessage || hasWelcome || form.followGate
   const [previewReplyIndex, setPreviewReplyIndex] = useState(0)
 
   useEffect(() => {
@@ -1117,7 +1209,7 @@ function AutomationForm({
       : form.keywords
 
     if (!form.name.trim()) return setFormError("Give the automation a name.")
-    if (keywords.length === 0)
+    if (keywords.length === 0 && showKeywords)
       return setFormError("Add at least one trigger keyword.")
     if (isComment && !form.matchAnyPost && !form.postId)
       return setFormError("Pick a post, or switch to “Any post”.")
@@ -1125,6 +1217,8 @@ function AutomationForm({
     const publicReplies = joinReplyVariants(form.publicReplyMessages)
     if (isComment && form.publicReplyEnabled && !publicReplies)
       return setFormError("Write the public reply, or turn it off.")
+    if (form.followupEnabled && !form.followupMessage.trim())
+      return setFormError("Write the follow-up message, or turn it off.")
 
     setSaving(true)
     try {
@@ -1135,7 +1229,7 @@ function AutomationForm({
         match_any_post: isComment && form.matchAnyPost,
         post_id: isComment && !form.matchAnyPost ? form.postId : null,
         post_url: isComment && !form.matchAnyPost ? form.postUrl : null,
-        keywords,
+        keywords: showKeywords ? keywords : [],
         whole_word_match: form.wholeWordMatch,
         dm_message: form.dmMessage,
         public_reply_enabled: isComment && form.publicReplyEnabled,
@@ -1144,6 +1238,10 @@ function AutomationForm({
           : null,
         track_clicks: form.trackClicks,
         follow_gate: form.followGate,
+        followup_enabled: form.followupEnabled,
+        followup_delay_hours: form.followupDelayHours,
+        followup_audience: form.followupAudience,
+        followup_message: form.followupMessage,
       }
       const res = await fetch(
         editing ? `/api/dms/automations/${editing.id}` : "/api/dms/automations",
@@ -1217,7 +1315,7 @@ function AutomationForm({
 
               {/* Step 1: what starts it */}
               <Step n={1} title="What starts it" note="Pick one or more">
-                <div role="group" aria-label="What starts it" className="grid grid-cols-3 gap-2">
+                <div role="group" aria-label="What starts it" className="grid grid-cols-2 gap-2">
                   {TRIGGERS.map((t) => {
                     // DM already catches story replies, so Story reply shows as included.
                     const included = t.value === "story_reply" && hasDm
@@ -1275,11 +1373,18 @@ function AutomationForm({
                     {isComment ? ", even if they also comment." : "."}
                   </p>
                 )}
+                {hasWelcome && (
+                  <p className="mt-2 text-[11px] leading-snug text-slate-500">
+                    Anyone who messages you for the very first time gets this DM, no keyword needed — a welcome
+                    message. People you&rsquo;ve talked to before never get it, and if their message has a keyword
+                    for another automation, that one answers instead.
+                  </p>
+                )}
               </Step>
 
               {/* Step 2: post (comments only) */}
               {isComment && (
-              <Step n={2} title="When someone comments on">
+              <Step n={stepPost} title="When someone comments on">
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1370,6 +1475,7 @@ function AutomationForm({
               )}
 
               {/* Keywords */}
+              {showKeywords && (
               <Step
                 n={stepKeywords}
                 title={`And the ${[
@@ -1441,9 +1547,10 @@ function AutomationForm({
                   &ldquo;linking&rdquo;)
                 </label>
               </Step>
+              )}
 
               {/* DM */}
-              <Step n={stepKeywords + 1} title="They will get a DM">
+              <Step n={stepDm} title="They will get a DM">
                 <textarea
                   value={form.dmMessage}
                   onChange={(e) =>
@@ -1522,7 +1629,7 @@ function AutomationForm({
 
               {/* Public reply (comments only) */}
               {isComment && (
-              <Step n={5} title="And a public reply" optional>
+              <Step n={stepPublicReply} title="And a public reply" optional>
                 <label className="flex items-center justify-between gap-3 cursor-pointer">
                   <span className="text-xs text-slate-600">
                     Reply under their comment so others see it works
@@ -1611,6 +1718,138 @@ function AutomationForm({
                 )}
               </Step>
               )}
+
+              {/* Follow-up (schema/028) */}
+              <Step n={stepFollowup} title="Then a follow-up" optional>
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <BellRing className="h-3.5 w-3.5 text-purple-600" />
+                    Send one more message a few hours later
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Send a follow-up"
+                    aria-checked={form.followupEnabled}
+                    onClick={() =>
+                      setForm((f) => {
+                        const on = !f.followupEnabled
+                        return {
+                          ...f,
+                          followupEnabled: on,
+                          // A ready-made message to start from, and the click
+                          // tracking the audience choice depends on.
+                          followupMessage: on && !f.followupMessage.trim()
+                            ? followupSuggestion(f.dmMessage, f.followupAudience)
+                            : f.followupMessage,
+                          trackClicks: on && audienceNeedsClicks(f.followupAudience) ? true : f.trackClicks,
+                        }
+                      })
+                    }
+                    className={cn(
+                      "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+                      form.followupEnabled ? "bg-purple-600" : "bg-slate-300"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                        form.followupEnabled && "translate-x-4"
+                      )}
+                    />
+                  </button>
+                </label>
+
+                {form.followupEnabled && (
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-semibold text-slate-700">Send it to people who</p>
+                      <div role="radiogroup" aria-label="Follow-up audience" className="grid grid-cols-2 gap-1.5">
+                        {FOLLOWUP_AUDIENCES.map((o) => (
+                          <button
+                            key={o.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={form.followupAudience === o.value}
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                followupAudience: o.value,
+                                // Swap the ready-made text along, but never the creator's own.
+                                followupMessage:
+                                  !f.followupMessage.trim() || ALL_SUGGESTIONS.has(f.followupMessage)
+                                    ? followupSuggestion(f.dmMessage, o.value)
+                                    : f.followupMessage,
+                                trackClicks: audienceNeedsClicks(o.value) ? true : f.trackClicks,
+                              }))
+                            }
+                            className={cn(
+                              "rounded-lg border px-2 py-1.5 text-[11px] font-semibold leading-tight transition-colors",
+                              form.followupAudience === o.value
+                                ? "border-purple-500 bg-purple-50 text-purple-700"
+                                : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                            )}
+                          >
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs text-slate-600">
+                      After
+                      <input
+                        type="number"
+                        min={1}
+                        max={23}
+                        value={form.followupDelayHours}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            followupDelayHours: Math.min(23, Math.max(1, Math.round(Number(e.target.value) || 1))),
+                          }))
+                        }
+                        aria-label="Hours until the follow-up"
+                        className="h-8 w-16 rounded-lg border border-slate-200 bg-white px-2 text-center text-sm text-slate-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      />
+                      hours (1&ndash;23)
+                    </label>
+
+                    <div>
+                      <textarea
+                        value={form.followupMessage}
+                        onChange={(e) => setForm((f) => ({ ...f, followupMessage: e.target.value }))}
+                        rows={3}
+                        maxLength={1000}
+                        aria-label="Follow-up message"
+                        placeholder="Hey! Did you see the link? Spots are filling up…"
+                        className={cn(inputCls, "py-2 resize-y")}
+                      />
+                      <p className="text-[11px] text-slate-400 text-right">{form.followupMessage.length}/1000</p>
+                    </div>
+
+                    <p className="text-[11px] leading-snug text-slate-500">
+                      Instagram only allows messages within 24 hours of a person&rsquo;s last message, so the
+                      follow-up goes out at most 23 hours after they wrote to you. If that time has passed, it&rsquo;s
+                      skipped — never sent late.
+                      {audienceNeedsClicks(form.followupAudience) && " It uses click tracking to know who opened the link."}
+                      {form.followupAudience === "not_replied" && " If they write back before then, it isn't sent."}
+                    </p>
+                    {audienceNeedsClicks(form.followupAudience) && !form.trackClicks && (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                        Turn on &ldquo;Track link clicks&rdquo; above, or everyone will count as not having opened it.
+                      </p>
+                    )}
+                    {!followupReachesEveryone && (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                        Only people who message you can get a follow-up. With comments alone that&rsquo;s just those who
+                        also write to you — turn on &ldquo;Ask them to follow first&rdquo; so commenters tap a button and
+                        the follow-up can reach them.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </Step>
             </div>
           </div>
 
@@ -1717,4 +1956,32 @@ function formatRelative(iso: string): string {
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days}d ago`
   return new Date(iso).toLocaleDateString()
+}
+
+const SKIP_REASONS: Record<string, string> = {
+  window_closed: "Instagram's 24-hour window had closed",
+  clicked: "They had already opened the link",
+  not_clicked: "They hadn't opened the link",
+  automation_off: "The automation or its follow-up was turned off",
+  replied: "They replied to you",
+}
+
+/** The follow-up's state on an activity row. */
+function FollowupChip({ followup }: { followup?: FollowupStats["byLog"][string] }) {
+  if (!followup) return null
+  const hoursLeft = Math.max(0, Math.ceil((new Date(followup.sendAfter).getTime() - Date.now()) / 3600_000))
+  const [label, title, tone] =
+    followup.status === "sent"
+      ? ["Followed up", "The follow-up was sent", "bg-purple-50 text-purple-700"]
+      : followup.status === "skipped"
+        ? ["Follow-up skipped", SKIP_REASONS[followup.skipReason ?? ""] ?? "Skipped", "bg-slate-100 text-slate-500"]
+        : followup.status === "failed"
+          ? ["Follow-up failed", "Instagram refused the follow-up", "bg-red-50 text-red-600"]
+          : [hoursLeft > 0 ? `Follow-up in ${hoursLeft}h` : "Follow-up soon", "Scheduled", "bg-slate-100 text-slate-600"]
+  return (
+    <span title={title} className={cn("ml-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", tone)}>
+      <BellRing className="h-3 w-3" />
+      {label}
+    </span>
+  )
 }
