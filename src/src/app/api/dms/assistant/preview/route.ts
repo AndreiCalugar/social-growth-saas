@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getAccountForUser } from "@/lib/meta/accounts"
 import {
+  ASSISTANT_LANGUAGE_SETTINGS,
   ASSISTANT_TONES,
-  detectLanguage,
+  automationLanguage,
   disclosureLine,
+  replyLanguage,
   generateAssistantReply,
+  type AssistantLanguageSetting,
   type AssistantTone,
   type ConversationTurn,
 } from "@/lib/ai/assistant"
@@ -39,10 +42,16 @@ export async function POST(req: NextRequest) {
     tone?: string
     question?: string
     history?: ConversationTurn[]
+    language?: string
+    dmMessage?: string
   } | null
   const knowledge = body?.knowledge?.trim() ?? ""
   const question = body?.question?.trim() ?? ""
   const tone = (ASSISTANT_TONES as string[]).includes(body?.tone ?? "") ? (body!.tone as AssistantTone) : "warm"
+  const language = (ASSISTANT_LANGUAGE_SETTINGS as string[]).includes(body?.language ?? "")
+    ? (body!.language as AssistantLanguageSetting)
+    : "auto"
+  const fallbackLanguage = automationLanguage(body?.dmMessage, knowledge)
   if (!knowledge) return NextResponse.json({ error: "Write what the assistant should know first." }, { status: 400 })
   if (knowledge.length > MAX_KNOWLEDGE_LENGTH) return NextResponse.json({ error: "The information is too long." }, { status: 400 })
   if (!question || question.length > 1000) return NextResponse.json({ error: "Type a question." }, { status: 400 })
@@ -52,8 +61,17 @@ export async function POST(req: NextRequest) {
 
   const account = await getAccountForUser(session.user.id)
   const username = account?.username ?? "you"
-  const result = await generateAssistantReply({ creatorUsername: username, knowledge, tone, history, question })
+  const result = await generateAssistantReply({
+    creatorUsername: username,
+    knowledge,
+    tone,
+    history,
+    question,
+    language,
+    fallbackLanguage,
+  })
   const first = !history.some((t) => t.role === "assistant")
-  const reply = first ? `${disclosureLine(detectLanguage(question, knowledge), tone, username)}\n\n${result.reply}` : result.reply
+  const lineLanguage = replyLanguage(language, question, fallbackLanguage)
+  const reply = first ? `${disclosureLine(lineLanguage, tone, username)}\n\n${result.reply}` : result.reply
   return NextResponse.json({ reply, handoff: result.kind === "handoff" })
 }

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import Anthropic from "@anthropic-ai/sdk"
 import {
+  automationLanguage,
   detectLanguage,
+  replyLanguage,
   disclosureLine,
   generateAssistantReply,
   handoffMessage,
@@ -80,5 +82,40 @@ describe("copy", () => {
     expect(disclosureLine("ro", "warm", "ana")).toMatch(/asistentul AI al lui @ana/)
     expect(disclosureLine("en", "professional", "ana")).toMatch(/^Hi! I'm @ana's AI assistant/)
     expect(disclosureLine("en", "warm", "ana").startsWith("🤖")).toBe(true)
+  })
+})
+
+describe("reply language", () => {
+  it("recognises short Romanian without diacritics", () => {
+    expect(detectLanguage("cat costa?")).toBe("ro")
+    expect(detectLanguage("unde e locatia")).toBe("ro")
+    expect(detectLanguage("where is it?")).toBe("en")
+  })
+
+  it("falls back to the automation's language when the message says nothing", () => {
+    expect(replyLanguage("auto", "ok", "ro")).toBe("ro")
+    expect(replyLanguage("auto", "👍", "ro")).toBe("ro")
+    expect(replyLanguage("auto", "How much is it?", "ro")).toBe("en")
+  })
+
+  it("always uses the chosen language when it's not automatic", () => {
+    expect(replyLanguage("ro", "How much is it?", "en")).toBe("ro")
+    expect(replyLanguage("en", "Cât costă?", "ro")).toBe("en")
+  })
+
+  it("takes the automation's language from its DM, then its info", () => {
+    expect(automationLanguage("Salut! 👋 Uite link-ul promis", "Price: 100")).toBe("ro")
+    expect(automationLanguage("https://x.com", "Preț: 100 lei")).toBe("ro")
+    expect(automationLanguage("Here you go", "")).toBe("en")
+  })
+
+  it("tells Claude which language to use", async () => {
+    const create = fakeClient(message({ reply: "Costă 250 lei.", needs_human: false }))
+    await generateAssistantReply({ ...input, language: "ro", question: "How much?" })
+    expect(create.mock.calls[0][0].system).toContain("Reply in Romanian")
+    await generateAssistantReply({ ...input, language: "auto", fallbackLanguage: "ro", question: "ok" })
+    expect(create.mock.calls[1][0].system).toContain("Reply in Romanian")
+    await generateAssistantReply({ ...input, language: "auto", fallbackLanguage: "ro", question: "What time does it start?" })
+    expect(create.mock.calls[2][0].system).toContain("Reply in English")
   })
 })

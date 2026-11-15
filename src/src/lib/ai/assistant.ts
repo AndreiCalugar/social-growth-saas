@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
+import { guessLanguage } from "@/lib/ai/language"
+export { guessLanguage }
 
 /**
  * The AI assistant on a DM automation (schema/029): answers the questions
@@ -17,6 +19,9 @@ export type AssistantTone = "warm" | "friendly" | "professional"
 export const ASSISTANT_TONES: AssistantTone[] = ["warm", "friendly", "professional"]
 
 export type AssistantLanguage = "ro" | "en"
+/** The creator's choice: match the person ("auto"), or always one language. */
+export type AssistantLanguageSetting = "auto" | AssistantLanguage
+export const ASSISTANT_LANGUAGE_SETTINGS: AssistantLanguageSetting[] = ["auto", "ro", "en"]
 
 export interface ConversationTurn {
   role: "user" | "assistant"
@@ -31,6 +36,10 @@ export interface AssistantInput {
   history: ConversationTurn[]
   /** The message to answer. */
   question: string
+  /** Always this language, or "auto" (the person's, else fallbackLanguage). */
+  language?: AssistantLanguageSetting
+  /** The automation's own language (its DM), used when "auto" can't tell. */
+  fallbackLanguage?: AssistantLanguage
 }
 
 export type AssistantResult =
@@ -67,7 +76,7 @@ function systemPrompt(input: AssistantInput): string {
 Answer ONLY from the creator's information below. It is the single source of truth.
 - If the answer is there, reply in 1-3 short sentences. Never add facts that aren't in it: no guessed prices, dates, times, places, links, discounts or promises.
 - If the answer isn't there (or only partly), if they ask to talk to a person, or if the message is off-topic, sensitive (health, legal, money advice) or rude: don't guess. Set needs_human to true and reply kindly that you'll pass the question to @${input.creatorUsername}, who will get back to them.
-- Reply in the language of the person's latest message (usually Romanian or English), even if the information is written in another language.
+- ${languageRule(replyLanguage(input.language ?? "auto", input.question, input.fallbackLanguage ?? "en"))}
 - Plain text only: no markdown, no bullet lists, no headings. Links exactly as written in the information.
 - Tone: ${TONE_GUIDE[input.tone]}
 - You are an AI assistant. Never claim to be @${input.creatorUsername} or a human. Don't introduce yourself; that's handled separately.
@@ -95,7 +104,7 @@ export function setAnthropicClientForTests(c: Anthropic | null) {
  * so the person always gets a polite answer and the creator sees it.
  */
 export async function generateAssistantReply(input: AssistantInput): Promise<AssistantResult> {
-  const language = detectLanguage(input.question, input.knowledge)
+  const language = replyLanguage(input.language ?? "auto", input.question, input.fallbackLanguage ?? "en")
   const fallback: AssistantResult = { kind: "handoff", reply: handoffMessage(language, input.tone, input.creatorUsername) }
 
   const messages: Anthropic.MessageParam[] = [
@@ -141,11 +150,34 @@ function cleanReply(text: string): string {
     .slice(0, 1000)
 }
 
+const LANGUAGE_NAMES: Record<AssistantLanguage, string> = { ro: "Romanian", en: "English" }
+
+// The code picks the language (the setting, else the person's message, else
+// the automation's) so Claude's answer always matches the intro line.
+function languageRule(language: AssistantLanguage): string {
+  return language === "ro"
+    ? "Reply in Romanian, with correct diacritics (ă, â, î, ș, ț), even if the information is written in English or the person mixes languages."
+    : "Reply in English, even if the information is written in Romanian or the person mixes languages."
+}
+
+/** Which language the assistant's own lines (intro, handoff) use. */
+export function replyLanguage(
+  setting: AssistantLanguageSetting,
+  message: string,
+  fallback: AssistantLanguage
+): AssistantLanguage {
+  if (setting !== "auto") return setting
+  return guessLanguage(message) ?? fallback
+}
+
+/** The automation's language: its DM first, then the assistant's info. */
+export function automationLanguage(dmMessage: string | null | undefined, knowledge: string | null | undefined): AssistantLanguage {
+  return guessLanguage(dmMessage ?? "") ?? guessLanguage(knowledge ?? "") ?? "en"
+}
+
+/** @deprecated kept for older callers: the language of the given texts, English if unclear. */
 export function detectLanguage(...texts: string[]): AssistantLanguage {
-  const joined = texts.join(" ")
-  if (/[ăâîșşțţ]/i.test(joined)) return "ro"
-  if (/\b(și|si|sunt|unde|cât|cat|când|cand|pret|preț|mersi|multumesc|mulțumesc|bună|buna|salut)\b/i.test(joined)) return "ro"
-  return "en"
+  return guessLanguage(texts.join(" ")) ?? "en"
 }
 
 /** The line that opens the first AI reply in a conversation. */
