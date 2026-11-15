@@ -42,7 +42,8 @@ import { DmTemplatePicker } from "@/components/dm-template-picker"
 import type { TemplateDraft } from "@/lib/dm-templates"
 import { automationTriggers, needsKeywords, normalizeTriggers, type TriggerType } from "@/lib/dm-triggers"
 import { audienceNeedsClicks, type FollowupAudience } from "@/lib/followup-settings"
-import type { AssistantTone } from "@/lib/ai/assistant"
+import type { AssistantLanguageSetting, AssistantTone } from "@/lib/ai/assistant"
+import { guessLanguage } from "@/lib/ai/language"
 
 export type DmAccount = ConnectedInstagramAccount
 
@@ -74,6 +75,8 @@ export interface DmAutomation {
   ai_knowledge?: string | null
   ai_tone?: AssistantTone
   ai_max_replies?: number
+  // Missing until schema/030 has run.
+  ai_language?: AssistantLanguageSetting
   // Missing until schema/026 has run.
   follow_gate?: boolean
   created_at: string
@@ -108,6 +111,12 @@ const AI_TONES: { value: AssistantTone; label: string; hint: string }[] = [
   { value: "warm", label: "Warm", hint: "Kind, like a friendly host" },
   { value: "friendly", label: "Casual", hint: "Upbeat, like texting a friend" },
   { value: "professional", label: "Professional", hint: "Polite and to the point" },
+]
+
+const AI_LANGUAGES: { value: AssistantLanguageSetting; label: string; hint: string }[] = [
+  { value: "auto", label: "Automatic", hint: "Their language; if unclear, your DM's language" },
+  { value: "ro", label: "Romanian", hint: "Always in Romanian" },
+  { value: "en", label: "English", hint: "Always in English" },
 ]
 
 const AI_KNOWLEDGE_PLACEHOLDER = `Everything it may answer from, e.g.:
@@ -232,6 +241,7 @@ interface FormState {
   aiKnowledge: string
   aiTone: AssistantTone
   aiMaxReplies: number
+  aiLanguage: AssistantLanguageSetting
 }
 
 const EMPTY_FORM: FormState = {
@@ -256,6 +266,7 @@ const EMPTY_FORM: FormState = {
   aiKnowledge: "",
   aiTone: "warm",
   aiMaxReplies: 3,
+  aiLanguage: "auto",
 }
 
 export function DmsClient({
@@ -1168,6 +1179,7 @@ function AutomationForm({
           aiKnowledge: editing.ai_knowledge ?? "",
           aiTone: editing.ai_tone ?? "warm",
           aiMaxReplies: editing.ai_max_replies ?? 3,
+          aiLanguage: editing.ai_language ?? "auto",
         }
       : draft
         ? {
@@ -1304,6 +1316,7 @@ function AutomationForm({
         ai_knowledge: form.aiKnowledge,
         ai_tone: form.aiTone,
         ai_max_replies: form.aiMaxReplies,
+        ai_language: form.aiLanguage,
       }
       const res = await fetch(
         editing ? `/api/dms/automations/${editing.id}` : "/api/dms/automations",
@@ -1701,7 +1714,15 @@ function AutomationForm({
                     role="switch"
                     aria-label="AI assistant"
                     aria-checked={form.aiEnabled}
-                    onClick={() => setForm((f) => ({ ...f, aiEnabled: !f.aiEnabled }))}
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        aiEnabled: !f.aiEnabled,
+                        // A Romanian DM → a Romanian assistant, unless already chosen.
+                        aiLanguage:
+                          !f.aiEnabled && f.aiLanguage === "auto" && guessLanguage(f.dmMessage) === "ro" ? "ro" : f.aiLanguage,
+                      }))
+                    }
                     className={cn(
                       "relative h-5 w-9 shrink-0 rounded-full transition-colors",
                       form.aiEnabled ? "bg-purple-600" : "bg-slate-300"
@@ -1759,6 +1780,33 @@ function AutomationForm({
                       </div>
                     </div>
 
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-semibold text-slate-700">Replies in</p>
+                      <div role="radiogroup" aria-label="Assistant language" className="grid grid-cols-3 gap-1.5">
+                        {AI_LANGUAGES.map((l) => (
+                          <button
+                            key={l.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={form.aiLanguage === l.value}
+                            title={l.hint}
+                            onClick={() => setForm((f) => ({ ...f, aiLanguage: l.value }))}
+                            className={cn(
+                              "rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                              form.aiLanguage === l.value
+                                ? "border-purple-500 bg-purple-50 text-purple-700"
+                                : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                            )}
+                          >
+                            {l.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        {AI_LANGUAGES.find((l) => l.value === form.aiLanguage)?.hint}.
+                      </p>
+                    </div>
+
                     <label className="flex items-center gap-2 text-xs text-slate-600">
                       Answer up to
                       <input
@@ -1785,7 +1833,13 @@ function AutomationForm({
                       <span className="font-semibold text-red-600">Needs you</span>.
                     </p>
 
-                    <AssistantTryIt knowledge={form.aiKnowledge} tone={form.aiTone} maxReplies={form.aiMaxReplies} />
+                    <AssistantTryIt
+                      knowledge={form.aiKnowledge}
+                      tone={form.aiTone}
+                      maxReplies={form.aiMaxReplies}
+                      language={form.aiLanguage}
+                      dmMessage={form.dmMessage}
+                    />
                   </div>
                 )}
               </Step>
@@ -2189,7 +2243,19 @@ function AiChip({ thread }: { thread?: AiThreadStats["byLog"][string] }) {
 }
 
 /** Ask the assistant test questions in the editor, like a follower would. */
-function AssistantTryIt({ knowledge, tone, maxReplies }: { knowledge: string; tone: AssistantTone; maxReplies: number }) {
+function AssistantTryIt({
+  knowledge,
+  tone,
+  maxReplies,
+  language,
+  dmMessage,
+}: {
+  knowledge: string
+  tone: AssistantTone
+  maxReplies: number
+  language: AssistantLanguageSetting
+  dmMessage: string
+}) {
   const [question, setQuestion] = useState("")
   const [turns, setTurns] = useState<{ role: "user" | "assistant"; text: string; handoff?: boolean }[]>([])
   const [loading, setLoading] = useState(false)
@@ -2213,7 +2279,14 @@ function AssistantTryIt({ knowledge, tone, maxReplies }: { knowledge: string; to
       const res = await fetch("/api/dms/assistant/preview", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ knowledge, tone, question: q, history: turns.map(({ role, text }) => ({ role, text })) }),
+        body: JSON.stringify({
+          knowledge,
+          tone,
+          language,
+          dmMessage,
+          question: q,
+          history: turns.map(({ role, text }) => ({ role, text })),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Couldn't get an answer")

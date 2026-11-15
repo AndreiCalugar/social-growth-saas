@@ -306,6 +306,23 @@ test("an AI assistant answers questions, and can be tried before going live", as
   await expect(page.getByText("1 conversation needs you")).toBeVisible()
 })
 
+test("a Romanian automation gets a Romanian-speaking assistant", async () => {
+  await page.getByRole("button", { name: /New automation/ }).first().click()
+  await page.getByRole("button", { name: /Free guide/ }).click()
+  // Romanian is the template default.
+  await page.getByPlaceholder("https://").fill("example.com/ghid")
+  await page.getByRole("button", { name: /Continue/ }).click()
+  await page.getByRole("button", { name: "Any post", exact: true }).click()
+
+  await page.getByRole("switch", { name: "AI assistant" }).click()
+  await expect(page.getByRole("radio", { name: "Romanian" })).toHaveAttribute("aria-checked", "true")
+  await page.getByLabel("What the AI assistant should know").fill("Ghid gratuit. Preț: 0 lei.")
+  await page.getByRole("button", { name: "Go live" }).click()
+  await expect(row("Ghid gratuit").getByText("Live")).toBeVisible()
+  const { data } = await db().from("dm_automations").select("ai_language").eq("name", "Ghid gratuit").single()
+  expect(data).toEqual({ ai_language: "ro" })
+})
+
 test("pausing an automation stops its DMs", async () => {
   const r = row("Link in DM")
   await r.getByTitle("Pause").click()

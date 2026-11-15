@@ -143,6 +143,11 @@ export async function PATCH(
       .maybeSingle()
 
   let { data: automation, error } = await update(patch)
+  // Before schema/030 the language setting has no column: save without it.
+  if (error && "ai_language" in patch && error.message.includes("ai_language")) {
+    delete patch.ai_language
+    ;({ data: automation, error } = await update(patch))
+  }
   // Before schema/029: saving with the assistant off needs no column;
   // turning it on must not be half-saved.
   if (error && isMissingAssistantColumn(error.message)) {

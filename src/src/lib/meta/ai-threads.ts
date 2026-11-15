@@ -3,10 +3,12 @@ import { decryptToken } from "@/lib/meta/oauth"
 import { TokenExpiredError, sendDirectMessage } from "@/lib/meta/client"
 import { markTokenError } from "@/lib/meta/accounts"
 import {
-  detectLanguage,
+  automationLanguage,
   disclosureLine,
+  replyLanguage,
   generateAssistantReply,
   handoffMessage,
+  type AssistantLanguageSetting,
   type AssistantTone,
   type ConversationTurn,
 } from "@/lib/ai/assistant"
@@ -34,6 +36,8 @@ interface AssistantAutomation {
   ai_knowledge?: string | null
   ai_tone?: AssistantTone
   ai_max_replies?: number
+  ai_language?: AssistantLanguageSetting
+  dm_message?: string
 }
 
 /** Open the assistant conversation for a delivered DM. Never throws. */
@@ -128,6 +132,10 @@ export async function handleAiMessage(
     if (!a?.is_active || !a.ai_enabled || !a.ai_knowledge?.trim() || !account) return "silent"
 
     const tone = a.ai_tone ?? "warm"
+    // Language of its own lines and of Claude's answers (schema/030).
+    const languageSetting = a.ai_language ?? "auto"
+    const fallbackLanguage = automationLanguage(a.dm_message, a.ai_knowledge)
+    const lineLanguage = replyLanguage(languageSetting, text, fallbackLanguage)
     const maxReplies = a.ai_max_replies ?? 3
     const token = decryptToken(account.access_token)
     const send = (message: string) => sendDirectMessage(token, account.instagram_id, thread.igsid, message)
@@ -144,7 +152,7 @@ export async function handleAiMessage(
         .eq("status", "open")
         .select("id")
       if (!claimed?.length) return "silent"
-      const reply = handoffMessage(detectLanguage(text, a.ai_knowledge), tone, account.username)
+      const reply = handoffMessage(lineLanguage, tone, account.username)
       await send(reply)
       await logReply(reply)
       return "handed_off"
@@ -175,12 +183,14 @@ export async function handleAiMessage(
       tone,
       history,
       question: text,
+      language: languageSetting,
+      fallbackLanguage,
     })
 
     // The first AI message in a conversation says it's an AI assistant.
     const first = thread.replies_count === 0
     const message = first
-      ? `${disclosureLine(detectLanguage(text, a.ai_knowledge), tone, account.username)}\n\n${result.reply}`
+      ? `${disclosureLine(lineLanguage, tone, account.username)}\n\n${result.reply}`
       : result.reply
     await send(message)
     await logReply(message)

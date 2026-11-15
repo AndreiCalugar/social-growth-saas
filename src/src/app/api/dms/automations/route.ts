@@ -175,6 +175,11 @@ export async function POST(req: NextRequest) {
     supabase.from("dm_automations").insert(row).select().maybeSingle()
 
   let { data: automation, error } = await insert(values)
+  // Before schema/030 the language setting has no column: save without it.
+  if (error && "ai_language" in values && error.message.includes("ai_language")) {
+    const { ai_language: _skipped, ...rest } = values
+    ;({ data: automation, error } = await insert(rest))
+  }
   if (error && isMissingAssistantColumn(error.message)) {
     return NextResponse.json(
       { error: "The AI assistant needs a database update (schema/029) first." },

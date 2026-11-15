@@ -1,6 +1,6 @@
 // AI assistant settings sent by the editor (schema/029), validated the
 // same way on create and update.
-import { ASSISTANT_TONES, type AssistantTone } from "@/lib/ai/assistant"
+import { ASSISTANT_LANGUAGE_SETTINGS, ASSISTANT_TONES, type AssistantTone } from "@/lib/ai/assistant"
 
 export const MAX_KNOWLEDGE_LENGTH = 4000
 
@@ -9,6 +9,7 @@ export interface AssistantInputBody {
   ai_knowledge?: string | null
   ai_tone?: string
   ai_max_replies?: number
+  ai_language?: string
 }
 
 /** The columns to write, or an error. Turning it on needs the information. */
@@ -28,6 +29,12 @@ export function assistantColumns(body: AssistantInputBody): { values: Record<str
     if (!Number.isInteger(n) || n < 1 || n > 10) return { error: "ai_max_replies must be a whole number from 1 to 10" }
     values.ai_max_replies = n
   }
+  if (body.ai_language !== undefined) {
+    if (!(ASSISTANT_LANGUAGE_SETTINGS as string[]).includes(body.ai_language)) {
+      return { error: "ai_language must be auto, ro or en" }
+    }
+    values.ai_language = body.ai_language
+  }
   if (body.ai_enabled !== undefined) {
     values.ai_enabled = Boolean(body.ai_enabled)
     if (values.ai_enabled && !values.ai_knowledge) {
@@ -39,5 +46,5 @@ export function assistantColumns(body: AssistantInputBody): { values: Record<str
 
 /** True if the database rejected an assistant column (schema/029 not run). */
 export function isMissingAssistantColumn(message: string): boolean {
-  return /\bai_(enabled|knowledge|tone|max_replies)\b/.test(message)
+  return /\bai_(enabled|knowledge|tone|max_replies|language)\b/.test(message)
 }
