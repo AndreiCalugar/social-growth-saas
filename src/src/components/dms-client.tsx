@@ -39,7 +39,7 @@ import { trackEvent } from "@/lib/analytics"
 import { DmTemplatePicker } from "@/components/dm-template-picker"
 import type { TemplateDraft } from "@/lib/dm-templates"
 import { automationTriggers, needsKeywords, normalizeTriggers, type TriggerType } from "@/lib/dm-triggers"
-import type { FollowupAudience } from "@/lib/followup-settings"
+import { audienceNeedsClicks, type FollowupAudience } from "@/lib/followup-settings"
 
 export type DmAccount = ConnectedInstagramAccount
 
@@ -91,6 +91,7 @@ const EMPTY_FOLLOWUP_STATS: FollowupStats = { byAutomation: {}, byLog: {} }
 const FOLLOWUP_AUDIENCES: { value: FollowupAudience; label: string }[] = [
   { value: "not_clicked", label: "Didn't open the link" },
   { value: "clicked", label: "Opened the link" },
+  { value: "not_replied", label: "Didn't reply" },
   { value: "all", label: "Everyone" },
 ]
 
@@ -99,11 +100,13 @@ const FOLLOWUP_SUGGESTIONS: Record<"ro" | "en", Record<FollowupAudience, string>
   en: {
     not_clicked: "Hey! 👋 Did you get a chance to look at the link I sent you? Spots are filling up — let me know if you have any questions.",
     clicked: "Hey! Did it help? Reply with a number from 1 to 5 ⭐ — I read every answer.",
+    not_replied: "Hey! 👋 Just making sure you saw my message. What can I help you with?",
     all: "Hey! 👋 Just checking in — any questions about what I sent you?",
   },
   ro: {
     not_clicked: "Hei! 👋 Ai apucat să te uiți pe link-ul pe care ți l-am trimis? Locurile se ocupă repede — scrie-mi dacă ai întrebări.",
     clicked: "Hei! Ți-a fost de folos? Răspunde cu o notă de la 1 la 5 ⭐ — citesc fiecare răspuns.",
+    not_replied: "Hei! 👋 Voiam doar să mă asigur că ai văzut mesajul meu. Cu ce te pot ajuta?",
     all: "Hei! 👋 Ai vreo întrebare despre ce ți-am trimis?",
   },
 }
@@ -1121,7 +1124,7 @@ function AutomationForm({
             publicReplyMessages: draft.publicReplyMessages,
             ...(draft.triggers ? { triggers: draft.triggers } : {}),
             ...(draft.followupMessage
-              ? { followupEnabled: true, followupAudience: "not_clicked" as const, followupMessage: draft.followupMessage }
+              ? { followupEnabled: true, followupAudience: draft.followupAudience ?? "not_clicked", followupMessage: draft.followupMessage }
               : {}),
           }
         : EMPTY_FORM
@@ -1739,7 +1742,7 @@ function AutomationForm({
                           followupMessage: on && !f.followupMessage.trim()
                             ? followupSuggestion(f.dmMessage, f.followupAudience)
                             : f.followupMessage,
-                          trackClicks: on && f.followupAudience !== "all" ? true : f.trackClicks,
+                          trackClicks: on && audienceNeedsClicks(f.followupAudience) ? true : f.trackClicks,
                         }
                       })
                     }
@@ -1761,7 +1764,7 @@ function AutomationForm({
                   <div className="mt-3 space-y-3">
                     <div>
                       <p className="mb-1.5 text-[11px] font-semibold text-slate-700">Send it to people who</p>
-                      <div role="radiogroup" aria-label="Follow-up audience" className="grid grid-cols-3 gap-1.5">
+                      <div role="radiogroup" aria-label="Follow-up audience" className="grid grid-cols-2 gap-1.5">
                         {FOLLOWUP_AUDIENCES.map((o) => (
                           <button
                             key={o.value}
@@ -1777,7 +1780,7 @@ function AutomationForm({
                                   !f.followupMessage.trim() || ALL_SUGGESTIONS.has(f.followupMessage)
                                     ? followupSuggestion(f.dmMessage, o.value)
                                     : f.followupMessage,
-                                trackClicks: o.value !== "all" ? true : f.trackClicks,
+                                trackClicks: audienceNeedsClicks(o.value) ? true : f.trackClicks,
                               }))
                             }
                             className={cn(
@@ -1829,9 +1832,10 @@ function AutomationForm({
                       Instagram only allows messages within 24 hours of a person&rsquo;s last message, so the
                       follow-up goes out at most 23 hours after they wrote to you. If that time has passed, it&rsquo;s
                       skipped — never sent late.
-                      {form.followupAudience !== "all" && " It uses click tracking to know who opened the link."}
+                      {audienceNeedsClicks(form.followupAudience) && " It uses click tracking to know who opened the link."}
+                      {form.followupAudience === "not_replied" && " If they write back before then, it isn't sent."}
                     </p>
-                    {form.followupAudience !== "all" && !form.trackClicks && (
+                    {audienceNeedsClicks(form.followupAudience) && !form.trackClicks && (
                       <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
                         Turn on &ldquo;Track link clicks&rdquo; above, or everyone will count as not having opened it.
                       </p>
@@ -1959,6 +1963,7 @@ const SKIP_REASONS: Record<string, string> = {
   clicked: "They had already opened the link",
   not_clicked: "They hadn't opened the link",
   automation_off: "The automation or its follow-up was turned off",
+  replied: "They replied to you",
 }
 
 /** The follow-up's state on an activity row. */

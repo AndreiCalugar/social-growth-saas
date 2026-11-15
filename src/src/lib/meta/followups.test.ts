@@ -30,7 +30,7 @@ describe("followupSendAfter", () => {
 })
 
 describe("decideFollowup", () => {
-  const base = { now, lastInbound: ago(20), audience: "not_clicked" as const, clicked: false, automationLive: true }
+  const base = { now, lastInbound: ago(20), audience: "not_clicked" as const, clicked: false, replied: false, automationLive: true }
 
   it("sends a reminder to someone who didn't open the link", () => {
     expect(decideFollowup(base)).toEqual({ send: true })
@@ -43,6 +43,11 @@ describe("decideFollowup", () => {
   it("sends the feedback question only to people who opened it", () => {
     expect(decideFollowup({ ...base, audience: "clicked", clicked: true })).toEqual({ send: true })
     expect(decideFollowup({ ...base, audience: "clicked" })).toEqual({ send: false, reason: "not_clicked" })
+  })
+
+  it("sends the nudge only to people who haven't replied", () => {
+    expect(decideFollowup({ ...base, audience: "not_replied" })).toEqual({ send: true })
+    expect(decideFollowup({ ...base, audience: "not_replied", replied: true })).toEqual({ send: false, reason: "replied" })
   })
 
   it("never sends outside Instagram's 24h window", () => {

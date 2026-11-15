@@ -213,6 +213,7 @@ async function setup() {
     // it doesn't answer the other scenarios' first messages) and follow-ups.
     { key: "welcome", name: "SIM welcome", trigger_type: "new_conversation", triggers: ["new_conversation"], match_any_post: false, keywords: [], dm_message: "Welcome! Here's a gift: https://example.com/gift", is_active: false },
     { key: "fu", name: "SIM follow-up", trigger_type: "dm", triggers: ["dm"], match_any_post: false, keywords: ["FU"], dm_message: "Event link: https://example.com/event", track_clicks: true, followup_enabled: true, followup_delay_hours: 20, followup_audience: "not_clicked", followup_message: "Did you see the link? Seats are filling up: https://example.com/event" },
+    { key: "fuReply", name: "SIM follow-up no reply", trigger_type: "dm", triggers: ["dm"], match_any_post: false, keywords: ["HELLO"], dm_message: "What can I help you with?", followup_enabled: true, followup_audience: "not_replied", followup_message: "Just making sure you saw my message!" },
     { key: "fuComment", name: "SIM follow-up comment", trigger_type: "comment", match_any_post: true, keywords: ["FUC"], dm_message: "Comment link: https://example.com/c", followup_enabled: true, followup_message: "Reminder!" },
     // schema/027: one automation answering both comments and DMs.
     { key: "multi", name: "SIM multi", trigger_type: "comment", triggers: ["comment", "dm"], match_any_post: true, keywords: ["BOTH"], dm_message: "Both ways: https://example.com/both", public_reply_enabled: true, public_reply_message: "Sent!" },
@@ -436,6 +437,31 @@ try {
     assert(r.status === "skipped" && r.skip_reason === "window_closed", `status ${r.status} ${r.skip_reason}`)
     assert(to(user).length === 1, "a late follow-up was sent")
     return "skipped: window closed"
+  })
+
+  await scenario("Follow-up \"didn't reply\": sent when they stayed silent", async () => {
+    const user = `u_fu_silent_${runId}`
+    await dm(bizId, user, "HELLO")
+    await waitFor("first DM", () => to(user)[0])
+    await sleep(500)
+    const r = await runFollowupNow(ids.fuReply, user)
+    assert(r.status === "sent", `status ${r.status} ${r.skip_reason ?? ""}`)
+    const m = await waitFor("follow-up", () => to(user)[1])
+    assert(m.text === "Just making sure you saw my message!", `unexpected: ${m.text}`)
+    return "nudge sent"
+  })
+
+  await scenario("Follow-up \"didn't reply\": skipped once they wrote back", async () => {
+    const user = `u_fu_replied_${runId}`
+    await dm(bizId, user, "HELLO")
+    await waitFor("first DM", () => to(user)[0])
+    await sleep(500)
+    await dm(bizId, user, "I'd like to know the prices")
+    await sleep(500)
+    const r = await runFollowupNow(ids.fuReply, user)
+    assert(r.status === "skipped" && r.skip_reason === "replied", `status ${r.status} ${r.skip_reason}`)
+    assert(to(user).length === 1, "a nudge was sent to someone who replied")
+    return "skipped: replied"
   })
 
   await scenario("Follow-up: not scheduled for a plain comment (no conversation, Instagram wouldn't allow it)", async () => {

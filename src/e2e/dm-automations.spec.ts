@@ -222,10 +222,17 @@ test("the event template comes with a reminder follow-up", async () => {
 
 test("a welcome message needs no keyword", async () => {
   await page.getByRole("button", { name: /New automation/ }).first().click()
-  await page.getByRole("button", { name: /Welcome \+ free resource/ }).click()
+  await page.getByRole("button", { name: /Welcome message/ }).click()
   await page.getByRole("button", { name: "English", exact: false }).first().click()
-  await page.getByPlaceholder("https://").fill("example.com/gift")
+  // The link is optional: leave it out and the DM is just a message.
+  await expect(page.getByText("Tell me what I can help you with", { exact: false })).toBeVisible()
   await page.getByRole("button", { name: /Continue/ }).click()
+  await expect(page.getByPlaceholder(/Here's the link you asked for/)).toHaveValue(/Tell me what I can help you with/)
+  await expect(page.getByPlaceholder(/Here's the link you asked for/)).not.toHaveValue(/https?:/)
+  // Comes with a nudge for people who don't reply.
+  await expect(page.getByRole("switch", { name: "Send a follow-up" })).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByRole("radio", { name: "Didn't reply" })).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByLabel("Follow-up message")).toHaveValue(/Just making sure you saw my message/)
 
   await expect(page.getByRole("checkbox", { name: /^New conversation/ })).toHaveAttribute("aria-checked", "true")
   await expect(page.getByRole("checkbox", { name: /^Comment/ })).toHaveAttribute("aria-checked", "false")
@@ -233,9 +240,14 @@ test("a welcome message needs no keyword", async () => {
   await expect(page.getByText(/Anyone who messages you for the very first time/)).toBeVisible()
   await page.getByRole("button", { name: "Go live" }).click()
 
-  await expect(row("Welcome message").getByText("New conversations", { exact: true })).toBeVisible()
-  const { data } = await db().from("dm_automations").select("triggers, keywords").eq("name", "Welcome message").single()
-  expect(data).toEqual({ triggers: ["new_conversation"], keywords: [] })
+  await expect(row("Welcome message").getByText("New conversations")).toBeVisible()
+  await expect(row("Welcome message").getByText("Follow-up after 20h")).toBeVisible()
+  const { data } = await db()
+    .from("dm_automations")
+    .select("triggers, keywords, followup_enabled, followup_audience")
+    .eq("name", "Welcome message")
+    .single()
+  expect(data).toEqual({ triggers: ["new_conversation"], keywords: [], followup_enabled: true, followup_audience: "not_replied" })
 })
 
 test("pausing an automation stops its DMs", async () => {

@@ -159,6 +159,10 @@ function TemplateSetup({
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (template.linkOptional && !link.trim()) {
+      onPick(buildTemplateDraft(template, language, null))
+      return
+    }
     const url = normalizeLink(link)
     if (!url) {
       setError("Paste a full link, like https://yoursite.com/page")
@@ -241,11 +245,17 @@ function TemplateSetup({
         <div>
           <p className="text-xs font-semibold text-slate-700">The DM they'll get</p>
           <p className="mt-1.5 max-w-md whitespace-pre-line rounded-2xl rounded-bl-md bg-gradient-to-br from-purple-600 to-indigo-600 px-3.5 py-2.5 text-sm leading-relaxed text-white">
-            {before}
-            <span className="rounded bg-white/20 px-1 underline decoration-white/50 underline-offset-2">
-              {normalizeLink(link) ?? "your link"}
-            </span>
-            {after}
+            {template.linkOptional && !link.trim() && copy.dmNoLink ? (
+              copy.dmNoLink
+            ) : (
+              <>
+                {before}
+                <span className="rounded bg-white/20 px-1 underline decoration-white/50 underline-offset-2">
+                  {normalizeLink(link) ?? "your link"}
+                </span>
+                {after}
+              </>
+            )}
           </p>
         </div>
       </div>

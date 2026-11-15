@@ -5,6 +5,7 @@ import { markTokenError } from "@/lib/meta/accounts"
 import { withTrackedLinks } from "@/lib/link-tracking"
 import { MESSAGING_WINDOW_MS, lastInboundAt } from "@/lib/meta/contacts"
 import { simulatorAccountIds } from "@/lib/meta/simulator"
+import type { FollowupAudience } from "@/lib/followup-settings"
 
 /**
  * Follow-up messages (schema/028): one extra DM a few hours after an
@@ -20,7 +21,7 @@ import { simulatorAccountIds } from "@/lib/meta/simulator"
  *   would be late is skipped, never sent outside the window.
  */
 
-export type FollowupAudience = "not_clicked" | "clicked" | "all"
+export type { FollowupAudience }
 
 // Never send closer than this to the end of the 24h window.
 const WINDOW_SAFETY_MS = 15 * 60 * 1000
@@ -29,7 +30,7 @@ const BATCH_SIZE = 25
 
 export type FollowupDecision =
   | { send: true }
-  | { send: false; reason: "automation_off" | "window_closed" | "clicked" | "not_clicked" }
+  | { send: false; reason: "automation_off" | "window_closed" | "clicked" | "not_clicked" | "replied" }
 
 /** Whether a due follow-up should go out now. Pure, so it's unit-tested. */
 export function decideFollowup(input: {
@@ -37,6 +38,8 @@ export function decideFollowup(input: {
   lastInbound: Date | null
   audience: FollowupAudience
   clicked: boolean
+  /** They wrote to us again after our DM went out. */
+  replied: boolean
   automationLive: boolean
 }): FollowupDecision {
   if (!input.automationLive) return { send: false, reason: "automation_off" }
@@ -45,6 +48,7 @@ export function decideFollowup(input: {
   }
   if (input.audience === "not_clicked" && input.clicked) return { send: false, reason: "clicked" }
   if (input.audience === "clicked" && !input.clicked) return { send: false, reason: "not_clicked" }
+  if (input.audience === "not_replied" && input.replied) return { send: false, reason: "replied" }
   return { send: true }
 }
 
@@ -109,6 +113,9 @@ export async function scheduleFollowup(dmLogId: string): Promise<void> {
         instagram_account_id: log.instagram_account_id,
         recipient_id: log.commenter_id,
         send_after: sendAfter.toISOString(),
+        // Same clock as instagram_contacts.last_inbound_at (this server's),
+        // so "did they write after our DM?" compares like with like.
+        created_at: new Date().toISOString(),
       },
       { onConflict: "dm_log_id", ignoreDuplicates: true }
     )
@@ -158,7 +165,7 @@ export async function processDueFollowups(): Promise<FollowupResult> {
     .update({ status: "processing", updated_at: now() })
     .in("id", due.map((d) => d.id))
     .eq("status", "scheduled")
-    .select("id, dm_log_id, automation_id, user_id, instagram_account_id, recipient_id")
+    .select("id, dm_log_id, automation_id, user_id, instagram_account_id, recipient_id, created_at")
 
   for (const f of claimed ?? []) {
     const finish = (values: Record<string, unknown>) =>
@@ -176,9 +183,13 @@ export async function processDueFollowups(): Promise<FollowupResult> {
       ])
       const a = automation as FollowupAutomation | null
 
+      // The follow-up row is created right after our DM went out, so a
+      // message from them after that is a reply.
+      const lastInbound = await lastInboundAt(f.instagram_account_id, f.recipient_id)
       const decision = decideFollowup({
         now: new Date(),
-        lastInbound: await lastInboundAt(f.instagram_account_id, f.recipient_id),
+        lastInbound,
+        replied: Boolean(lastInbound && lastInbound.getTime() > new Date(f.created_at).getTime()),
         audience: a?.followup_audience ?? "not_clicked",
         clicked: (links ?? []).some((l) => l.click_count > 0),
         automationLive: Boolean(a?.is_active && a.followup_enabled && a.followup_message?.trim()),

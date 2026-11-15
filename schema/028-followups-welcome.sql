@@ -7,7 +7,7 @@
 --
 -- 2. Follow-up settings per automation (off by default): after N hours
 --    (1-23, inside the 24h window) send one more message to the people who
---    didn't open the link, who did, or everyone.
+--    didn't open the link, who did, who didn't reply, or everyone.
 --
 -- 3. dm_followups: the scheduled follow-ups, one per sent DM at most.
 --    Sent by the same every-20-seconds job as the DM queue. A follow-up
@@ -42,12 +42,12 @@ BEGIN
       ADD CONSTRAINT dm_automations_followup_delay_check
       CHECK (followup_delay_hours BETWEEN 1 AND 23);
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dm_automations_followup_audience_check') THEN
-    ALTER TABLE dm_automations
-      ADD CONSTRAINT dm_automations_followup_audience_check
-      CHECK (followup_audience IN ('not_clicked', 'clicked', 'all'));
-  END IF;
 END $$;
+
+ALTER TABLE dm_automations DROP CONSTRAINT IF EXISTS dm_automations_followup_audience_check;
+ALTER TABLE dm_automations
+  ADD CONSTRAINT dm_automations_followup_audience_check
+  CHECK (followup_audience IN ('not_clicked', 'clicked', 'not_replied', 'all'));
 
 CREATE TABLE IF NOT EXISTS dm_followups (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),

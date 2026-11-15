@@ -5,6 +5,7 @@
 // message text exists in both languages.
 
 import type { TriggerType } from "@/lib/dm-triggers"
+import type { FollowupAudience } from "@/lib/followup-settings"
 
 export type TemplateLanguage = "ro" | "en"
 
@@ -18,8 +19,10 @@ type Copy = {
   /** Empty for a welcome message: any first message starts it. */
   keyword: string
   dm: string
+  /** The DM when the creator leaves the (optional) link out. */
+  dmNoLink?: string
   publicReplies: string[]
-  /** A ready-made follow-up for people who didn't open the link. */
+  /** A ready-made follow-up (see the template's followupAudience). */
   followup?: string
 }
 
@@ -32,6 +35,10 @@ export type DmTemplate = {
   copy: Record<TemplateLanguage, Copy>
   /** What starts it; comments when not set. */
   triggers?: TriggerType[]
+  /** The link can be left out (the DM is then just a message). */
+  linkOptional?: boolean
+  /** Who the ready-made follow-up goes to; people who didn't click by default. */
+  followupAudience?: FollowupAudience
 }
 
 export const DM_TEMPLATES: DmTemplate[] = [
@@ -119,22 +126,28 @@ export const DM_TEMPLATES: DmTemplate[] = [
   },
   {
     id: "welcome",
-    title: "Welcome + free resource",
-    description: "Greet everyone who messages you for the first time and give them a free resource.",
-    linkLabel: "Link to the resource",
+    title: "Welcome message",
+    description: "Greet everyone who messages you for the first time — with a free resource if you like.",
+    linkLabel: "Link to a free resource (optional)",
     triggers: ["new_conversation"],
+    linkOptional: true,
+    followupAudience: "not_replied",
     copy: {
       ro: {
         name: "Mesaj de bun venit",
         keyword: "",
         dm: `Bine ai venit! 👋 Mă bucur că mi-ai scris. Ca mulțumire, uite un cadou pentru tine:\n${LINK_PLACEHOLDER}\n\nSpune-mi cu ce te pot ajuta, îți răspund cât de repede pot.`,
+        dmNoLink: "Bine ai venit! 👋 Mă bucur că mi-ai scris. Spune-mi cu ce te pot ajuta și îți răspund cât de repede pot.",
         publicReplies: [],
+        followup: "Hei! 👋 Voiam doar să mă asigur că ai văzut mesajul meu. Cu ce te pot ajuta?",
       },
       en: {
         name: "Welcome message",
         keyword: "",
         dm: `Welcome! 👋 So glad you reached out. As a thank-you, here's a little gift for you:\n${LINK_PLACEHOLDER}\n\nTell me how I can help, I'll get back to you as soon as I can.`,
+        dmNoLink: "Welcome! 👋 So glad you reached out. Tell me what I can help you with and I'll get back to you as soon as I can.",
         publicReplies: [],
+        followup: "Hey! 👋 Just making sure you saw my message. What can I help you with?",
       },
     },
   },
@@ -149,6 +162,7 @@ export type TemplateDraft = {
   publicReplyMessages: string[]
   triggers?: TriggerType[]
   followupMessage?: string
+  followupAudience?: FollowupAudience
 }
 
 /** The link as a full http(s) URL (adds https:// if missing), or null if it isn't one. */
@@ -165,10 +179,11 @@ export function normalizeLink(raw: string): string | null {
   }
 }
 
+/** `link` may be null only for templates with linkOptional. */
 export function buildTemplateDraft(
   template: DmTemplate,
   language: TemplateLanguage,
-  link: string
+  link: string | null
 ): TemplateDraft {
   const copy = template.copy[language]
   const onComments = !template.triggers || template.triggers.includes("comment")
@@ -176,10 +191,15 @@ export function buildTemplateDraft(
     templateId: template.id,
     name: copy.name,
     keywords: copy.keyword ? [copy.keyword] : [],
-    dmMessage: copy.dm.replace(LINK_PLACEHOLDER, link),
+    dmMessage: link ? copy.dm.replace(LINK_PLACEHOLDER, link) : (copy.dmNoLink ?? copy.dm.replace(LINK_PLACEHOLDER, "")),
     publicReplyEnabled: onComments && copy.publicReplies.length > 0,
     publicReplyMessages: copy.publicReplies.length > 0 ? [...copy.publicReplies] : [""],
     ...(template.triggers ? { triggers: template.triggers } : {}),
-    ...(copy.followup ? { followupMessage: copy.followup.replace(LINK_PLACEHOLDER, link) } : {}),
+    ...(copy.followup
+      ? {
+          followupMessage: copy.followup.replace(LINK_PLACEHOLDER, link ?? ""),
+          followupAudience: template.followupAudience ?? "not_clicked",
+        }
+      : {}),
   }
 }
