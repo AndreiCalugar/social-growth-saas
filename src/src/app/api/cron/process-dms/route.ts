@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { pollAutomationComments } from "@/lib/meta/poll-comments"
 import { drainDmQueue } from "@/lib/meta/process-queue"
+import { recordPgCronRun } from "@/lib/meta/queue-clock"
 
 /**
  * Cron entry point, triggered every 20 seconds by Supabase pg_cron (see
@@ -9,6 +10,9 @@ import { drainDmQueue } from "@/lib/meta/process-queue"
  * pollAutomationComments() first queues comments on watched posts that the
  * webhook never delivered, so a missed webhook delays a DM by one run
  * instead of losing it. Then the queue is drained (lib/meta/process-queue).
+ *
+ * Each run also records itself for the backup clock on Vercel Queues and
+ * restarts that clock if needed (lib/meta/queue-clock.ts, schema/031).
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization")
@@ -17,8 +21,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  // Before the work, so a slow run doesn't look like pg_cron is down.
+  const clock = await recordPgCronRun()
   const polled = await pollAutomationComments()
   const results = await drainDmQueue()
 
-  return NextResponse.json({ success: true, polled, ...results })
+  return NextResponse.json({ success: true, clock, polled, ...results })
 }
