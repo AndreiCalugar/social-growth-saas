@@ -4,15 +4,17 @@ import { pollAutomationComments } from "@/lib/meta/poll-comments"
 import { drainDmQueue } from "@/lib/meta/process-queue"
 
 /**
- * A second clock for the DM queue, on Vercel Queues (schema/031).
+ * The clock that runs the DM queue, on Vercel Queues (schema/031, 032).
  *
- * pg_cron calls /api/cron/process-dms every 20 seconds, but on the free
- * Supabase plan it sometimes can't start jobs for hours. This clock is a
- * "tick" message that, each time it's delivered, first schedules the next
- * tick (one per minute, deduplicated by minute) and then does the queue
- * work only if pg_cron has been silent. pg_cron restarts the chain if it
- * ever stops. Both running at once is safe: queue rows are claimed
- * atomically.
+ * A "tick" message that, each time it's delivered, first schedules the
+ * next tick (every 20 seconds, deduplicated per 20s slot) and then runs the
+ * queue. It lives outside the database: running pg_cron every 20s used up
+ * the free Supabase plan's Disk IO budget, which then stopped pg_cron from
+ * starting jobs at night.
+ *
+ * pg_cron is now a watchdog every 5 minutes: it calls /api/cron/process-dms,
+ * which runs the queue once and restarts the chain if it stopped. Both
+ * running at once is safe: queue rows are claimed atomically.
  *
  * Vercel delivers a message to the deployment that sent it, so an old
  * deployment's chain would keep running old code. pg_cron always reaches
@@ -26,13 +28,13 @@ export const CLOCK_TOPIC = "dm-clock"
 export const PG_CRON = "process-dms"
 export const QUEUE_TICK = "queue-tick"
 
-const TICK_SECONDS = 60
-// pg_cron counts as running if it ran this recently (it runs every 20s).
-const PG_CRON_ALIVE_MS = 90 * 1000
-// The current deployment is known for sure only while pg_cron is alive;
-// trust its record for this long.
-const DEPLOYMENT_RECORD_MS = 5 * 60 * 1000
-// Restart the chain if no tick ran for this long.
+const TICK_SECONDS = 20
+// A tick records itself once a minute (every third slot), not every tick.
+const HEARTBEAT_EVERY_SLOTS = 3
+// pg_cron runs every 5 minutes and records the current deployment; trust
+// that record for a bit more than two runs.
+const DEPLOYMENT_RECORD_MS = 12 * 60 * 1000
+// Restart the chain if no tick recorded itself for this long.
 const TICK_STALE_MS = 3 * 60 * 1000
 
 export interface Heartbeat {
@@ -42,9 +44,13 @@ export interface Heartbeat {
 
 export type TickDecision =
   | { action: "stop"; reason: "not_production" | "old_deployment" }
-  | { action: "continue"; work: boolean }
+  | { action: "continue" }
 
-/** What a delivered tick should do. Pure, so it's unit-tested. */
+/**
+ * Whether a delivered tick keeps its chain going. Pure, so it's unit-tested.
+ * A tick from an old deployment stops once pg_cron has recorded a newer
+ * one; if pg_cron has been silent a while, it keeps the queue running.
+ */
 export function decideTick(input: {
   now: number
   isProduction: boolean
@@ -57,7 +63,7 @@ export function decideTick(input: {
   if (pg?.deployment_id && pg.deployment_id !== input.deploymentId && pgAge < DEPLOYMENT_RECORD_MS) {
     return { action: "stop", reason: "old_deployment" }
   }
-  return { action: "continue", work: pgAge >= PG_CRON_ALIVE_MS }
+  return { action: "continue" }
 }
 
 /** Whether pg_cron should (re)start this deployment's tick chain. Pure. */
@@ -68,11 +74,16 @@ export function needsRearm(input: { now: number; deploymentId: string; tick: Hea
   return input.now - new Date(t.last_run_at).getTime() >= TICK_STALE_MS
 }
 
-/** The next tick: at the start of the next minute, one per minute however many senders. */
+/** The next tick: at the start of the next 20s slot, one per slot however many senders. */
 export function nextTick(now: number, deploymentId: string): { delaySeconds: number; idempotencyKey: string } {
-  const minute = Math.floor(now / (TICK_SECONDS * 1000)) + 1
-  const delaySeconds = Math.max(1, Math.ceil((minute * TICK_SECONDS * 1000 - now) / 1000))
-  return { delaySeconds, idempotencyKey: `tick-${deploymentId}-${minute}` }
+  const slot = Math.floor(now / (TICK_SECONDS * 1000)) + 1
+  const delaySeconds = Math.max(1, Math.ceil((slot * TICK_SECONDS * 1000 - now) / 1000))
+  return { delaySeconds, idempotencyKey: `tick-${deploymentId}-${slot}` }
+}
+
+/** Whether the tick running now should record its heartbeat (once a minute). */
+export function recordsHeartbeat(now: number): boolean {
+  return Math.floor(now / (TICK_SECONDS * 1000)) % HEARTBEAT_EVERY_SLOTS === 0
 }
 
 export function currentDeployment(): { isProduction: boolean; deploymentId: string | null } {
@@ -125,13 +136,13 @@ export const defaultClockDeps: ClockDeps = {
 
 export type TickResult =
   | { stopped: "not_production" | "old_deployment" }
-  | { scheduled: string; worked: false }
-  | { scheduled: string; worked: true; result?: unknown; error?: string }
+  | { scheduled: string; result?: unknown; error?: string }
 
 /**
- * Handle one delivered tick. Schedules the next tick before any work, so
- * a failure in the work never breaks the chain. Throws only if the next
- * tick couldn't be scheduled (then Vercel redelivers this one).
+ * Handle one delivered tick: schedule the next one, then run the queue.
+ * Scheduling comes first, so a failure in the work never breaks the chain.
+ * Throws only if the next tick couldn't be scheduled (then Vercel
+ * redelivers this one).
  */
 export async function handleTick(deps: ClockDeps = defaultClockDeps): Promise<TickResult> {
   const { isProduction, deploymentId } = deps.deployment()
@@ -145,23 +156,21 @@ export async function handleTick(deps: ClockDeps = defaultClockDeps): Promise<Ti
 
   const next = nextTick(deps.now(), deploymentId!)
   await deps.sendTick(next.delaySeconds, next.idempotencyKey)
-  await deps.writeHeartbeat(QUEUE_TICK, deploymentId)
+  if (recordsHeartbeat(deps.now())) await deps.writeHeartbeat(QUEUE_TICK, deploymentId)
 
-  if (!decision.work) return { scheduled: next.idempotencyKey, worked: false }
-  console.warn("[queue-clock] pg_cron is silent, the queue clock is running the DM queue")
   try {
-    return { scheduled: next.idempotencyKey, worked: true, result: await deps.doWork() }
+    return { scheduled: next.idempotencyKey, result: await deps.doWork() }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[queue-clock] work failed:", message)
-    return { scheduled: next.idempotencyKey, worked: true, error: message }
+    return { scheduled: next.idempotencyKey, error: message }
   }
 }
 
 /**
- * Called on every pg_cron run: record that pg_cron (and this deployment)
- * is alive, and restart the tick chain if it isn't running here. Never
- * throws: the queue clock must not affect the DM queue.
+ * Called on every pg_cron run (the 5-minute watchdog): record that pg_cron
+ * reached this deployment, and restart the tick chain if it isn't running
+ * here. Never throws: the clock must not stop the watchdog's own queue run.
  */
 export async function recordPgCronRun(deps: ClockDeps = defaultClockDeps): Promise<{ rearmed: boolean }> {
   try {

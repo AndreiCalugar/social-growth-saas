@@ -26,6 +26,9 @@ import { findAiThread, handleAiMessage } from "@/lib/meta/ai-threads"
  * - After the signature verifies, ALWAYS return 200 — Meta throttles and
  *   eventually disables subscriptions that keep failing. Errors are recorded
  *   on the webhook_events row instead of the HTTP status.
+ * - Only events that did something (or failed) are saved in webhook_events,
+ *   in one insert. Most deliveries are read receipts and echoes of our own
+ *   messages; saving those used up the database's Disk IO (schema/032).
  */
 
 // Meta's initial verification handshake (dashboard "Verify and save").
@@ -66,12 +69,6 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ received: true })
   }
-
-  const { data: eventRow } = await supabase
-    .from("webhook_events")
-    .insert({ object: payload.object ?? null, payload, status: "pending" })
-    .select("id")
-    .maybeSingle()
 
   let queued = 0
   let errorMessage: string | null = null
@@ -115,28 +112,13 @@ export async function POST(request: NextRequest) {
       console.error("[Instagram Webhook] message trigger error:", err)
     }
 
-    if (eventRow?.id) {
-      await supabase
-        .from("webhook_events")
-        .update({
-          status: queued > 0 || gateReplies.length > 0 || aiMessages.length > 0 ? "processed" : "ignored",
-          processed_at: new Date().toISOString(),
-        })
-        .eq("id", eventRow.id)
+    if (queued > 0 || gateReplies.length > 0 || aiMessages.length > 0) {
+      await saveEvent(payload, { status: "processed" })
     }
   } catch (err) {
     errorMessage = err instanceof Error ? err.message : "Unknown error"
     console.error("[Instagram Webhook] processing error:", err)
-    if (eventRow?.id) {
-      await supabase
-        .from("webhook_events")
-        .update({
-          status: "failed",
-          error_message: errorMessage,
-          processed_at: new Date().toISOString(),
-        })
-        .eq("id", eventRow.id)
-    }
+    await saveEvent(payload, { status: "failed", error_message: errorMessage })
   }
 
   if (queued > 0) {
@@ -169,4 +151,18 @@ export async function POST(request: NextRequest) {
 
   // Signature was valid → 200 no matter what happened above.
   return NextResponse.json({ received: true, queued })
+}
+
+/** Record a webhook delivery that did something or failed. Never throws. */
+async function saveEvent(
+  payload: WebhookPayload,
+  outcome: { status: "processed" | "failed"; error_message?: string }
+): Promise<void> {
+  const { error } = await supabase.from("webhook_events").insert({
+    object: payload.object ?? null,
+    payload,
+    ...outcome,
+    processed_at: new Date().toISOString(),
+  })
+  if (error) console.warn("[Instagram Webhook] event not saved:", error.message)
 }

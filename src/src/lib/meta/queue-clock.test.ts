@@ -11,12 +11,16 @@ import {
   handleTick,
   needsRearm,
   nextTick,
+  recordsHeartbeat,
   recordPgCronRun,
   type ClockDeps,
   type Heartbeat,
 } from "./queue-clock"
 
+// 03:00:30 is 10s into a 20s slot; the slot number isn't a multiple of 3.
 const NOW = Date.parse("2026-11-16T03:00:30Z")
+// The start of a slot whose tick records the heartbeat (03:00:00).
+const ON_THE_MINUTE = Date.parse("2026-11-16T03:00:00Z")
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
 const beat = (msAgo: number, deployment_id: string | null = "dpl_new"): Heartbeat => ({
   last_run_at: ago(msAgo),
@@ -51,45 +55,50 @@ describe("decideTick", () => {
     expect(decideTick({ ...base, deploymentId: null, pgCron: null })).toEqual({ action: "stop", reason: "not_production" })
   })
 
-  it("keeps ticking but skips the work while pg_cron is alive", () => {
-    expect(decideTick({ ...base, pgCron: beat(20_000) })).toEqual({ action: "continue", work: false })
-  })
-
-  it("does the work when pg_cron has been silent", () => {
-    expect(decideTick({ ...base, pgCron: beat(120_000) })).toEqual({ action: "continue", work: true })
-    expect(decideTick({ ...base, pgCron: null })).toEqual({ action: "continue", work: true })
+  it("keeps going whether or not pg_cron is running", () => {
+    expect(decideTick({ ...base, pgCron: beat(20_000) })).toEqual({ action: "continue" })
+    expect(decideTick({ ...base, pgCron: beat(60 * 60_000) })).toEqual({ action: "continue" })
+    expect(decideTick({ ...base, pgCron: null })).toEqual({ action: "continue" })
   })
 
   it("stops an old deployment's chain when pg_cron reports a newer one", () => {
-    expect(decideTick({ ...base, deploymentId: "dpl_old", pgCron: beat(20_000) })).toEqual({
+    // pg_cron runs every 5 minutes, so its record can be a few minutes old.
+    expect(decideTick({ ...base, deploymentId: "dpl_old", pgCron: beat(6 * 60_000) })).toEqual({
       action: "stop",
       reason: "old_deployment",
     })
   })
 
   it("lets an old deployment keep the queue going if pg_cron has been down a while", () => {
-    expect(decideTick({ ...base, deploymentId: "dpl_old", pgCron: beat(10 * 60_000) })).toEqual({
+    expect(decideTick({ ...base, deploymentId: "dpl_old", pgCron: beat(15 * 60_000) })).toEqual({
       action: "continue",
-      work: true,
     })
   })
 })
 
 describe("nextTick", () => {
-  it("targets the start of the next minute", () => {
+  it("targets the start of the next 20-second slot", () => {
     expect(nextTick(NOW, "dpl_new")).toEqual({
-      delaySeconds: 30,
-      idempotencyKey: `tick-dpl_new-${Math.floor(NOW / 60_000) + 1}`,
+      delaySeconds: 10,
+      idempotencyKey: `tick-dpl_new-${Math.floor(NOW / 20_000) + 1}`,
     })
   })
 
-  it("gives every sender in the same minute the same key", () => {
-    expect(nextTick(NOW + 25_000, "d").idempotencyKey).toBe(nextTick(NOW - 25_000, "d").idempotencyKey)
+  it("gives every sender in the same slot the same key", () => {
+    expect(nextTick(NOW + 5_000, "d").idempotencyKey).toBe(nextTick(NOW - 5_000, "d").idempotencyKey)
+    expect(nextTick(NOW + 15_000, "d").idempotencyKey).not.toBe(nextTick(NOW, "d").idempotencyKey)
   })
 
   it("never schedules with zero delay", () => {
-    const onBoundary = Math.floor(NOW / 60_000) * 60_000 + 59_999
+    const onBoundary = Math.floor(NOW / 20_000) * 20_000 + 19_999
     expect(nextTick(onBoundary, "d").delaySeconds).toBe(1)
+  })
+})
+
+describe("recordsHeartbeat", () => {
+  it("records once a minute, on every third slot", () => {
+    const slots = [0, 1, 2, 3, 4, 5].map((i) => recordsHeartbeat(ON_THE_MINUTE + i * 20_000))
+    expect(slots).toEqual([true, false, false, true, false, false])
   })
 })
 
@@ -106,21 +115,22 @@ describe("needsRearm", () => {
 })
 
 describe("handleTick", () => {
-  it("schedules the next tick, records itself, and skips the work while pg_cron runs", async () => {
-    const { deps, sent, written } = fakeDeps({ beats: { [PG_CRON]: beat(10_000) } })
-    const result = await handleTick(deps)
-    expect(sent).toHaveLength(1)
-    expect(written).toEqual([QUEUE_TICK])
-    expect(deps.doWork).not.toHaveBeenCalled()
-    expect(result).toMatchObject({ worked: false })
-  })
-
-  it("runs the queue when pg_cron is silent", async () => {
-    const { deps, sent } = fakeDeps({ beats: { [PG_CRON]: beat(5 * 60_000) } })
+  it("schedules the next tick and runs the queue, even while pg_cron runs", async () => {
+    const { deps, sent } = fakeDeps({ beats: { [PG_CRON]: beat(10_000) } })
     const result = await handleTick(deps)
     expect(sent).toHaveLength(1)
     expect(deps.doWork).toHaveBeenCalledOnce()
-    expect(result).toMatchObject({ worked: true, result: { sent: 1 } })
+    expect(result).toMatchObject({ result: { sent: 1 } })
+  })
+
+  it("records its heartbeat only once a minute", async () => {
+    const offSlot = fakeDeps()
+    await handleTick(offSlot.deps)
+    expect(offSlot.written).toEqual([])
+
+    const onSlot = fakeDeps({ now: () => ON_THE_MINUTE })
+    await handleTick(onSlot.deps)
+    expect(onSlot.written).toEqual([QUEUE_TICK])
   })
 
   it("schedules the next tick before the work, and survives a work failure", async () => {
@@ -136,7 +146,7 @@ describe("handleTick", () => {
     })
     const result = await handleTick(deps)
     expect(order).toEqual(["send", "work"])
-    expect(result).toMatchObject({ worked: true, error: "db down" })
+    expect(result).toMatchObject({ error: "db down" })
   })
 
   it("throws when the next tick can't be scheduled, so Vercel redelivers", async () => {

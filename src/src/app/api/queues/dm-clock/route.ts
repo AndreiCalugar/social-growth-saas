@@ -13,7 +13,7 @@ export const POST = handleCallback(
   },
   {
     // Only "couldn't schedule the next tick" throws. Retry a few times,
-    // then drop it: pg_cron restarts the chain.
+    // then drop it: the pg_cron watchdog restarts the chain.
     retry: (_error, metadata) =>
       metadata.deliveryCount > 5 ? { acknowledge: true } : { afterSeconds: 15 * metadata.deliveryCount },
   }
