@@ -7,7 +7,21 @@
   ],
   "functions": {
     "src/app/api/queues/dm-clock/route.ts": {
-      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "dm-clock", "maxDeliveries": 6 }]
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "dm-clock",
+          "maxDeliveries": 6
+        }
+      ]
+    },
+    "src/app/api/queues/webhook-replay/route.ts": {
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "webhook-replay"
+        }
+      ]
     }
   }
 }
