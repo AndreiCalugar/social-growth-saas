@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { supabase } from "@/lib/supabase"
-import {
-  parseCommentEvents,
-  parseMessageEvents,
-  verifyWebhookSignature,
-  type WebhookPayload,
-} from "@/lib/meta/webhook"
-import { queueMatchingComment, queueMatchingMessage } from "@/lib/meta/enqueue"
-import { drainDmQueue } from "@/lib/meta/process-queue"
-import { findOpenGate, handleGateReply, type OpenGate } from "@/lib/meta/follow-gate"
-import { recordInboundMessage } from "@/lib/meta/contacts"
-import { findAiThread, handleAiMessage } from "@/lib/meta/ai-threads"
+import { verifyWebhookSignature, type WebhookPayload } from "@/lib/meta/webhook"
+import { handleWebhookPayload, runFollowUps, type WebhookOutcome } from "@/lib/meta/webhook-handler"
+import { databaseReachable, scheduleReplay } from "@/lib/meta/webhook-replay"
 
 /**
  * Meta Instagram webhook receiver. Public route (excluded from the auth
@@ -18,7 +10,8 @@ import { findAiThread, handleAiMessage } from "@/lib/meta/ai-threads"
  * session. Structure adapted from OpenReply's app/api/webhook (MIT), with
  * BullMQ replaced by inserting pending rows into dm_logs. When something was
  * queued, the queue is drained right after the response is sent (after()),
- * so the DM goes out within seconds; the cron run is the backup.
+ * so the DM goes out within seconds; the queue clock is the backup.
+ * Processing itself lives in lib/meta/webhook-handler.ts.
  *
  * Design rules:
  * - Keep the response fast: a few indexed queries, no external calls before
@@ -26,9 +19,9 @@ import { findAiThread, handleAiMessage } from "@/lib/meta/ai-threads"
  * - After the signature verifies, ALWAYS return 200 — Meta throttles and
  *   eventually disables subscriptions that keep failing. Errors are recorded
  *   on the webhook_events row instead of the HTTP status.
- * - Only events that did something (or failed) are saved in webhook_events,
- *   in one insert. Most deliveries are read receipts and echoes of our own
- *   messages; saving those used up the database's Disk IO (schema/032).
+ * - Meta doesn't resend a delivery we answered with 200. If the database is
+ *   down or processing fails, the delivery is kept on Vercel Queues and
+ *   processed later (lib/meta/webhook-replay.ts).
  */
 
 // Meta's initial verification handshake (dashboard "Verify and save").
@@ -70,99 +63,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true })
   }
 
-  let queued = 0
-  let errorMessage: string | null = null
-  const gateReplies: { gate: OpenGate; senderId: string }[] = []
-  const aiMessages: { threadId: string; text: string }[] = []
+  // Lookups that fail quietly would make every event look like "no
+  // automation matched", so check the database first.
+  if (!(await databaseReachable())) {
+    const kept = await scheduleReplay(rawBody, payload, "database unreachable")
+    return NextResponse.json({ received: true, replay: kept })
+  }
 
+  let outcome: WebhookOutcome
   try {
-    const events = parseCommentEvents(payload)
-
-    for (const event of events) {
-      if (await queueMatchingComment(event)) queued++
-    }
-
-    // DM and story-reply triggers. Kept apart so a problem here can never
-    // stop the comment automations above.
-    try {
-      for (const message of parseMessageEvents(payload)) {
-        // Remember they wrote (opens Instagram's 24h window for follow-ups)
-        // and whether we'd seen them before (welcome message).
-        const { data: account } = await supabase
-          .from("instagram_accounts")
-          .select("id")
-          .eq("instagram_id", message.instagramAccountId)
-          .maybeSingle()
-        const contact = account ? await recordInboundMessage(account.id, message.senderId) : { known: true }
-
-        // A tap on a follow-gate button (or any reply while a gate is
-        // open) answers that gate instead of starting a new automation.
-        const gate = await findOpenGate(message)
-        if (gate) {
-          gateReplies.push({ gate, senderId: message.senderId })
-          continue
-        }
-        // A keyword for an automation (new conversation) wins; otherwise a
-        // reply in an AI assistant conversation goes to the assistant.
-        const aiThread = account ? await findAiThread(account.id, message.senderId) : null
-        if (await queueMatchingMessage(message, { knownContact: contact.known || Boolean(aiThread) })) queued++
-        else if (aiThread) aiMessages.push({ threadId: aiThread.id, text: message.text })
-      }
-    } catch (err) {
-      console.error("[Instagram Webhook] message trigger error:", err)
-    }
-
-    if (queued > 0 || gateReplies.length > 0 || aiMessages.length > 0) {
-      await saveEvent(payload, { status: "processed" })
-    }
-  } catch (err) {
-    errorMessage = err instanceof Error ? err.message : "Unknown error"
-    console.error("[Instagram Webhook] processing error:", err)
-    await saveEvent(payload, { status: "failed", error_message: errorMessage })
+    outcome = await handleWebhookPayload(payload)
+  } catch {
+    const kept = await scheduleReplay(rawBody, payload, "processing failed")
+    return NextResponse.json({ received: true, replay: kept })
   }
 
-  if (queued > 0) {
-    after(async () => {
-      try {
-        await drainDmQueue()
-      } catch (err) {
-        console.error("[Instagram Webhook] immediate send failed:", err)
-      }
-    })
-  }
-
-  // Follow-gate answers: check follow status and reply, after responding.
-  if (gateReplies.length > 0) {
-    after(async () => {
-      for (const { gate, senderId } of gateReplies) {
-        await handleGateReply(gate, senderId)
-      }
-    })
-  }
-
-  // AI assistant answers (Claude takes a second or two): after responding.
-  if (aiMessages.length > 0) {
-    after(async () => {
-      for (const { threadId, text } of aiMessages) {
-        await handleAiMessage(threadId, text)
-      }
-    })
+  const { queued, gateReplies, aiMessages } = outcome
+  if (queued > 0 || gateReplies.length > 0 || aiMessages.length > 0) {
+    after(() => runFollowUps(outcome))
   }
 
   // Signature was valid → 200 no matter what happened above.
   return NextResponse.json({ received: true, queued })
-}
-
-/** Record a webhook delivery that did something or failed. Never throws. */
-async function saveEvent(
-  payload: WebhookPayload,
-  outcome: { status: "processed" | "failed"; error_message?: string }
-): Promise<void> {
-  const { error } = await supabase.from("webhook_events").insert({
-    object: payload.object ?? null,
-    payload,
-    ...outcome,
-    processed_at: new Date().toISOString(),
-  })
-  if (error) console.warn("[Instagram Webhook] event not saved:", error.message)
 }
